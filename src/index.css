@@ -2,3 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+@import "@fontsource/urbanist";
+body {
+  font-family: 'Urbanist', sans-serif;
+  background-color: #0f0f1c;
+  color: #e0e0f0;
+}
