@@ -11,11 +11,15 @@ import {
   LogOut,
   ChevronDown,
   ChevronRight,
+  Menu,
+  X,
 } from "lucide-react";
+import { supabase } from "../../lib/supabaseClient";
 
 export default function Sidebar() {
   const navigate = useNavigate();
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
 
   const navLink = (label, icon, route, textSize = "text-base") => (
     <motion.li
@@ -24,18 +28,33 @@ export default function Sidebar() {
       className={`flex items-center gap-3 px-4 py-2 rounded hover:bg-gray-800 cursor-pointer ${textSize}`}
     >
       {icon}
-      <span>{label}</span>
+      {!collapsed && <span>{label}</span>}
     </motion.li>
   );
 
   return (
-    <aside className="w-64 h-screen bg-gradient-to-b from-gray-950 to-black p-6 text-white flex flex-col justify-between shadow-2xl border-r border-gray-800">
+    <motion.aside
+      initial={{ width: 260 }}
+      animate={{ width: collapsed ? 72 : 260 }}
+      transition={{ duration: 0.3 }}
+      className="h-screen bg-gradient-to-b from-gray-950 to-black text-white flex flex-col justify-between shadow-2xl border-r border-gray-800"
+    >
       <div>
-        <h1 className="text-xl font-bold mb-8 text-purple-500 tracking-wide">
-          🔐 WhatMatters
-        </h1>
+        <div className="flex items-center justify-between p-4">
+          {!collapsed && (
+            <h1 className="text-xl font-bold text-purple-500 tracking-wide whitespace-nowrap">
+              🔐 WhatMatters
+            </h1>
+          )}
+          <button onClick={() => setCollapsed(!collapsed)}>
+            {collapsed ? <Menu size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+
         <ul className="space-y-1">
           {navLink("Dashboard", <LayoutDashboard size={18} />, "/dashboard")}
+
+          <hr className="my-6 border-gray-800" />
 
           {/* Workspace Vault Toggle */}
           <li
@@ -44,17 +63,18 @@ export default function Sidebar() {
           >
             <div className="flex items-center gap-3">
               <FolderKanban size={18} />
-              <span>Workspace Vault</span>
+              {!collapsed && <span>Workspace Vault</span>}
             </div>
-            {workspaceOpen ? (
-              <ChevronDown size={16} className="text-gray-400" />
-            ) : (
-              <ChevronRight size={16} className="text-gray-400" />
-            )}
+            {!collapsed &&
+              (workspaceOpen ? (
+                <ChevronDown size={16} className="text-gray-400" />
+              ) : (
+                <ChevronRight size={16} className="text-gray-400" />
+              ))}
           </li>
 
           <AnimatePresence>
-            {workspaceOpen && (
+            {workspaceOpen && !collapsed && (
               <motion.ul
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
@@ -72,9 +92,11 @@ export default function Sidebar() {
 
           <hr className="my-6 border-gray-800" />
 
-          <li className="text-sm uppercase tracking-wide text-purple-400 mt-4 mb-2 px-3">
-            My Private Vault
-          </li>
+          {!collapsed && (
+            <li className="text-sm uppercase tracking-wide text-purple-400 mt-4 mb-2 px-3">
+              My Private Vault
+            </li>
+          )}
           {navLink("Projects Planner", <FolderKanban size={18} />, "/private/projects")}
           {navLink("Messenger", <MessageCircle size={18} />, "/private/messenger")}
           {navLink("Calendar", <CalendarDays size={18} />, "/private/calendar")}
@@ -93,11 +115,11 @@ export default function Sidebar() {
           await supabase.auth.signOut();
           navigate("/");
         }}
-        className="flex items-center gap-2 text-sm hover:text-red-400 transition"
+        className="flex items-center gap-2 text-base hover:text-red-400 transition p-4"
       >
         <LogOut size={18} />
-        Log Out
+        {!collapsed && "Log Out"}
       </motion.button>
-    </aside>
+    </motion.aside>
   );
 }
