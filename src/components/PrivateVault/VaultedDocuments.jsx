@@ -32,12 +32,29 @@ export default function VaultedDocuments() {
 
         <div className="mb-6 flex justify-end">
             <button
-                onClick={() => navigate("/private/vaults/upload")}
+                onClick={() => navigate("/private/vaults/file-upload")}
                 className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition"
             >
                 + Upload Document
             </button>
         </div>
+
+        //
+        <div className="p-4">
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold">Vaulted Documents</h2>
+                <button
+                onClick={() => navigate("/private/vaults/note-upload")}
+                className="px-4 py-2 rounded bg-purple-600 text-white hover:bg-purple-700 shadow-sm"
+                >
+                + Create Note
+                </button>
+            </div>
+
+            {/* Existing Vaulted Document Grid or List */}
+            {/* ... */}
+        </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {documents.map((doc) => (
           <div
