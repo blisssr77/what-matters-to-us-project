@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 import { X, Search } from "lucide-react";
+import { encryptText } from "../../utils/encryption";
 
 const VaultedNoteUpload = () => {
     const [title, setTitle] = useState("");
@@ -14,6 +15,7 @@ const VaultedNoteUpload = () => {
 
     const navigate = useNavigate();
 
+    // Fetch available tags on component mount
     useEffect(() => {
         const fetchTags = async () => {
         const { data, error } = await supabase.from("vault_tags").select("*");
@@ -32,27 +34,34 @@ const VaultedNoteUpload = () => {
         setNewTag("");
     };
 
+    // Encrypt the note before saving
     const handleCreate = async () => {
         setLoading(true);
         setSuccessMsg("");
 
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+
+        const passphrase = user?.id; // or a separate per-user secret
+
+        const { encryptedData, iv } = await encryptText(privateNote, passphrase);
 
         const { error } = await supabase.from("vaulted_notes").insert({
-        user_id: user?.id,
-        title,
-        private_note: privateNote,
-        tags,
-        created_at: new Date().toISOString(),
+            user_id: user?.id,
+            title,
+            encrypted_note: encryptedData,
+            iv,
+            tags,
         });
 
         setLoading(false);
         if (error) {
-        console.error(error);
-        setSuccessMsg("❌ Failed to create note.");
+            console.error(error);
+            setSuccessMsg("❌ Failed to create note");
         } else {
-        setSuccessMsg("✅ Note created successfully!");
-        setTimeout(() => navigate("/private/vaults"), 1300);
+            setSuccessMsg("✅ Note created successfully!");
+            setTimeout(() => navigate("/private/vaults"), 1300);
         }
     };
 

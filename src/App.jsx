@@ -5,6 +5,7 @@ import VaultedDocuments from "./components/PrivateVault/VaultedDocuments";
 import VaultedFileUpload from "./components/PrivateVault/FileUpload";
 import VaultedNoteUpload from "./components/PrivateVault/NoteUpload";
 import NoteDetail from "./components/PrivateVault/NoteDetail";
+import ManageAccount from "./pages/Account/ManageAccount";
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
       <Routes>
         <Route path="/" element={<AuthPage />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/account/manage" element={<ManageAccount />} />
 
 
         <Route path="/private/vaults" element={<VaultedDocuments />} />

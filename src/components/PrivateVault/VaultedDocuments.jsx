@@ -118,7 +118,7 @@ export default function VaultedDocuments() {
           </button>
 
           {showTagFilter && (
-            <div className="absolute z-10 mt-2 w-full max-h-60 bg-white border border-gray-300 rounded-lg shadow p-3">
+            <div className="absolute z-30 mt-2 w-full max-h-60 bg-white border border-gray-300 rounded-lg shadow p-3">
               <input
                 type="text"
                 placeholder="Filter tags..."
