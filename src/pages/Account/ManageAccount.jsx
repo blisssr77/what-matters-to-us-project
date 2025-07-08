@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import Layout from "../../components/Layout/Layout";
 import { UploadCloud, Camera } from "lucide-react";
@@ -14,13 +14,13 @@ export default function ManageAccount() {
     const [username, setUsername] = useState("");
     const [usernameErr, setUsernameErr] = useState("");
     const [basicSaved, setBasicSaved] = useState(false);
-    const [pwdSaved, setPwdSaved] = useState(false);
 
     /* ────────────────── Password state ────────────────── */
     const [currentPw, setCurrentPw] = useState("");
     const [newPw, setNewPw] = useState("");
     const [confirmPw, setConfirmPw] = useState("");
     const [pwErr, setPwErr] = useState("");
+    const [pwdSaved, setPwdSaved] = useState(false);
     const [pwMatchNote, setPwMatchNote] = useState(""); // "" | "match" | "no-match"
     const [currPwStatus, setCurrPwStatus] = useState(""); // "" | "correct" | "incorrect"
 
@@ -28,6 +28,34 @@ export default function ManageAccount() {
     /* ────────────────── Vault Codes state ────────────────── */
     const [workspaceCode, setWorkspaceCode] = useState("");
     const [privateCode, setPrivateCode] = useState("");
+
+    /* ────────────────── Get Basic User Info ────────────────── */
+    useEffect(() => {
+        const loadProfile = async () => {
+            try {
+            const { data: { user } } = await supabase.auth.getUser();
+
+            if (!user) return; // not signed-in yet
+
+            const { data, error, status } = await supabase
+                .from("profiles")
+                .select("first_name, last_name, username")
+                .eq("id", user.id)
+                .maybeSingle();      // ← won’t throw on 0 rows
+
+            if (error && status !== 406) throw error; // 406 = no row, ignore
+            if (data) {
+                setFirstName(data.first_name || "");
+                setLastName(data.last_name || "");
+                setUsername(data.username || "");
+            }
+            } catch (err) {
+            console.error("Profile load error:", err.message);
+            }
+        };
+
+    loadProfile();
+    }, []);
 
     /* ────────────────── Helper functions ────────────────── */
     const checkUsernameUnique = async (val) => {
@@ -44,56 +72,48 @@ export default function ManageAccount() {
         /[^A-Za-z0-9]/.test(pw) &&
         pw.length >= 8;
 
-    /* ────────────────── Checking if Current Password is Correct ────────────────── */
-    let currPwTimer;   // module-level or ref
-
-    const checkCurrentPw = (pw) => {
-        clearTimeout(currPwTimer);
-        setCurrPwStatus("checking");
-        currPwTimer = setTimeout(async () => {
-            const {
-            data: { session },
-            } = await supabase.auth.getSession();
-            const email = session?.user?.email;
-
-            if (!email) return setCurrPwStatus("bad");
-
-            const { error } = await supabase.auth.signInWithPassword({ email, password: pw });
-            setCurrPwStatus(error ? "bad" : "good");
-        }, 400);
-    };
-
     /* ────────────────── Save handlers (wire to Supabase) ────────────────── */
     const saveBasicInfo = async () => {
         if (usernameErr) return;
 
-        const {
-            data: { user },
-        } = await supabase.auth.getUser();
+        const { data: { user } } = await supabase.auth.getUser();
 
-        // Upsert and get back the row in one call
-        const { data, error } = await supabase
-            .from("profiles")
-            .upsert(
+        // Upsert first
+        const { error: upsertErr } = await supabase.from("profiles").upsert(
             {
-                id: user.id,
-                first_name: firstName,
-                last_name: lastName,
-                username,
+            id: user.id,
+            first_name: firstName,
+            last_name: lastName,
+            username,
             },
-            { onConflict: "id", returning: "representation" }
-            )
+            { onConflict: "id" }
+        );
+
+        if (upsertErr) {
+            console.error("Save error:", upsertErr.message);
+            return;
+        }
+
+        // Always fetch the fresh row afterwards
+        const { data, error: fetchErr } = await supabase
+            .from("profiles")
+            .select("first_name, last_name, username")
+            .eq("id", user.id)
             .single();
 
-        if (!error && data) {
-            // keep local state in sync with saved values
-            setFirstName(data.first_name);
-            setLastName(data.last_name);
-            setUsername(data.username);
-            setBasicSaved(true);
-            setTimeout(() => setBasicSaved(false), 10000);
+        if (fetchErr) {
+            console.error("Fetch error:", fetchErr.message);
+            return;
         }
+
+        // Sync state + success flag
+        setFirstName(data.first_name || "");
+        setLastName(data.last_name || "");
+        setUsername(data.username || "");
+        setBasicSaved(true);
+        setTimeout(() => setBasicSaved(false), 5000);
     };
+
 
     const changePassword = async () => {
         setPwErr("");
@@ -233,11 +253,22 @@ export default function ManageAccount() {
                         });
 
                         setCurrPwStatus(error ? "bad" : "good"); // stays until next keystroke
-                        }, 3000);
+                        }, 1000);
                     }}
                     placeholder="Current password"
                     className="w-full border rounded px-3 py-2 text-sm"
                 />
+                {/* ▼ dynamic helper notes */}
+                {currPwStatus === "checking" && (
+                <p className="text-xs text-gray-500 -mt-1">Checking…</p>
+                )}
+                {currPwStatus === "good" && (
+                <p className="text-xs text-green-600 -mt-1">Current password correct ✅</p>
+                )}
+                {currPwStatus === "bad" && (
+                <p className="text-xs text-red-500 -mt-1">Current password incorrect</p>
+                )}
+
                 {/* New password */}
                 <input
                     type="password"
@@ -278,22 +309,13 @@ export default function ManageAccount() {
                     className="w-full border rounded px-3 py-2 text-sm"
                 />
                 {/* ▼ dynamic helper notes */}
-                {currPwStatus === "checking" && (
-                <p className="text-xs text-gray-500 -mt-1">Checking…</p>
-                )}
-                {currPwStatus === "good" && (
-                <p className="text-xs text-green-600 -mt-1">Current password correct ✅</p>
-                )}
-                {currPwStatus === "bad" && (
-                <p className="text-xs text-red-500 -mt-1">Current password incorrect</p>
-                )}
-
                 {pwMatchNote === "match" && (
                 <p className="text-xs text-green-600 -mt-1">Passwords match ✅</p>
                 )}
                 {pwMatchNote === "no-match" && (
                 <p className="text-xs text-red-500 -mt-1">Passwords do not match</p>
                 )}
+
                 {/* ▼ password rules */}
                 {pwErr && <p className="text-xs text-red-500 -mt-1">{pwErr}</p>}
                 <ul className="text-xs text-gray-500 pl-4 list-disc space-y-0.5">
