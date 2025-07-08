@@ -79,7 +79,7 @@ export default function VaultedDocuments() {
         </div>
 
         {/* Title */}
-        <h2 className="text-2xl font-bold text-purple-500 mb-4">🔐 Your Vaulted Documents</h2>
+        <h2 className="text-2xl font-bold text-purple-800 mb-4">🔐 Your Vaulted Documents</h2>
 
         {/* Search and Tag Filters */}
         <div className="flex flex-wrap md:flex-nowrap justify-between items-start gap-4 mb-6">

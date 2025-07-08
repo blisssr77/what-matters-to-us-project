@@ -542,7 +542,7 @@ export default function ManageAccount() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Workspace Card */}
             <div className="p-5 bg-gray-50 rounded border">
-                <h3 className="font-medium mb-3 text-gray-800">Set Up Workspace Vault Code</h3>
+                <h3 className="font-medium mb-3 text-gray-800">Set-Up /Change Workspace Vault Code</h3>
 
                 {codes.workspace === null ? (
                 /* CREATE form */
@@ -620,7 +620,7 @@ export default function ManageAccount() {
 
             {/* Private Card */}
             <div className="p-5 bg-gray-50 rounded border">
-                <h3 className="font-medium mb-3 text-gray-900">Set Up Private Vault Code</h3>
+                <h3 className="font-medium mb-3 text-gray-900">Set-Up /Change Private Vault Code</h3>
 
                 {codes.private === null ? (
                 /* CREATE */
