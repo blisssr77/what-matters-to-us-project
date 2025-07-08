@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import Layout from "../../components/Layout/Layout";
 import { UploadCloud, Camera } from "lucide-react";
+import bcrypt from "bcryptjs";
+import { ShieldCheck } from "lucide-react";
 
 /* =========================================================
    ManageAccount.jsx – modern AI‑styled settings page
@@ -23,11 +25,20 @@ export default function ManageAccount() {
     const [pwdSaved, setPwdSaved] = useState(false);
     const [pwMatchNote, setPwMatchNote] = useState(""); // "" | "match" | "no-match"
     const [currPwStatus, setCurrPwStatus] = useState(""); // "" | "correct" | "incorrect"
-
+    const currPwTimer = useRef(null);
 
     /* ────────────────── Vault Codes state ────────────────── */
     const [workspaceCode, setWorkspaceCode] = useState("");
     const [privateCode, setPrivateCode] = useState("");
+    const [codes, setCodes] = useState({ workspace: null, private: null });
+    const [workspaceCurrent, setWorkspaceCurrent] = useState("");
+    const [workspaceConfirm, setWorkspaceConfirm] = useState("");
+    const [privateCurrent, setPrivateCurrent] = useState("");
+    const [privateConfirm, setPrivateConfirm] = useState("");
+
+    /* feedback messages */
+    const [workspaceMsg, setWorkspaceMsg] = useState(null); // { ok, msg }
+    const [privateMsg, setPrivateMsg]   = useState(null);
 
     /* ────────────────── Get Basic User Info ────────────────── */
     useEffect(() => {
@@ -56,6 +67,34 @@ export default function ManageAccount() {
 
     loadProfile();
     }, []);
+
+    /* ────────────────── Get User's Vault Codes Info ────────────────── */
+    useEffect(() => {
+        const getCodes = async () => {
+            const {
+            data: { user },
+            } = await supabase.auth.getUser();
+            if (!user) return;
+
+            const { data, error } = await supabase
+            .from("vault_codes")
+            .select("workspace_code, private_code")
+            .eq("id", user.id)
+            .maybeSingle();           // returns null instead of throwing
+
+            if (!error && data) {
+            setCodes({
+                workspace: !!data.workspace_code, // true if a hash exists
+                private:   !!data.private_code,
+            });
+            }
+        };
+
+    getCodes();
+    }, []);
+
+    /* cleanup password check timer */
+    useEffect(() => () => clearTimeout(currPwTimer.current), []);
 
     /* ────────────────── Helper functions ────────────────── */
     const checkUsernameUnique = async (val) => {
@@ -134,19 +173,166 @@ export default function ManageAccount() {
         }
     };
 
-    const saveWorkspaceCode = async () => {
+    /* ────────────────── Save Vault Code handlers (wire to Supabase) ────────────────── */
+    /* ------------------------------------------------------------------
+   CREATE a Workspace/Private Vault Code  (only if user never set one)
+    ------------------------------------------------------------------ */
+    const createWorkspaceCode = async () => {
+        // 1) quick client-side checks
+        if (!workspaceCode || !workspaceConfirm)
+            return { ok: false, msg: "Enter code and confirmation" };
+
+        if (workspaceCode !== workspaceConfirm)
+            return { ok: false, msg: "Codes do not match" };
+
+        // 2) get logged-in user
         const {
-        data: { user },
+            data: { user },
         } = await supabase.auth.getUser();
-        await supabase.from("vault_codes").upsert({ id: user.id, workspace_code: workspaceCode });
+
+        if (!user) return { ok: false, msg: "User not signed-in" };
+
+        // 3) hash the new code
+        const hash = await bcrypt.hash(workspaceCode, 10);
+
+        // 4) upsert into vault_codes (insert if none, ignore private_code)
+        const { error } = await supabase.from("vault_codes").upsert(
+            {
+            id: user.id,            // PK / FK to auth.users
+            workspace_code: hash,
+            },
+            { onConflict: "id" }
+        );
+
+        if (error) return { ok: false, msg: "Failed to save code" };
+
+        // 5) clear inputs + mark UI as “has code”
+        setWorkspaceCode("");
+        setWorkspaceConfirm("");
+        setCodes((c) => ({ ...c, workspace: true }));
+
+        return { ok: true, msg: "Workspace code created successfully ✅" };
     };
 
-    const savePrivateCode = async () => {
+    const changeWorkspaceCode = async () => {
+        if (!workspaceCurrent || !workspaceCode || !workspaceConfirm)
+            return { ok: false, msg: "All fields are required" };
+
+        if (workspaceCode !== workspaceConfirm)
+            return { ok: false, msg: "New codes do not match" };
+
         const {
-        data: { user },
+            data: { user },
         } = await supabase.auth.getUser();
-        await supabase.from("vault_codes").upsert({ id: user.id, private_code: privateCode });
+
+        // 1. Fetch current hashed code from DB
+        const { data, error } = await supabase
+            .from("vault_codes")
+            .select("workspace_code")
+            .eq("user_id", user.id)
+            .single();
+
+        if (error || !data)
+            return { ok: false, msg: "Unable to load existing code" };
+
+        const storedHash = data.workspace_code;
+
+        // 2. Compare current input with stored hash
+        const match = await bcrypt.compare(workspaceCurrent, storedHash);
+        if (!match) return { ok: false, msg: "Current code is incorrect ❌" };
+
+        // 3. Hash the new code
+        const newHash = await bcrypt.hash(workspaceCode, 10);
+
+        // 4. Update Supabase with new hashed code
+        const { error: updateErr } = await supabase
+            .from("vault_codes")
+            .update({ workspace_code: newHash })
+            .eq("user_id", user.id);
+
+        if (updateErr) return { ok: false, msg: "Update failed" };
+
+        return { ok: true, msg: "Workspace code updated successfully ✅" };
     };
+    /* ────────────────── Private Vault Code ────────────────── */
+    const createPrivateCode = async () => {
+        // 1) Client-side validation
+        if (!privateCode || !privateConfirm)
+            return { ok: false, msg: "Enter code and confirmation" };
+
+        if (privateCode !== privateConfirm)
+            return { ok: false, msg: "Codes do not match" };
+
+        // 2) Get current user
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) return { ok: false, msg: "User not signed-in" };
+
+        // 3) Hash the code
+        const hash = await bcrypt.hash(privateCode, 10);
+
+        // 4) Insert or update into vault_codes
+        const { error } = await supabase.from("vault_codes").upsert(
+            {
+            id: user.id,
+            private_code: hash,
+            },
+            { onConflict: "id" }
+        );
+
+        if (error) return { ok: false, msg: "Failed to save code" };
+
+        // 5) Reset input and mark UI as saved
+        setPrivateCode("");
+        setPrivateConfirm("");
+        setCodes((c) => ({ ...c, private: true }));
+
+        return { ok: true, msg: "Private code created successfully ✅" };
+    };
+
+    const changePrivateCode = async () => {
+        if (!privateCurrent || !privateCode || !privateConfirm)
+            return { ok: false, msg: "All fields are required" };
+
+        if (privateCode !== privateConfirm)
+            return { ok: false, msg: "New codes do not match" };
+
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+
+        // 1. Load current hash
+        const { data, error } = await supabase
+            .from("vault_codes")
+            .select("private_code")
+            .eq("id", user.id)
+            .single();
+
+        if (error || !data)
+            return { ok: false, msg: "Unable to load existing code" };
+
+        const storedHash = data.private_code;
+
+        // 2. Compare current input
+        const match = await bcrypt.compare(privateCurrent, storedHash);
+        if (!match) return { ok: false, msg: "Current code is incorrect ❌" };
+
+        // 3. Hash and update
+        const newHash = await bcrypt.hash(privateCode, 10);
+
+        const { error: updateErr } = await supabase
+            .from("vault_codes")
+            .update({ private_code: newHash })
+            .eq("id", user.id);
+
+        if (updateErr) return { ok: false, msg: "Update failed" };
+
+        return { ok: true, msg: "Private code updated successfully ✅" };
+    };
+
+
 
     /* ────────────────── UI ────────────────── */
     return (
@@ -156,7 +342,7 @@ export default function ManageAccount() {
 
             {/* ========== Profile Photo ========== */}
             <div className="mb-12">
-            <h2 className="text-lg font-semibold mb-4">Profile photo</h2>
+            <h2 className="text-lg font-semibold mb-4 text-gray-800">Profile photo</h2>
             <div className="flex items-start gap-4">
                 <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center text-3xl font-bold text-purple-600 overflow-hidden">
                 {avatar ? <img src={URL.createObjectURL(avatar)} className="object-cover w-full h-full" /> : "R"}
@@ -165,11 +351,11 @@ export default function ManageAccount() {
                 <p className="text-sm text-gray-600">Upload your photo …</p>
                 <p className="text-xs text-gray-400 mb-2">Photo should be at least 300 × 300 px</p>
                 <div className="flex gap-2">
-                    <label className="inline-flex items-center gap-1 px-3 py-1.5 text-sm border rounded cursor-pointer hover:bg-purple-50">
+                    <label className="inline-flex items-center gap-1 px-3 py-1.5 text-sm border rounded cursor-pointer hover:bg-purple-50 text-gray-800">
                     <UploadCloud size={14} /> Upload
                     <input type="file" className="hidden" onChange={(e) => setAvatar(e.target.files[0])} />
                     </label>
-                    <button className="inline-flex items-center gap-1 px-3 py-1.5 text-sm border rounded hover:bg-purple-50">
+                    <button className="inline-flex items-center gap-1 px-3 py-1.5 text-sm border rounded hover:bg-purple-50 text-gray-800 text-gray-800">
                     <Camera size={14} /> Take Photo
                     </button>
                 </div>
@@ -180,8 +366,8 @@ export default function ManageAccount() {
             {/* ========== Basic Info & Password (stacked) ========== */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mb-12">
             {/* Basic */}
-            <div>
-                <h2 className="text-lg font-semibold mb-4">Basic information</h2>
+            <div className="text-gray-800">
+                <h2 className="text-lg font-semibold mb-4 ">Basic information</h2>
                 <div className="space-y-3">
                 <input
                     value={username}
@@ -218,7 +404,7 @@ export default function ManageAccount() {
             </div>
 
             {/* Password */}
-            <div>
+            <div className="text-gray-800">
                 <h2 className="text-lg font-semibold mb-4">Change password</h2>
                 <div className="space-y-3">
                 {/* Current password */}
@@ -339,20 +525,175 @@ export default function ManageAccount() {
             </div>
             </div>
 
-            {/* Vault codes section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
-            {/* Workspace vault */}
+            {/* ========== Vault Codes ========== */}
+            <h2 className="text-xl font-semibold text-blue-900 flex items-center gap-2">
+                <ShieldCheck size={28} className="text-blue-700" />
+                Vault codes
+                
+            </h2>
+            <p className="text-sm text-gray-700 mb-4">
+            Vault Codes are like personal encryption passwords used to lock or unlock your secure notes and files.
+            <span className="block text-red-400 mt-1 font-medium">
+                This cannot be recovered if forgotten. Make sure it’s memorable or saved securely.
+            </span>
+            </p>
+
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Workspace Card */}
             <div className="p-5 bg-gray-50 rounded border">
-                <h3 className="font-medium mb-3 text-gray-700">Workspace Vault Code</h3>
-                <input type="password" value={workspaceCode} onChange={(e)=>setWorkspaceCode(e.target.value)} className="w-full border rounded px-3 py-2 text-sm mb-3" placeholder="Enter workspace code" />
-                <button onClick={saveWorkspaceCode} className="bg-purple-600 text-white px-4 py-1.5 rounded hover:bg-purple-700 transition text-sm">Save workspace code</button>
+                <h3 className="font-medium mb-3 text-gray-800">Set Up Workspace Vault Code</h3>
+
+                {codes.workspace === null ? (
+                /* CREATE form */
+                <>
+                    <input
+                    type="password"
+                    placeholder="Create workspace code"
+                    value={workspaceCode}
+                    onChange={(e) => setWorkspaceCode(e.target.value)}
+                    className="w-full border rounded px-3 py-2 text-sm mb-2 text-gray-800"
+                    />
+                    <input
+                    type="password"
+                    placeholder="Confirm code"
+                    value={workspaceConfirm}
+                    onChange={(e) => setWorkspaceConfirm(e.target.value)}
+                    className="w-full border rounded px-3 py-2 text-sm mb-3 text-gray-800"
+                    />
+                    <button
+                    className="bg-purple-600 text-white px-4 py-1.5 rounded hover:bg-purple-700 transition text-sm"
+                    onClick={async () => {
+                        const { ok, msg } = await createWorkspaceCode();
+                        setWorkspaceMsg({ ok, msg });
+                    }}
+                    >
+                    Create code
+                    </button>
+                    {workspaceMsg?.ok ? (
+                    <p className="text-xs text-green-600 mt-1">{workspaceMsg.msg}</p>
+                    ) : workspaceMsg?.msg ? (
+                    <p className="text-xs text-red-500 mt-1">{workspaceMsg.msg}</p>
+                    ) : null}
+                </>
+                ) : (
+                /* CHANGE form */
+                <>
+                    <input
+                    type="password"
+                    placeholder="Current workspace vault code"
+                    value={workspaceCurrent}
+                    onChange={(e) => setWorkspaceCurrent(e.target.value)}
+                    className="w-full border rounded px-3 py-2 text-sm mb-2 text-gray-800"
+                    />
+                    <input
+                    type="password"
+                    placeholder="New code"
+                    value={workspaceCode}
+                    onChange={(e) => setWorkspaceCode(e.target.value)}
+                    className="w-full border rounded px-3 py-2 text-sm mb-2 text-gray-800"
+                    />
+                    <input
+                    type="password"
+                    placeholder="Confirm new code"
+                    value={workspaceConfirm}
+                    onChange={(e) => setWorkspaceConfirm(e.target.value)}
+                    className="w-full border rounded px-3 py-2 text-sm mb-3 text-gray-800"
+                    />
+                    <button
+                    className="bg-purple-600 text-white px-4 py-1.5 rounded hover:bg-purple-700 transition text-sm"
+                    onClick={async () => {
+                        const { ok, msg } = await changeWorkspaceCode();
+                        setWorkspaceMsg({ ok, msg });
+                    }}
+                    >
+                    Change code
+                    </button>
+                    {workspaceMsg?.ok ? (
+                    <p className="text-xs text-green-600 mt-1">{workspaceMsg.msg}</p>
+                    ) : workspaceMsg?.msg ? (
+                    <p className="text-xs text-red-500 mt-1">{workspaceMsg.msg}</p>
+                    ) : null}
+                </>
+                )}
             </div>
 
-            {/* Private vault */}
+            {/* Private Card */}
             <div className="p-5 bg-gray-50 rounded border">
-                <h3 className="font-medium mb-3 text-gray-700">Private Vault Code</h3>
-                <input type="password" value={privateCode} onChange={(e)=>setPrivateCode(e.target.value)} className="w-full border rounded px-3 py-2 text-sm mb-3" placeholder="Enter private code" />
-                <button onClick={savePrivateCode} className="bg-purple-600 text-white px-4 py-1.5 rounded hover:bg-purple-700 transition text-sm">Save private code</button>
+                <h3 className="font-medium mb-3 text-gray-900">Set Up Private Vault Code</h3>
+
+                {codes.private === null ? (
+                /* CREATE */
+                <>
+                    <input
+                    type="password"
+                    placeholder="Create private code"
+                    value={privateCode}
+                    onChange={(e) => setPrivateCode(e.target.value)}
+                    className="w-full border rounded px-3 py-2 text-sm mb-2 text-gray-800"
+                    />
+                    <input
+                    type="password"
+                    placeholder="Confirm code"
+                    value={privateConfirm}
+                    onChange={(e) => setPrivateConfirm(e.target.value)}
+                    className="w-full border rounded px-3 py-2 text-sm mb-3 text-gray-800"
+                    />
+                    <button
+                    className="bg-purple-600 text-white px-4 py-1.5 rounded hover:bg-purple-700 transition text-sm"
+                    onClick={async () => {
+                        const { ok, msg } = await createPrivateCode();
+                        setPrivateMsg({ ok, msg });
+                    }}
+                    >
+                    Create code
+                    </button>
+                    {privateMsg?.ok ? (
+                    <p className="text-xs text-green-600 mt-1">{privateMsg.msg}</p>
+                    ) : privateMsg?.msg ? (
+                    <p className="text-xs text-red-500 mt-1">{privateMsg.msg}</p>
+                    ) : null}
+                </>
+                ) : (
+                /* CHANGE */
+                <>
+                    <input
+                    type="password"
+                    placeholder="Current private vault code"
+                    value={privateCurrent}
+                    onChange={(e) => setPrivateCurrent(e.target.value)}
+                    className="w-full border rounded px-3 py-2 text-sm mb-2 text-gray-800"
+                    />
+                    <input
+                    type="password"
+                    placeholder="New code"
+                    value={privateCode}
+                    onChange={(e) => setPrivateCode(e.target.value)}
+                    className="w-full border rounded px-3 py-2 text-sm mb-2 text-gray-800"
+                    />
+                    <input
+                    type="password"
+                    placeholder="Confirm new code"
+                    value={privateConfirm}
+                    onChange={(e) => setPrivateConfirm(e.target.value)}
+                    className="w-full border rounded px-3 py-2 text-sm mb-3 text-gray-800"
+                    />
+                    <button
+                    className="bg-purple-600 text-white px-4 py-1.5 rounded hover:bg-purple-700 transition text-sm"
+                    onClick={async () => {
+                        const { ok, msg } = await changePrivateCode();
+                        setPrivateMsg({ ok, msg });
+                    }}
+                    >
+                    Change code
+                    </button>
+                    {privateMsg?.ok ? (
+                    <p className="text-xs text-green-600 mt-1">{privateMsg.msg}</p>
+                    ) : privateMsg?.msg ? (
+                    <p className="text-xs text-red-500 mt-1">{privateMsg.msg}</p>
+                    ) : null}
+                </>
+                )}
             </div>
             </div>
         </div>
