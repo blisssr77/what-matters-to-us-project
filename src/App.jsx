@@ -2,9 +2,9 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import AuthPage from "./components/Auth/AuthPage";
 import Dashboard from "./pages/Dashboard";
 import VaultedDocuments from "./components/PrivateVault/VaultedDocuments";
-import VaultedFileUpload from "./components/PrivateVault/FileUpload";
-import VaultedNoteUpload from "./components/PrivateVault/NoteUpload";
-import NoteDetail from "./components/PrivateVault/NoteDetail";
+import VaultedFileUpload from "./components/PrivateVault/VaultedDocUpload";
+import VaultedNoteUpload from "./components/PrivateVault/VaultedNoteUpload";
+import NoteDetail from "./components/PrivateVault/VaultedNoteDetail";
 import ManageAccount from "./pages/Account/ManageAccount";
 
 function App() {

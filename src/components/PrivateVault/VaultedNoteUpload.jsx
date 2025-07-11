@@ -3,6 +3,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 import { X, Search } from "lucide-react";
 import { encryptText } from "../../utils/encryption";
+import Layout from "../Layout/Layout";
 
 const VaultedNoteUpload = () => {
     const [title, setTitle] = useState("");
@@ -66,6 +67,7 @@ const VaultedNoteUpload = () => {
     };
 
     return (
+        <Layout>
         <div className="max-w-xl mx-auto mt-10 p-6 bg-white rounded shadow border border-gray-200">
         <h2 className="text-xl font-bold mb-4 text-purple-700">📝 Create Note</h2>
 
@@ -160,6 +162,7 @@ const VaultedNoteUpload = () => {
             <p className="text-sm text-center mt-3 text-green-600">{successMsg}</p>
         )}
         </div>
+    </Layout>
     );
 };
 
