@@ -13,6 +13,8 @@ const VaultedNoteUpload = () => {
     const [tags, setTags] = useState([]);
     const [availableTags, setAvailableTags] = useState([]);
     const [successMsg, setSuccessMsg] = useState("");
+    const [vaultCode, setVaultCode] = useState("");
+
 
     const navigate = useNavigate();
 
@@ -25,6 +27,7 @@ const VaultedNoteUpload = () => {
         fetchTags();
     }, []);
 
+    // Handle adding a new tag
     const handleTagAdd = async () => {
         if (!newTag.trim()) return;
         if (!availableTags.includes(newTag)) {
@@ -44,12 +47,16 @@ const VaultedNoteUpload = () => {
             data: { user },
         } = await supabase.auth.getUser();
 
-        const passphrase = user?.id; // or a separate per-user secret
+        if (!user || !vaultCode) {
+            setSuccessMsg("❌ Missing user or vault code");
+            setLoading(false);
+            return;
+        }
 
-        const { encryptedData, iv } = await encryptText(privateNote, passphrase);
+        const { encryptedData, iv } = await encryptText(privateNote, vaultCode); // ✅ Use vaultCode
 
         const { error } = await supabase.from("vaulted_notes").insert({
-            user_id: user?.id,
+            user_id: user.id,
             title,
             encrypted_note: encryptedData,
             iv,
@@ -92,6 +99,18 @@ const VaultedNoteUpload = () => {
                 rows="6"
                 className="w-full p-2 border rounded mb-4 text-gray-700"
                 placeholder="Write your note here..."
+            />
+
+            {/* Vault Code Section */}
+            <label className="block text-sm font-medium mb-1 text-gray-500">
+                Enter Vault Code to Encrypt Note
+            </label>
+            <input
+                type="password"
+                value={vaultCode}
+                onChange={(e) => setVaultCode(e.target.value)}
+                className="w-full p-2 border rounded mb-3"
+                placeholder="Vault Code"
             />
 
             {/* Tag Section */}

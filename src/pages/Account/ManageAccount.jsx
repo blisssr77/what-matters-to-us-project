@@ -175,49 +175,49 @@ export default function ManageAccount() {
 
     /* ────────────────── Save Vault Code handlers (wire to Supabase) ────────────────── */
     /* ------------------------------------------------------------------
-   CREATE a Workspace/Private Vault Code  (only if user never set one)
-    ------------------------------------------------------------------ */
+    /* ────────────── CREATE WORKSPACE CODE ────────────── */
     const createWorkspaceCode = async () => {
-        // 1) quick client-side checks
         if (!workspaceCode || !workspaceConfirm)
             return { ok: false, msg: "Enter code and confirmation" };
-
         if (workspaceCode !== workspaceConfirm)
             return { ok: false, msg: "Codes do not match" };
 
-        // 2) get logged-in user
         const {
             data: { user },
         } = await supabase.auth.getUser();
-
         if (!user) return { ok: false, msg: "User not signed-in" };
 
-        // 3) hash the new code
         const hash = await bcrypt.hash(workspaceCode, 10);
 
-        // 4) upsert into vault_codes (insert if none, ignore private_code)
+        // Fetch existing private_code (if any)
+        const { data: existing } = await supabase
+            .from("vault_codes")
+            .select("private_code")
+            .eq("id", user.id)
+            .single();
+
         const { error } = await supabase.from("vault_codes").upsert(
             {
-            id: user.id,            // PK / FK to auth.users
+            id: user.id,
             workspace_code: hash,
+            private_code: existing?.private_code ?? null, // keep other
             },
             { onConflict: "id" }
         );
 
         if (error) return { ok: false, msg: "Failed to save code" };
 
-        // 5) clear inputs + mark UI as “has code”
         setWorkspaceCode("");
         setWorkspaceConfirm("");
         setCodes((c) => ({ ...c, workspace: true }));
 
         return { ok: true, msg: "Workspace code created successfully ✅" };
-    };
+        };
 
-    const changeWorkspaceCode = async () => {
+        /* ────────────── CHANGE WORKSPACE CODE ────────────── */
+        const changeWorkspaceCode = async () => {
         if (!workspaceCurrent || !workspaceCode || !workspaceConfirm)
             return { ok: false, msg: "All fields are required" };
-
         if (workspaceCode !== workspaceConfirm)
             return { ok: false, msg: "New codes do not match" };
 
@@ -225,77 +225,74 @@ export default function ManageAccount() {
             data: { user },
         } = await supabase.auth.getUser();
 
-        // 1. Fetch current hashed code from DB
         const { data, error } = await supabase
             .from("vault_codes")
             .select("workspace_code")
-            .eq("user_id", user.id)
+            .eq("id", user.id)
             .single();
 
         if (error || !data)
             return { ok: false, msg: "Unable to load existing code" };
 
         const storedHash = data.workspace_code;
-
-        // 2. Compare current input with stored hash
         const match = await bcrypt.compare(workspaceCurrent, storedHash);
         if (!match) return { ok: false, msg: "Current code is incorrect ❌" };
 
-        // 3. Hash the new code
         const newHash = await bcrypt.hash(workspaceCode, 10);
 
-        // 4. Update Supabase with new hashed code
         const { error: updateErr } = await supabase
             .from("vault_codes")
             .update({ workspace_code: newHash })
-            .eq("user_id", user.id);
+            .eq("id", user.id);
 
         if (updateErr) return { ok: false, msg: "Update failed" };
 
         return { ok: true, msg: "Workspace code updated successfully ✅" };
-    };
-    /* ────────────────── Private Vault Code ────────────────── */
-    const createPrivateCode = async () => {
-        // 1) Client-side validation
+        };
+
+        /* ────────────── CREATE PRIVATE CODE ────────────── */
+        const createPrivateCode = async () => {
         if (!privateCode || !privateConfirm)
             return { ok: false, msg: "Enter code and confirmation" };
-
         if (privateCode !== privateConfirm)
             return { ok: false, msg: "Codes do not match" };
 
-        // 2) Get current user
         const {
             data: { user },
         } = await supabase.auth.getUser();
-
         if (!user) return { ok: false, msg: "User not signed-in" };
 
-        // 3) Hash the code
         const hash = await bcrypt.hash(privateCode, 10);
 
-        // 4) Insert or update into vault_codes
+        // Fetch existing workspace_code (if any)
+        const { data: existing } = await supabase
+            .from("vault_codes")
+            .select("workspace_code")
+            .eq("id", user.id)
+            .single();
+
         const { error } = await supabase.from("vault_codes").upsert(
             {
             id: user.id,
             private_code: hash,
+            workspace_code: existing?.workspace_code ?? null,
             },
             { onConflict: "id" }
         );
 
         if (error) return { ok: false, msg: "Failed to save code" };
 
-        // 5) Reset input and mark UI as saved
         setPrivateCode("");
         setPrivateConfirm("");
         setCodes((c) => ({ ...c, private: true }));
 
         return { ok: true, msg: "Private code created successfully ✅" };
-    };
+        };
 
-    const changePrivateCode = async () => {
+        /* ────────────── CHANGE PRIVATE CODE ────────────── */
+        const changePrivateCode = async () => {
         if (!privateCurrent || !privateCode || !privateConfirm)
             return { ok: false, msg: "All fields are required" };
-
         if (privateCode !== privateConfirm)
             return { ok: false, msg: "New codes do not match" };
 
@@ -303,7 +300,6 @@ export default function ManageAccount() {
             data: { user },
         } = await supabase.auth.getUser();
 
-        // 1. Load current hash
         const { data, error } = await supabase
             .from("vault_codes")
             .select("private_code")
@@ -314,12 +310,9 @@ export default function ManageAccount() {
             return { ok: false, msg: "Unable to load existing code" };
 
         const storedHash = data.private_code;
-
-        // 2. Compare current input
         const match = await bcrypt.compare(privateCurrent, storedHash);
         if (!match) return { ok: false, msg: "Current code is incorrect ❌" };
 
-        // 3. Hash and update
         const newHash = await bcrypt.hash(privateCode, 10);
 
         const { error: updateErr } = await supabase
@@ -355,7 +348,7 @@ export default function ManageAccount() {
                     <UploadCloud size={14} /> Upload
                     <input type="file" className="hidden" onChange={(e) => setAvatar(e.target.files[0])} />
                     </label>
-                    <button className="inline-flex items-center gap-1 px-3 py-1.5 text-sm border rounded hover:bg-purple-50 text-gray-800 text-gray-800">
+                    <button className="inline-flex items-center gap-1 px-3 py-1.5 text-sm border rounded hover:bg-purple-50 text-gray-800">
                     <Camera size={14} /> Take Photo
                     </button>
                 </div>
@@ -542,7 +535,7 @@ export default function ManageAccount() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Workspace Card */}
             <div className="p-5 bg-gray-50 rounded border">
-                <h3 className="font-medium mb-3 text-gray-800">Set-Up /Change Workspace Vault Code</h3>
+                <h3 className="font-medium mb-3 text-gray-800">Set-up /change <strong>Workspace</strong> vault code</h3>
 
                 {codes.workspace === null ? (
                 /* CREATE form */
@@ -620,7 +613,7 @@ export default function ManageAccount() {
 
             {/* Private Card */}
             <div className="p-5 bg-gray-50 rounded border">
-                <h3 className="font-medium mb-3 text-gray-900">Set-Up /Change Private Vault Code</h3>
+                <h3 className="font-medium mb-3 text-gray-900">Set-up /change <strong>Private</strong> vault code</h3>
 
                 {codes.private === null ? (
                 /* CREATE */

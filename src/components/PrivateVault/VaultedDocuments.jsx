@@ -16,6 +16,7 @@ export default function VaultedDocuments() {
 
   const tagBoxRef = useRef();
 
+  // Close tag filter when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (tagBoxRef.current && !tagBoxRef.current.contains(event.target)) {
@@ -28,6 +29,7 @@ export default function VaultedDocuments() {
     };
   }, []);
 
+  // Fetch all documents and notes on component mount
   useEffect(() => {
     const fetchDocs = async () => {
       const { data, error } = await supabase
@@ -51,6 +53,7 @@ export default function VaultedDocuments() {
     fetchDocs();
   }, []);
 
+  // Filter documents based on search term and selected tag
   const filteredDocs = allDocuments.filter((doc) => {
     const matchesSearch =
       doc.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -86,8 +89,8 @@ export default function VaultedDocuments() {
         <div className="flex flex-wrap md:flex-nowrap justify-between items-start gap-4 mb-6">
 
           {/* Search Bar */}
-          <div className="relative w-full md:w-1/2">
-            <Search className="absolute left-3 top-3 text-purple-400" size={18} />
+          <div className="relative w-full md:w-1/2"> 
+            <Search className="absolute left-3 top-3 text-purple-600" size={18} />
 
             <input
               type="text"
@@ -101,7 +104,7 @@ export default function VaultedDocuments() {
               <button
                 type="button"
                 onClick={() => setSearchTerm("")}
-                className="absolute right-2 top-2 text-gray-400 hover:text-red-500"
+                className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
               >
                 ✕
               </button>
@@ -112,7 +115,7 @@ export default function VaultedDocuments() {
           <div className="relative w-full md:w-1/2" ref={tagBoxRef}>
             <button
               onClick={() => setShowTagFilter(!showTagFilter)}
-              className="w-full flex items-center justify-between px-4 py-2 border border-gray-300 rounded-lg text-gray-500 bg-white shadow-sm hover:border-purple-400"
+              className="w-full flex items-center justify-between px-4 py-2 border border-gray-300 rounded-lg text-gray-400 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
               {selectedTag ? `Tag: ${selectedTag}` : "Search by Tag"}
               <ChevronDown className="ml-2 text-gray-400" size={18} />
@@ -163,7 +166,7 @@ export default function VaultedDocuments() {
           {filteredDocs.map((doc) => (
             <div
               key={doc.id}
-              onClick={() => navigate(doc.file_urls ? doc.file_urls : `/private/vaults/note/${doc.id}`)}
+              onClick={() => navigate(doc.file_urls ? doc.file_urls : `/private/vaults/note-view/${doc.id}`)}
               className="cursor-pointer bg-white border border-gray-200 rounded-xl shadow-md p-4 hover:shadow-lg transition"
             >
               <div className="flex items-center gap-3 mb-3">
@@ -174,13 +177,13 @@ export default function VaultedDocuments() {
               </div>
 
               {doc.tags?.length > 0 && (
-                <div className="mb-2 text-sm text-gray-600">
+                <div className="mb-2 text-sm text-gray-700">
                   <strong>Tags:</strong> {doc.tags.join(", ")}
                 </div>
               )}
 
               {doc.notes && (
-                <p className="text-sm text-gray-600 mb-2">{doc.notes}</p>
+                <p className="text-sm text-gray-800 mb-2">{doc.notes}</p>
               )}
 
               {doc.updated_at !== doc.created_at && (

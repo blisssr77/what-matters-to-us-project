@@ -6,6 +6,7 @@ import VaultedFileUpload from "./components/PrivateVault/VaultedDocUpload";
 import VaultedNoteUpload from "./components/PrivateVault/VaultedNoteUpload";
 import NoteDetail from "./components/PrivateVault/VaultedNoteDetail";
 import ManageAccount from "./pages/Account/ManageAccount";
+import VaultViewNote from "./components/PrivateVault/VaultViewNote";
 
 function App() {
   return (
@@ -19,7 +20,8 @@ function App() {
         <Route path="/private/vaults" element={<VaultedDocuments />} />
         <Route path="/private/vaults/file-upload" element={<VaultedFileUpload />} />
         <Route path="/private/vaults/note-upload" element={<VaultedNoteUpload />} />
-        <Route path="/private/vaults/note/:id" element={<NoteDetail />} />
+        {/* <Route path="/private/vaults/note/:id" element={<NoteDetail />} /> */}
+        <Route path="/private/vaults/note-view/:id" element={<VaultViewNote />} />
       </Routes>
     </Router>
   );

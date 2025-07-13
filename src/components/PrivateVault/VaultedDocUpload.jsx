@@ -166,7 +166,7 @@ export default function VaultedFileUpload() {
                         ))}
                     </ul>
                     ) : (
-                    <span className="text-sm">Drag & Drop your file(s) here or use browse below</span>
+                    <span className="text-sm">Drag & Drop your file(s) here or use browse below <br /><br />Format not exeeding 10 MB each</span>
                 )}
                 </div>
                 
@@ -179,7 +179,7 @@ export default function VaultedFileUpload() {
                     className="w-full border border-gray-300 p-2 rounded text-gray-500"
                 />
 
-                {/* Title input */}
+                {/* File input */}
                 <label className="block text-sm font-medium mb-1 text-gray-500 mt-4">Title</label>
                 <input
                 value={title}
