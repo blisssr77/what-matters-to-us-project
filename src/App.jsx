@@ -1,12 +1,13 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import AuthPage from "./components/Auth/AuthPage";
 import Dashboard from "./pages/Dashboard";
-import VaultedDocuments from "./components/PrivateVault/VaultedDocuments";
-import VaultedFileUpload from "./components/PrivateVault/VaultedDocUpload";
-import VaultedNoteUpload from "./components/PrivateVault/VaultedNoteUpload";
-import NoteDetail from "./components/PrivateVault/VaultedNoteDetail";
 import ManageAccount from "./pages/Account/ManageAccount";
+import VaultedDocuments from "./components/PrivateVault/VaultDocuments";
+import VaultedFileUpload from "./components/PrivateVault/VaultDocUpload";
+import VaultedNoteUpload from "./components/PrivateVault/VaultNoteUpload";
 import VaultViewNote from "./components/PrivateVault/VaultViewNote";
+import VaultEditNote from "./components/PrivateVault/VaultEditNote";
+import VaultViewDoc from "./components/PrivateVault/VaultViewDoc";
 
 function App() {
   return (
@@ -16,12 +17,13 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/account/manage" element={<ManageAccount />} />
 
-
         <Route path="/private/vaults" element={<VaultedDocuments />} />
         <Route path="/private/vaults/file-upload" element={<VaultedFileUpload />} />
         <Route path="/private/vaults/note-upload" element={<VaultedNoteUpload />} />
-        {/* <Route path="/private/vaults/note/:id" element={<NoteDetail />} /> */}
         <Route path="/private/vaults/note-view/:id" element={<VaultViewNote />} />
+        <Route path="/private/vaults/note-edit/:id" element={<VaultEditNote />} />
+
+        <Route path="/private/vaults/doc-view/:id" element={<VaultViewDoc />} />
       </Routes>
     </Router>
   );

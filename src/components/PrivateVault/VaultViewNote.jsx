@@ -19,6 +19,7 @@ export default function VaultViewNote() {
     const [codeEntered, setCodeEntered] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+    // Fetch note data on mount
     useEffect(() => {
         const fetchNote = async () => {
             const { data, error } = await supabase
@@ -36,14 +37,18 @@ export default function VaultViewNote() {
         fetchNote();
     }, [id]);
 
+    
+
+    // Handle decryption when vault code is entered
     const handleDecrypt = async () => {
         setLoading(true);
         setErrorMsg("");
-
+        
         const {
             data: { user },
         } = await supabase.auth.getUser();
 
+        // Check if user is authenticated
         const { data: vaultCodeRow, error: codeError } = await supabase
             .from("vault_codes")
             .select("private_code")
@@ -56,6 +61,7 @@ export default function VaultViewNote() {
             return;
         }
 
+        // Compare entered vault code with stored hash
         const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
         if (!isMatch) {
             setErrorMsg("Incorrect Vault Code.");
@@ -63,12 +69,15 @@ export default function VaultViewNote() {
             return;
         }
 
+        sessionStorage.setItem("vaultCode", vaultCode);
+
         try {
             const { decrypted } = await decryptText(
                 noteData.encrypted_note,
                 noteData.iv,
                 vaultCode
             );
+            console.log("Decrypted note:", decrypted);
             setDecryptedNote(decrypted);
             setCodeEntered(true);
         } catch (err) {
@@ -79,10 +88,12 @@ export default function VaultViewNote() {
         setLoading(false);
     };
 
+    // Handle copy to clipboard
     const handleCopy = () => {
         navigator.clipboard.writeText(decryptedNote);
     };
 
+    // Handle delete confirmation
     const handleDelete = async () => {
         setShowDeleteConfirm(false);
         await supabase.from("vaulted_notes").delete().eq("id", id);
@@ -93,7 +104,7 @@ export default function VaultViewNote() {
         <Layout>
             <div className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
                 <button
-                    onClick={() => navigate(-1)}
+                    onClick={() => navigate("/private/vaults")}
                     className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl"
                     aria-label="Close"
                 >
@@ -105,12 +116,16 @@ export default function VaultViewNote() {
                 {!codeEntered ? (
                     <>
                         <label className="block text-sm font-medium mb-1 text-gray-500">
-                            Enter 'Private' Vault Code to Decrypt Note
+                            Enter <strong>Private</strong> Vault Code to Decrypt Note
                         </label>
                         <input
                             type="password"
                             value={vaultCode}
-                            onChange={(e) => setVaultCode(e.target.value)}
+                            onChange={(e) => {
+                                const newCode = e.target.value;
+                                setVaultCode(newCode);
+                                sessionStorage.setItem("vaultCode", newCode); // ✅ persist vault code immediately
+                            }}
                             className="w-full p-2 border rounded mb-3 text-gray-600"
                             placeholder="Vault Code"
                         />
@@ -140,7 +155,7 @@ export default function VaultViewNote() {
                         </div>
 
                         <div className="whitespace-pre-wrap border border-gray-100 p-4 rounded bg-gray-50 text-sm text-gray-800 leading-relaxed mb-4">
-                            {decryptedNote}
+                            {decryptedNote ? decryptedNote : "⚠️ Decryption returned nothing."}
                         </div>
 
                         <div className="flex gap-4 text-sm">
@@ -152,7 +167,7 @@ export default function VaultViewNote() {
                                 Copy
                             </button>
                             <button
-                                onClick={() => navigate(`/private/vaults/edit/${id}`)}
+                                onClick={() => navigate(`/private/vaults/note-edit/${id}`)}
                                 className="flex items-center gap-1 text-blue-600 hover:underline"
                             >
                                 <Edit2 size={16} />

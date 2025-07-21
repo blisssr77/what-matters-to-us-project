@@ -109,7 +109,7 @@ const VaultedNoteUpload = () => {
                 type="password"
                 value={vaultCode}
                 onChange={(e) => setVaultCode(e.target.value)}
-                className="w-full p-2 border rounded mb-3"
+                className="w-full p-2 border rounded mb-3 text-gray-600"
                 placeholder="Vault Code"
             />
 

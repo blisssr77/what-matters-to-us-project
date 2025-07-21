@@ -166,7 +166,13 @@ export default function VaultedDocuments() {
           {filteredDocs.map((doc) => (
             <div
               key={doc.id}
-              onClick={() => navigate(doc.file_urls ? doc.file_urls : `/private/vaults/note-view/${doc.id}`)}
+              onClick={() =>
+                navigate(
+                  doc.file_urls
+                    ? `/private/vaults/doc-view/${doc.id}` // 🔐 Encrypted document route
+                    : `/private/vaults/note-view/${doc.id}`
+                )
+              }
               className="cursor-pointer bg-white border border-gray-200 rounded-xl shadow-md p-4 hover:shadow-lg transition"
             >
               <div className="flex items-center gap-3 mb-3">

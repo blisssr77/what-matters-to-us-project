@@ -1,6 +1,7 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
+// Function to derive a key from a passphrase using PBKDF2
 const getKey = async (passphrase) => {
   const passphraseKey = await crypto.subtle.importKey(
     "raw",
@@ -10,6 +11,7 @@ const getKey = async (passphrase) => {
     ["deriveKey"]
   );
 
+  // Derive a key using PBKDF2 with SHA-256
   return crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
@@ -24,6 +26,7 @@ const getKey = async (passphrase) => {
   );
 };
 
+// Function to encrypt and decrypt text using AES-GCM
 export const encryptText = async (text, passphrase) => {
   const key = await getKey(passphrase);
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -38,10 +41,11 @@ export const encryptText = async (text, passphrase) => {
   };
 };
 
+// Function to decrypt text using AES-GCM
 export const decryptText = async (encryptedData, ivBase64, passphrase) => {
   const key = await getKey(passphrase);
   const iv = Uint8Array.from(atob(ivBase64), (c) => c.charCodeAt(0));
   const data = Uint8Array.from(atob(encryptedData), (c) => c.charCodeAt(0));
   const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
-  return decoder.decode(decrypted);
+  return { decrypted: decoder.decode(decrypted) };
 };
