@@ -163,51 +163,58 @@ export default function VaultedDocuments() {
 
         {/* Vaulted Document Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {filteredDocs.map((doc) => (
-            <div
-              key={doc.id}
-              onClick={() =>
-                navigate(
-                  doc.file_urls
-                    ? `/private/vaults/doc-view/${doc.id}` // 🔐 Encrypted document route
-                    : `/private/vaults/note-view/${doc.id}`
-                )
-              }
-              className="cursor-pointer bg-white border border-gray-200 rounded-xl shadow-md p-4 hover:shadow-lg transition"
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <FileText className="text-purple-500" size={22} />
-                <div className="text-lg text-gray-700 font-semibold truncate">
-                  {doc.title || doc.name || "Untitled"}
+          {filteredDocs.map((doc) => {
+            const hasFiles = Array.isArray(doc.file_metas) && doc.file_metas.length > 0;
+
+            return (
+              <div
+                key={doc.id}
+                onClick={() =>
+                  navigate(
+                    hasFiles
+                      ? `/private/vaults/doc-view/${doc.id}` // 🔐 Encrypted document
+                      : `/private/vaults/note-view/${doc.id}`
+                  )
+                }
+                className="cursor-pointer bg-white border border-gray-200 rounded-xl shadow-md p-4 hover:shadow-lg transition"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <FileText className="text-purple-500" size={22} />
+                  <div className="text-lg text-gray-700 font-semibold truncate">
+                    {doc.title || doc.name || "Untitled"}
+                  </div>
                 </div>
+
+                {doc.tags?.length > 0 && (
+                  <div className="mb-2 text-sm text-gray-700">
+                    <strong>Tags:</strong> {doc.tags.join(", ")}
+                  </div>
+                )}
+
+                {doc.notes && (
+                  <p className="text-sm text-gray-800 mb-2">{doc.notes}</p>
+                )}
+
+                {doc.updated_at !== doc.created_at && (
+                  <div className="text-xs text-gray-400 mb-1">
+                    <strong>Last Modified:</strong>{" "}
+                    {dayjs(doc.updated_at).format("MMM D, YYYY h:mm A")}
+                  </div>
+                )}
+
+                <div className="text-xs text-gray-400">
+                  <strong>Uploaded:</strong>{" "}
+                  {dayjs(doc.created_at).format("MMM D, YYYY h:mm A")}
+                </div>
+
+                {hasFiles && (
+                  <div className="text-xs text-red-500 font-semibold mt-2">
+                    Contains File
+                  </div>
+                )}
               </div>
-
-              {doc.tags?.length > 0 && (
-                <div className="mb-2 text-sm text-gray-700">
-                  <strong>Tags:</strong> {doc.tags.join(", ")}
-                </div>
-              )}
-
-              {doc.notes && (
-                <p className="text-sm text-gray-800 mb-2">{doc.notes}</p>
-              )}
-
-              {doc.updated_at !== doc.created_at && (
-                <div className="text-xs text-gray-400 mb-1">
-                  <strong>Last Modified:</strong>{" "}
-                  {dayjs(doc.updated_at).format("MMM D, YYYY h:mm A")}
-                </div>
-              )}
-
-              <div className="text-xs text-gray-400">
-                <strong>Uploaded:</strong>{" "}
-                {dayjs(doc.created_at).format("MMM D, YYYY h:mm A")}
-              </div>
-              {doc.file_urls && (
-                <div className="text-xs text-red-500 font-semibold mt-2">Contains File</div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </Layout>

@@ -82,17 +82,20 @@ const VaultedNoteUpload = () => {
             >
                 <X size={20} />
             </button>
-            <h2 className="text-xl font-bold mb-4 text-purple-700">📝 Create Note</h2>
+            <h2 className="text-xl font-bold mb-4 text-gray-700">📝 Upload to My Private Vault</h2>
 
-            <label className="block text-sm font-medium mb-1 text-gray-500">Title</label>
+            <label className="block text-sm font-medium mb-1 text-gray-700">Title</label>
             <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full p-2 mb-4 border rounded text-gray-700"
-                placeholder="Enter note title"
+                placeholder="Enter note title (Public)"
             />
 
-            <label className="block text-sm font-medium mb-1 text-gray-500">Note</label>
+             <p className="text-sm text-red-400 mb-4">
+                🔐 Private Note will be encrypted using your saved Vault Code. 
+            </p>
+            <label className="block text-sm font-medium mb-1 text-gray-700">Private Note</label>
             <textarea
                 value={privateNote}
                 onChange={(e) => setPrivateNote(e.target.value)}
@@ -102,8 +105,8 @@ const VaultedNoteUpload = () => {
             />
 
             {/* Vault Code Section */}
-            <label className="block text-sm font-medium mb-1 text-gray-500">
-                Enter Vault Code to Encrypt Note
+            <label className="block text-sm font-medium mb-1 text-gray-700">
+                Enter <strong>Private</strong> Vault Code to Encrypt Note
             </label>
             <input
                 type="password"
@@ -115,7 +118,7 @@ const VaultedNoteUpload = () => {
 
             {/* Tag Section */}
             <div>
-                <label className="text-sm font-medium text-gray-500 mb-1 block">Tags</label>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Add tags</label>
 
                 <div className="relative flex items-center gap-2 mb-2">
                 <Search className="absolute left-3 text-gray-400" size={16} />

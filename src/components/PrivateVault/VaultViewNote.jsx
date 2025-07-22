@@ -111,12 +111,14 @@ export default function VaultViewNote() {
                     <X size={20} />
                 </button>
 
-                <h2 className="text-xl font-bold mb-4 text-purple-700">🔓 View Note</h2>
+                <h2 className="text-xl font-bold mb-4 text-gray-800">🔓 View Note</h2>
+                {noteData?.title && <h3 className="text-lg text-gray-800 font-semibold mb-1">{noteData.title}</h3>}
+                {noteData?.notes && <p className="text-s text-gray-700 mb-4">{noteData.notes}</p>}
 
                 {!codeEntered ? (
                     <>
-                        <label className="block text-sm font-medium mb-1 text-gray-500">
-                            Enter <strong>Private</strong> Vault Code to Decrypt Note
+                        <label className="block text-sm font-medium mb-1 text-gray-600">
+                            Enter <strong>Private</strong> Vault Code to Decrypt Note:
                         </label>
                         <input
                             type="password"

@@ -3,7 +3,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 import { Loader2, X, Search } from "lucide-react";
 import Layout from "../Layout/Layout";
-
+import { encryptText, encryptFile } from "../../utils/encryption"; // AES-GCM helper
 
 export default function VaultedFileUpload() {
     const [files, setFiles] = useState([]);
@@ -16,9 +16,11 @@ export default function VaultedFileUpload() {
     const [successMsg, setSuccessMsg] = useState("");
     const [dragging, setDragging] = useState(false);
     const [title, setTitle] = useState("");
+    const [vaultCode, setVaultCode] = useState("");
 
     const navigate = useNavigate();
 
+    // Allowed MIME types for file uploads
     const allowedMimes = [
         "application/pdf",
         "application/msword",
@@ -33,14 +35,16 @@ export default function VaultedFileUpload() {
         "image/png"
     ];
 
+    // Fetch available tags on component mount
     useEffect(() => {
         const fetchTags = async () => {
-        const { data, error } = await supabase.from("vault_tags").select("*");
-        if (!error) setAvailableTags(data.map((tag) => tag.name));
+            const { data, error } = await supabase.from("vault_tags").select("*");
+            if (!error) setAvailableTags(data.map((tag) => tag.name));
         };
         fetchTags();
     }, []);
 
+    // Handle file drop
     const handleFileDrop = (e) => {
         e.preventDefault();
         setDragging(false);
@@ -48,88 +52,117 @@ export default function VaultedFileUpload() {
         setFiles(droppedFiles);
     };
 
+    // Handle file selection
     const handleTagAdd = async () => {
         if (!newTag.trim()) return;
         if (!availableTags.includes(newTag)) {
-        await supabase.from("vault_tags").insert({ name: newTag });
-        setAvailableTags((prev) => [...prev, newTag]);
+            await supabase.from("vault_tags").insert({ name: newTag });
+            setAvailableTags((prev) => [...prev, newTag]);
         }
         if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
         setNewTag("");
     };
 
+    // Handle file upload
     const handleUpload = async (e) => {
         e.preventDefault();
         setUploading(true);
         setSuccessMsg("");
 
         if (!files.length) {
-        setUploading(false);
-        setSuccessMsg("⚠️ Please attach file(s) before uploading.");
-        return;
+            setUploading(false);
+            setSuccessMsg("⚠️ Please attach file(s) before uploading.");
+            return;
         }
 
         const invalidFiles = files.filter((f) => !allowedMimes.includes(f.type));
         if (invalidFiles.length > 0) {
-        setUploading(false);
-        setSuccessMsg(`❌ One or more files have unsupported types.`);
-        return;
+            setUploading(false);
+            setSuccessMsg(`❌ One or more files have unsupported types.`);
+            return;
         }
 
         const { data: userData } = await supabase.auth.getUser();
         const userId = userData?.user?.id;
         if (!userId) {
-        setUploading(false);
-        setSuccessMsg("❌ User not authenticated.");
-        return;
+            setUploading(false);
+            setSuccessMsg("❌ User not authenticated.");
+            return;
         }
 
-        const uploadedUrls = [];
+        if (!vaultCode) {
+            setUploading(false);
+            setSuccessMsg("❌ Please enter your Vault Code to encrypt.");
+            return;
+        }
+
+        const fileMetas = []; // to hold file info: url, iv, name
+        let noteIv = ""; // optional IV for private note
+        let uploadedCount = 0;
 
         for (const file of files) {
-        const sanitizedName = file.name.replace(/[^\w.-]/g, "_");
-        const filePath = `${userId}/${Date.now()}-${sanitizedName}`;
-        const { error: uploadError } = await supabase.storage
-            .from("vaulted")
-            .upload(filePath, file);
+            const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
+            const { encryptedBlob, ivHex } = await encryptFile(file, vaultCode, ivBytes);
 
-        if (uploadError) {
-            console.error(uploadError);
-            continue;
+            const sanitizedName = file.name.replace(/[^\w.-]/g, "_");
+            const filePath = `${userId}/${Date.now()}-${sanitizedName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from("vaulted")
+                .upload(filePath, encryptedBlob, { contentType: file.type });
+
+            if (uploadError) {
+                console.error(uploadError);
+                continue;
+            }
+
+            const { data } = supabase.storage.from("vaulted").getPublicUrl(filePath);
+            if (data?.publicUrl) {
+                fileMetas.push({
+                name: file.name,
+                url: data.publicUrl,
+                iv: ivHex,
+                });
+            }
         }
 
-        const { data } = supabase.storage.from("vaulted").getPublicUrl(filePath);
-        if (data?.publicUrl) uploadedUrls.push(data.publicUrl);
+        if (!fileMetas.length) {
+            setUploading(false);
+            setSuccessMsg("❌ Upload failed for all files.");
+            return;
+        } else if (uploadedCount < files.length) {
+            setSuccessMsg(`⚠️ Only ${uploadedCount} of ${files.length} files uploaded successfully.`);
         }
 
-        if (!uploadedUrls.length) {
-        setUploading(false);
-        setSuccessMsg("❌ Upload failed for all files.");
-        return;
+        // Encrypt private note (if provided)
+        let encryptedNote = "";
+        if (privateNote) {
+            const result = await encryptText(privateNote, vaultCode);
+            encryptedNote = result.encryptedData;
+            noteIv = result.iv;
         }
 
         const { error: insertError } = await supabase.from("vaulted_documents").insert({
-        user_id: userId,
-        name: files.map((f) => f.name).join(", "),
-        file_urls: uploadedUrls,
-        title,
-        tags,
-        notes,
-        private_note: privateNote,
-        created_at: new Date().toISOString()
+            user_id: userId,
+            name: files.map((f) => f.name).join(", "),
+            file_metas: fileMetas, // ✅ instead of file_urls
+            title,
+            tags,
+            notes,
+            encrypted_note: encryptedNote,
+            created_at: new Date().toISOString()
         });
 
         if (insertError) {
-        console.error(insertError);
-        setSuccessMsg("❌ Failed to save document.");
+            console.error(insertError);
+            setSuccessMsg("❌ Failed to save document.");
         } else {
-        setSuccessMsg("✅ Files uploaded successfully!");
-        setTimeout(() => navigate("/private/vaults"), 1300);
+            setSuccessMsg("✅ Files uploaded successfully!");
+            setTimeout(() => navigate("/private/vaults"), 1300);
         }
 
         setUploading(false);
     };
-
 
     return (
         <Layout>
@@ -141,7 +174,7 @@ export default function VaultedFileUpload() {
                 <X size={20} />
             </button>
 
-            <h2 className="text-xl font-semibold text-purple-600 mb-4">📤 Upload to My Vault</h2>
+            <h2 className="text-xl font-semibold text-gray-700 mb-4">📤 Upload to My Private Vault</h2>
             <p className="text-xs text-blue-700 mt-1">
                 Supported: PDF, Word, Excel, PowerPoint, Text, CSV, JPG, PNG, GIF, ZIP, JSON
             </p>
@@ -180,17 +213,17 @@ export default function VaultedFileUpload() {
                 />
 
                 {/* File input */}
-                <label className="block text-sm font-medium mb-1 text-gray-500 mt-4">Title</label>
+                <label className="block text-sm font-medium mb-1 text-gray-800 mt-4">Title</label>
                 <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full p-2 mb-4 border rounded text-gray-700"
-                placeholder="Enter document title"
+                placeholder="Enter document title (Public)"
                 />
 
                 {/* Tag Input Section */}
                 <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Tags</label>
+                    <label className="text-sm font-medium text-gray-800 mb-1 block">Add tags</label>
 
                     {/* Search + Create */}
                     <div className="relative flex items-center gap-2 mb-2">
@@ -259,17 +292,32 @@ export default function VaultedFileUpload() {
                 <textarea
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Public Notes (visible to shared contacts)"
+                    placeholder="Public notes (Visible to shared contacts)"
                     rows={2}
                     className="w-full border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
                 />
 
+                <p className="text-sm text-red-400 mb-4">
+                🔐 Private Note will be encrypted using your saved Vault Code. 
+                </p>
                 <textarea
                     value={privateNote}
                     onChange={(e) => setPrivateNote(e.target.value)}
-                    placeholder="Private Notes (for your eyes only)"
+                    placeholder="Private notes (For your eyes only)"
                     rows={2}
                     className="w-full border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
+                />
+
+                {/* Vault Code Section */}
+                <label className="block text-sm font-medium mb-1 text-gray-500">
+                    Enter <strong>Private</strong> vault code to encrypt document:
+                </label>
+                <input
+                    type="password"
+                    value={vaultCode}
+                    onChange={(e) => setVaultCode(e.target.value)}
+                    className="w-full p-2 border rounded mb-3 text-gray-600"
+                    placeholder="Vault code"
                 />
 
                 {/* Upload */}
