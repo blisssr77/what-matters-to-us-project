@@ -59,7 +59,7 @@ const VaultedNoteUpload = () => {
             user_id: user.id,
             title,
             encrypted_note: encryptedData,
-            iv,
+            note_iv: iv, // ✅ save IV under note_iv
             tags,
         });
 
@@ -100,7 +100,7 @@ const VaultedNoteUpload = () => {
                 value={privateNote}
                 onChange={(e) => setPrivateNote(e.target.value)}
                 rows="6"
-                className="w-full p-2 border rounded mb-4 text-gray-700"
+                className="w-full p-2 border bg-gray-50 rounded mb-4 text-gray-700"
                 placeholder="Write your note here..."
             />
 
@@ -132,7 +132,7 @@ const VaultedNoteUpload = () => {
                 <button
                     type="button"
                     onClick={handleTagAdd}
-                    className="ml-2 px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                    className="ml-2 px-3 py-2 text-sm bg-purple-600 text-white rounded hover:bg-purple-700"
                 >
                     Create
                 </button>

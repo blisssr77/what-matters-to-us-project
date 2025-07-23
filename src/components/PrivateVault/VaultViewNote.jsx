@@ -43,12 +43,12 @@ export default function VaultViewNote() {
     const handleDecrypt = async () => {
         setLoading(true);
         setErrorMsg("");
-        
+
         const {
             data: { user },
         } = await supabase.auth.getUser();
 
-        // Check if user is authenticated
+        // 1. Fetch vault code hash
         const { data: vaultCodeRow, error: codeError } = await supabase
             .from("vault_codes")
             .select("private_code")
@@ -61,7 +61,7 @@ export default function VaultViewNote() {
             return;
         }
 
-        // Compare entered vault code with stored hash
+        // 2. Compare hash with user input
         const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
         if (!isMatch) {
             setErrorMsg("Incorrect Vault Code.");
@@ -71,22 +71,27 @@ export default function VaultViewNote() {
 
         sessionStorage.setItem("vaultCode", vaultCode);
 
+        // 3. Decrypt the note
         try {
-            const { decrypted } = await decryptText(
-                noteData.encrypted_note,
-                noteData.iv,
-                vaultCode
+            const ivToUse = noteData.note_iv || noteData.iv; // ✅ fallback if note_iv is missing
+
+            const decrypted = await decryptText(
+            noteData.encrypted_note,
+            ivToUse,
+            vaultCode
             );
-            console.log("Decrypted note:", decrypted);
+            console.log("✅ Decrypted note:", decrypted);
             setDecryptedNote(decrypted);
             setCodeEntered(true);
         } catch (err) {
-            console.error("Decryption failed:", err);
+            console.error("❌ Decryption failed:", err);
             setErrorMsg("Failed to decrypt note.");
         }
 
         setLoading(false);
     };
+
+
 
     // Handle copy to clipboard
     const handleCopy = () => {
@@ -153,7 +158,7 @@ export default function VaultViewNote() {
                         </div>
 
                         <div className="text-gray-900 mb-2 text-sm">Private note:</div>
-                        <div className="whitespace-pre-wrap border border-gray-100 p-4 rounded bg-gray-50 text-sm text-gray-800 leading-relaxed mb-4">
+                        <div className="whitespace-pre-wrap border border-gray-100 p-4 rounded bg-gray-50 text-sm text-purple-900 leading-relaxed mb-4">
                             {decryptedNote ? decryptedNote : "⚠️ Decryption returned nothing."}
                         </div>
 

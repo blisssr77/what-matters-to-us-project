@@ -35,6 +35,7 @@ export default function VaultViewDoc() {
   const [loading, setLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // Fetch document data on mount
   useEffect(() => {
     const fetchDoc = async () => {
     const { data, error } = await supabase.from("vaulted_documents").select("*").eq("id", id).single();
@@ -48,49 +49,59 @@ export default function VaultViewDoc() {
     fetchDoc();
   }, [id]);
 
+  // Handle vault code entry
   useEffect(() => {
     const decrypt = async () => {
-      if (!doc || !vaultCode) return;
-      try {
-        // Decrypt note
-        if (doc.encrypted_note && doc.iv) {
-          const note = await decryptText(doc.encrypted_note, doc.iv, vaultCode);
-          setDecryptedNote(note);
+        if (!doc || !vaultCode) return;
+        setLoading(true);
+
+        try {
+        // ✅ Decrypt note using stored Base64 IV
+        if (doc.encrypted_note && doc.note_iv) {
+            try {
+            const note = await decryptText(doc.encrypted_note, doc.note_iv, vaultCode);
+            setDecryptedNote(note);
+            console.log("✅ Decrypted note:", note);
+            } catch (err) {
+            console.error("❌ Note decryption failed:", err);
+            }
         }
 
-        // Decrypt file
-        if (!doc.file_metas?.length) return;
-        const fileMeta = doc.file_metas[0];
-        const { url, iv } = fileMeta;
-        const urlObj = new URL(url);
-        const pathname = urlObj.pathname;
-        const bucket = "vaulted";
-        const publicPathPrefix = `/storage/v1/object/public/${bucket}/`;
-        const filePath = pathname.startsWith(publicPathPrefix) ? pathname.slice(publicPathPrefix.length) : pathname;
+        // ✅ Decrypt file
+        if (doc.file_metas?.length) {
+            const fileMeta = doc.file_metas[0];
+            const { url, iv } = fileMeta;
+            const urlObj = new URL(url);
+            const pathname = urlObj.pathname;
+            const bucket = "vaulted";
+            const publicPathPrefix = `/storage/v1/object/public/${bucket}/`;
+            const filePath = pathname.startsWith(publicPathPrefix)
+            ? pathname.slice(publicPathPrefix.length)
+            : pathname;
 
-        const { data, error } = await supabase.storage.from(bucket).download(filePath);
-        if (error) throw error;
+            const { data, error } = await supabase.storage.from(bucket).download(filePath);
+            if (error) throw error;
 
-        const encryptedBuffer = await data.arrayBuffer();
-        const blob = await decryptFile(encryptedBuffer, iv, vaultCode);
-        const blobUrl = URL.createObjectURL(blob);
+            const encryptedBuffer = await data.arrayBuffer();
+            const blob = await decryptFile(encryptedBuffer, iv, vaultCode);
+            const blobUrl = URL.createObjectURL(blob);
 
-        setDecryptedBlob(blob);
-        setDecryptedFileUrl(blobUrl);
-        setDecryptedFileType(blob.type || "application/octet-stream");
-      } catch (err) {
+            setDecryptedBlob(blob);
+            setDecryptedFileUrl(blobUrl);
+            setDecryptedFileType(blob.type || "application/octet-stream");
+        }
+        } catch (err) {
         console.error("❌ Decryption error:", err);
         setErrorMsg("Decryption failed. Please check your Vault Code.");
-      } finally {
+        } finally {
         setLoading(false);
-      }
+        }
     };
 
     if (entered && doc) {
-      setLoading(true);
-      decrypt();
+        decrypt();
     }
-  }, [entered, doc, vaultCode]);
+    }, [entered, doc, vaultCode]);
 
     // Handle delete confirmation
     const handleDelete = async () => {
@@ -148,7 +159,7 @@ export default function VaultViewDoc() {
         {doc?.title && <h3 className="text-lg text-gray-800 font-semibold mb-1">{doc.title}</h3>}
         {doc?.notes && <p className="text-sm text-gray-700 mb-2">{doc.notes}</p>}
         {entered && decryptedNote && (
-          <div className="text-sm text-purple-700 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
+          <div className="text-sm text-purple-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
             {decryptedNote}
           </div>
         )}

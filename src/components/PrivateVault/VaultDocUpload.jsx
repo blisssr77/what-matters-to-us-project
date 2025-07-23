@@ -150,6 +150,7 @@ export default function VaultedFileUpload() {
             tags,
             notes,
             encrypted_note: encryptedNote,
+            note_iv: noteIv,
             created_at: new Date().toISOString()
         });
 
@@ -294,7 +295,7 @@ export default function VaultedFileUpload() {
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder="Public notes (Visible to shared contacts)"
                     rows={2}
-                    className="w-full border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
+                    className="w-full border bg-gray-50 border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
                 />
 
                 <p className="text-sm text-red-400 mb-4">
@@ -305,7 +306,7 @@ export default function VaultedFileUpload() {
                     onChange={(e) => setPrivateNote(e.target.value)}
                     placeholder="Private notes (For your eyes only)"
                     rows={2}
-                    className="w-full border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
+                    className="bg-gray-50 w-full border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
                 />
 
                 {/* Vault Code Section */}

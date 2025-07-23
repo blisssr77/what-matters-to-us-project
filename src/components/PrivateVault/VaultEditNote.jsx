@@ -68,7 +68,6 @@ export default function VaultEditNote() {
     useEffect(() => {
         if (vaultCode && noteData) {
             handleDecrypt();
-            console.log("🔐 Running handleDecrypt() with vaultCode and noteData")
             console.log("🔍 noteData updated:", noteData);
         }
     }, [vaultCode, noteData]);
@@ -88,8 +87,8 @@ export default function VaultEditNote() {
             .select("private_code")
             .eq("id", user.id)
             .single();
-            
-            console.log("🔐 Running handleDecrypt()");
+
+        console.log("🔐 Running handleDecrypt()");
 
         if (codeError || !vaultCodeRow?.private_code) {
             setErrorMsg("❌ Vault code not set.");
@@ -105,28 +104,32 @@ export default function VaultEditNote() {
         }
 
         if (!noteData) {
-            console.error("Note data not yet loaded");
+            console.error("❌ Note data not yet loaded");
             setErrorMsg("Please wait for note data to load.");
             setLoading(false);
             return;
         }
 
         try {
-            const { decrypted } = await decryptText(
-                noteData.encrypted_note,
-                noteData.iv,
-                vaultCode
+            const ivToUse = noteData.note_iv || noteData.iv; // ✅ fallback for backward compatibility
+
+            const decrypted = await decryptText(
+            noteData.encrypted_note,
+            ivToUse,
+            vaultCode
             );
+
             console.log("✅ Decrypted note:", decrypted);
             setEditedNote(decrypted);
             setEditedTitle(noteData.title || "");
         } catch (err) {
-            console.error("Decryption error:", err);
+            console.error("❌ Decryption error:", err);
             setErrorMsg("Failed to decrypt note.");
         }
 
         setLoading(false);
     };
+
 
     // Handle vault code change
     const handleSave = async () => {
@@ -141,32 +144,32 @@ export default function VaultEditNote() {
             const { encryptedData, iv } = await encryptText(editedNote, vaultCode);
 
             const updatedTags = selectedTags
-                .map((tag) => tag.trim())
-                .filter((tag) => tag.length > 0);
+            .map((tag) => tag.trim())
+            .filter((tag) => tag.length > 0);
 
             const { error: updateError } = await supabase
-                .from("vaulted_notes")
-                .update({
-                    title: editedTitle,
-                    tags: updatedTags,
-                    encrypted_note: encryptedData,
-                    iv,
-                })
-                .eq("id", id);
+            .from("vaulted_notes")
+            .update({
+                title: editedTitle,
+                tags: updatedTags,
+                encrypted_note: encryptedData,
+                note_iv: iv, // ✅ save as note_iv instead of iv
+            })
+            .eq("id", id);
 
             if (updateError) {
-                console.error("Update error:", updateError);
-                setError("Failed to update note.");
+            console.error("❌ Update error:", updateError);
+            setError("Failed to update note.");
             } else {
-                console.log("🔐 Encrypted Note:", encryptedData);
-                console.log("🧂 IV:", iv);
-                setSuccessMsg("✅ Note updated successfully!");
-                setTimeout(() => {
-                    navigate(`/private/vaults/note-view/${id}`);
-                }, 1300);
+            console.log("🔐 Encrypted Note:", encryptedData);
+            console.log("🧂 Note IV:", iv);
+            setSuccessMsg("✅ Note updated successfully!");
+            setTimeout(() => {
+                navigate(`/private/vaults/note-view/${id}`);
+            }, 1300);
             }
         } catch (err) {
-            console.error("Encryption error:", err);
+            console.error("❌ Encryption error:", err);
             setError("Encryption failed.");
         } finally {
             setSaving(false);
@@ -200,12 +203,12 @@ export default function VaultEditNote() {
                     <X size={20} />
                 </button>
 
-                <h2 className="text-xl font-bold mb-4 text-purple-700">✏️ Edit Note</h2>
+                <h2 className="text-xl font-bold mb-4 text-gray-800">✏️ Edit Note</h2>
 
                 <input
                     value={editedTitle}
                     onChange={(e) => setEditedTitle(e.target.value)}
-                    className="w-full p-2 border rounded mb-3 text-gray-800 font-semibold"
+                    className="w-full p-2 border rounded mb-3  text-gray-800 font-semibold"
                     placeholder="Title"
                 />
 
@@ -227,7 +230,7 @@ export default function VaultEditNote() {
                             value={newTag}
                             onChange={(e) => setNewTag(e.target.value)}
                             placeholder="Search or create new tag"
-                            className="w-full pl-8 border border-gray-300 p-2 rounded text-sm"
+                            className="w-full pl-8 border border-gray-300 p-2 text-gray-700 rounded text-sm"
                         />
                         <button
                             type="button"
@@ -265,7 +268,7 @@ export default function VaultEditNote() {
                     )}
                 </div>
 
-                <div className="flex gap-4 text-sm mt-4">
+                <div className="flex gap-4 mt-4">
                     <button onClick={handleSave} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
                         Save
                     </button>
