@@ -142,12 +142,8 @@ export default function VaultViewNote() {
                     </>
                 ) : (
                     <>
-                        <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                            {noteData.title || "Untitled Note"}
-                        </h3>
-
                         {noteData.tags?.length > 0 && (
-                            <div className="mb-2 text-sm text-gray-600">
+                            <div className="mb-2 text-sm text-gray-700">
                                 <strong>Tags:</strong> {noteData.tags.join(", ")}
                             </div>
                         )}
@@ -156,10 +152,12 @@ export default function VaultViewNote() {
                             Created: {dayjs(noteData.created_at).format("MMM D, YYYY h:mm A")}
                         </div>
 
+                        <div className="text-gray-900 mb-2 text-sm">Private note:</div>
                         <div className="whitespace-pre-wrap border border-gray-100 p-4 rounded bg-gray-50 text-sm text-gray-800 leading-relaxed mb-4">
                             {decryptedNote ? decryptedNote : "⚠️ Decryption returned nothing."}
                         </div>
 
+                        {/* Action buttons */}
                         <div className="flex gap-4 text-sm">
                             <button
                                 onClick={handleCopy}
@@ -190,6 +188,7 @@ export default function VaultViewNote() {
                     </>
                 )}
 
+                {/* Delete confirmation modal */}
                 {showDeleteConfirm && (
                     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
                         <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full">

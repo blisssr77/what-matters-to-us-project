@@ -75,11 +75,11 @@ export const encryptFile = async (file, passphrase, ivBytes) => {
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 
-  return { encryptedBlob, ivHex };
+  return { encryptedBlob, ivHex, mimeType: file.type };
 };
 
 // Decrypt a file using AES-GCM with vaultCode-derived key
-export async function decryptFile(encryptedBuffer, ivHex, vaultCode) {
+export async function decryptFile(encryptedBuffer, ivHex, vaultCode, mimeType = "") {
   try {
     const iv = hexToUint8Array(ivHex);
     const key = await getKey(vaultCode, iv); // uses same salt as encrypt
@@ -93,7 +93,8 @@ export async function decryptFile(encryptedBuffer, ivHex, vaultCode) {
       encryptedBuffer
     );
 
-    return new Blob([decrypted]);
+    // ✅ Return with correct MIME type for viewing/downloading
+    return new Blob([decrypted], { type: mimeType || "application/octet-stream" });
   } catch (err) {
     console.error("❌ Decryption failed:", err);
     throw new Error("Failed to decrypt file");
