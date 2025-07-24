@@ -154,6 +154,7 @@ export default function VaultEditNote() {
                 tags: updatedTags,
                 encrypted_note: encryptedData,
                 note_iv: iv, // ✅ save as note_iv instead of iv
+                updated_at: new Date().toISOString(),
             })
             .eq("id", id);
 

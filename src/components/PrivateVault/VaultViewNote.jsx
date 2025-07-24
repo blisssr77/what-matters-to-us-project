@@ -156,6 +156,9 @@ export default function VaultViewNote() {
                         <div className="mb-3 text-xs text-gray-400">
                             Created: {dayjs(noteData.created_at).format("MMM D, YYYY h:mm A")}
                         </div>
+                        <div className="mb-3 text-xs text-gray-400">
+                            Updated: {dayjs(noteData.updated_at).format("MMM D, YYYY h:mm A")}
+                        </div>
 
                         <div className="text-gray-900 mb-2 text-sm">Private note:</div>
                         <div className="whitespace-pre-wrap border border-gray-100 p-4 rounded bg-gray-50 text-sm text-purple-900 leading-relaxed mb-4">

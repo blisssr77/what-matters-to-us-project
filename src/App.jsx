@@ -3,11 +3,12 @@ import AuthPage from "./components/Auth/AuthPage";
 import Dashboard from "./pages/Dashboard";
 import ManageAccount from "./pages/Account/ManageAccount";
 import VaultedDocuments from "./components/PrivateVault/VaultDocuments";
-import VaultedFileUpload from "./components/PrivateVault/VaultDocUpload";
-import VaultedNoteUpload from "./components/PrivateVault/VaultNoteUpload";
+import VaultedFileUpload from "./components/PrivateVault/VaultUploadDoc";
+import VaultedNoteUpload from "./components/PrivateVault/VaultUploadNote";
 import VaultViewNote from "./components/PrivateVault/VaultViewNote";
 import VaultEditNote from "./components/PrivateVault/VaultEditNote";
 import VaultViewDoc from "./components/PrivateVault/VaultViewDoc";
+import VaultEditDoc from "./components/PrivateVault/VaultEditDoc";
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
         <Route path="/private/vaults/note-edit/:id" element={<VaultEditNote />} />
 
         <Route path="/private/vaults/doc-view/:id" element={<VaultViewDoc />} />
+        <Route path="/private/vaults/doc-edit/:id" element={<VaultEditDoc />} />
       </Routes>
     </Router>
   );

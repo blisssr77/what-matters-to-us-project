@@ -82,7 +82,7 @@ const VaultedNoteUpload = () => {
             >
                 <X size={20} />
             </button>
-            <h2 className="text-xl font-bold mb-4 text-gray-700">📝 Upload to My Private Vault</h2>
+            <h2 className="text-xl font-bold mb-4 text-gray-800">📝 Upload to My Private Vault</h2>
 
             <label className="block text-sm font-medium mb-1 text-gray-700">Title</label>
             <input

@@ -52,7 +52,7 @@ export default function VaultedFileUpload() {
         setFiles(droppedFiles);
     };
 
-    // Handle file selection
+    // Handle tags selection
     const handleTagAdd = async () => {
         if (!newTag.trim()) return;
         if (!availableTags.includes(newTag)) {
@@ -175,7 +175,7 @@ export default function VaultedFileUpload() {
                 <X size={20} />
             </button>
 
-            <h2 className="text-xl font-semibold text-gray-700 mb-4">📤 Upload to My Private Vault</h2>
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">📤 Upload to My Private Vault</h2>
             <p className="text-xs text-blue-700 mt-1">
                 Supported: PDF, Word, Excel, PowerPoint, Text, CSV, JPG, PNG, GIF, ZIP, JSON
             </p>
@@ -214,17 +214,19 @@ export default function VaultedFileUpload() {
                 />
 
                 {/* File input */}
-                <label className="block text-sm font-medium mb-1 text-gray-800 mt-4">Title</label>
-                <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full p-2 mb-4 border rounded text-gray-700"
-                placeholder="Enter document title (Public)"
-                />
+                <div>
+                    <label className="block text-sm font-medium mb-1 text-gray-800 mt-4">Document title:</label>
+                    <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="w-full p-2 border rounded text-gray-700"
+                    placeholder="Enter document title (Public)"
+                    />
+                </div>
 
                 {/* Tag Input Section */}
                 <div>
-                    <label className="text-sm font-medium text-gray-800 mb-1 block">Add tags</label>
+                    <label className="text-sm font-medium text-gray-800 mb-1 block">Add tags:</label>
 
                     {/* Search + Create */}
                     <div className="relative flex items-center gap-2 mb-2">
@@ -239,7 +241,7 @@ export default function VaultedFileUpload() {
                         <button
                             type="button"
                             onClick={handleTagAdd}
-                            className="ml-2 px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                            className="ml-2 px-3 py-2 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
                         >
                         Create
                         </button>
@@ -290,36 +292,44 @@ export default function VaultedFileUpload() {
                 </div>
 
                 {/* Notes */}
-                <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Public notes (Visible to shared contacts)"
-                    rows={2}
-                    className="w-full border bg-gray-50 border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
-                />
+                <div>
+                    <h className="text-sm font-medium mb-1 text-gray-800">Public note:</h>
+                    <textarea
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        placeholder="Public notes (Visible to shared contacts)"
+                        rows={2}
+                        className="w-full border bg-gray-50 border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
+                    />
+                </div>
 
-                <p className="text-sm text-red-400 mb-4">
-                🔐 Private Note will be encrypted using your saved Vault Code. 
-                </p>
-                <textarea
-                    value={privateNote}
-                    onChange={(e) => setPrivateNote(e.target.value)}
-                    placeholder="Private notes (For your eyes only)"
-                    rows={2}
-                    className="bg-gray-50 w-full border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
-                />
+                {/* Private Note Section */}
+                <div>
+                    <p className="text-sm text-red-400 mb-1">
+                    🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
+                    </p>
+                    <textarea
+                        value={privateNote}
+                        onChange={(e) => setPrivateNote(e.target.value)}
+                        placeholder="Private notes (For your eyes only)"
+                        rows={2}
+                        className="bg-gray-50 w-full border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
+                    />
+                </div>
 
                 {/* Vault Code Section */}
-                <label className="block text-sm font-medium mb-1 text-gray-500">
-                    Enter <strong>Private</strong> vault code to encrypt document:
-                </label>
-                <input
-                    type="password"
-                    value={vaultCode}
-                    onChange={(e) => setVaultCode(e.target.value)}
-                    className="w-full p-2 border rounded mb-3 text-gray-600"
-                    placeholder="Vault code"
-                />
+                <div>
+                    <label className="block text-sm font-medium mb-1 text-gray-500">
+                        Enter <strong>Private</strong> vault code to encrypt document:
+                    </label>
+                    <input
+                        type="password"
+                        value={vaultCode}
+                        onChange={(e) => setVaultCode(e.target.value)}
+                        className="w-full p-2 border rounded mb-3 text-gray-600"
+                        placeholder="Vault code"
+                    />
+                </div>
 
                 {/* Upload */}
                 <button
