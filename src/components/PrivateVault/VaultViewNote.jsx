@@ -23,7 +23,7 @@ export default function VaultViewNote() {
     useEffect(() => {
         const fetchNote = async () => {
             const { data, error } = await supabase
-                .from("vaulted_notes")
+                .from("vault_items")
                 .select("*")
                 .eq("id", id)
                 .single();
@@ -37,12 +37,18 @@ export default function VaultViewNote() {
         fetchNote();
     }, [id]);
 
-    
-
     // Handle decryption when vault code is entered
     const handleDecrypt = async () => {
         setLoading(true);
         setErrorMsg("");
+
+        // If we reach here, the vault code is correct
+        console.log("✅ Vault code verified successfully");
+        if (!noteData.note_iv || !noteData.encrypted_note) {
+            setErrorMsg("❌ Nothing to decrypt for this document.");
+            setLoading(false);
+            return;
+        }
 
         const {
             data: { user },
@@ -91,8 +97,6 @@ export default function VaultViewNote() {
         setLoading(false);
     };
 
-
-
     // Handle copy to clipboard
     const handleCopy = () => {
         navigator.clipboard.writeText(decryptedNote);
@@ -101,7 +105,7 @@ export default function VaultViewNote() {
     // Handle delete confirmation
     const handleDelete = async () => {
         setShowDeleteConfirm(false);
-        await supabase.from("vaulted_notes").delete().eq("id", id);
+        await supabase.from("vault_items").delete().eq("id", id);
         navigate("/private/vaults");
     };
 

@@ -3,13 +3,15 @@ import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import Layout from "../Layout/Layout";
 import { X, Search, Loader2 } from "lucide-react";
-import { encryptFile, encryptText } from "../../utils/encryption";
+import { encryptFile, encryptText, decryptText } from "../../utils/encryption";
 
 export default function VaultEditDoc() {
     const { id } = useParams();
     const navigate = useNavigate();
 
     const [files, setFiles] = useState([]);
+    const [existingFiles, setExistingFiles] = useState([]);
+    const [removedFiles, setRemovedFiles] = useState([]);
     const [dragging, setDragging] = useState(false);
     const [title, setTitle] = useState("");
     const [tags, setTags] = useState([]);
@@ -20,6 +22,10 @@ export default function VaultEditDoc() {
     const [vaultCode, setVaultCode] = useState("");
     const [uploading, setUploading] = useState(false);
     const [successMsg, setSuccessMsg] = useState("");
+    const [errorMsg, setErrorMsg] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [showConfirmPopup, setShowConfirmPopup] = useState(false);
+    const [fileToDeleteIndex, setFileToDeleteIndex] = useState(null);
 
     const allowedMimes = [
         "application/pdf",
@@ -38,64 +44,109 @@ export default function VaultEditDoc() {
         "application/json",
     ];
     
-    // Fetch available tags on component mount
+    // Fetch document data and tags on mount
     useEffect(() => {
-        const fetchTags = async () => {
-            const { data, error } = await supabase.from("vault_tags").select("*");
-            if (!error) setAvailableTags(data.map((tag) => tag.name));
-        };
-        fetchTags();
-    }, []);
-
-    useEffect(() => {
-        // Fetch document details and tags on mount
         const fetchDoc = async () => {
-        const { data, error } = await supabase
-            .from("vaulted_documents")
+            const { data, error } = await supabase
+            .from("vault_items")
             .select("*")
             .eq("id", id)
             .single();
 
-        if (!error && data) {
+            if (!error && data) {
             setTitle(data.title);
             setTags(data.tags || []);
-            setNotes(data.notes || "");
-            setPrivateNote(data.encrypted_note ? "🔐 Encrypted" : "");
-        }
-        };
+            setNotes(data.notes || []);
+            setExistingFiles(data.file_metas || []);
 
-        // Fetch all unique tags from vaulted_documents
+            const storedVaultCode = sessionStorage.getItem("vaultCode");
+
+            if (data.encrypted_note && data.note_iv && storedVaultCode) {
+                try {
+                const decrypted = await decryptText(
+                    data.encrypted_note,
+                    data.note_iv,
+                    storedVaultCode
+                );
+                setPrivateNote(decrypted);
+                } catch (err) {
+                console.error("❌ Failed to decrypt note:", err);
+                setPrivateNote("🔐 Encrypted");
+                }
+            } else {
+                setPrivateNote(""); // no encrypted note
+            }
+        }
+    };
+
         const fetchTags = async () => {
-        const { data } = await supabase.from("vaulted_documents").select("tags");
-        const allTags = data?.flatMap((item) => item.tags || []);
-        const uniqueTags = [...new Set(allTags)];
-        setAvailableTags(uniqueTags);
+            const { data } = await supabase.from("vault_tags").select("name");
+            const tagNames = data?.map((tag) => tag.name) || [];
+            setAvailableTags(tagNames);
         };
 
         fetchDoc();
         fetchTags();
-    }, [id]);
+        }, [id]);
 
-    // Handle file drop events
+    // Handle file drop
     const handleFileDrop = (e) => {
         e.preventDefault();
         setDragging(false);
         setFiles(Array.from(e.dataTransfer.files));
     };
 
-    // Handle file selection from input
+    // Handle drag over
     const handleTagAdd = async () => {
         if (!newTag.trim()) return;
         if (!availableTags.includes(newTag)) {
-            await supabase.from("vault_tags").insert({ name: newTag });
-            setAvailableTags((prev) => [...prev, newTag]);
+        await supabase.from("vault_tags").insert({ name: newTag });
+        setAvailableTags((prev) => [...prev, newTag]);
         }
         if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
         setNewTag("");
     };
 
+    // Remove existing file from the list
+    const handleRemoveExistingFile = async (index) => {
+        const fileToRemove = existingFiles[index];
 
-    // Handle file drag over
+        if (!fileToRemove?.url) return;
+
+        // Derive file path from public URL
+        const urlParts = fileToRemove.url.split("/");
+        const filePath = decodeURIComponent(urlParts.slice(4).join("/")); // vault_items/[user.id]/filename
+
+        // Delete file from storage
+        const { error: deleteError } = await supabase
+            .storage
+            .from("vaulted")
+            .remove([filePath]);
+
+        if (deleteError) {
+            console.error("❌ Storage deletion error:", deleteError);
+            setSuccessMsg("❌ Failed to delete file from storage.");
+            return;
+    }
+
+    // Update state by removing from UI and prepare for DB update
+    const updatedFiles = existingFiles.filter((_, i) => i !== index);
+
+    // Update the vault_items row immediately
+    const { error: updateError } = await supabase
+        .from("vault_items")
+        .update({ file_metas: updatedFiles })
+        .eq("id", id);
+
+    if (updateError) {
+        console.error("❌ DB update error:", updateError);
+        setSuccessMsg("❌ Failed to update database after deleting file.");
+    } else {
+        setExistingFiles(updatedFiles);
+        setSuccessMsg("✅ File deleted successfully.");
+    }
+    };
+
     const handleUpload = async (e) => {
         e.preventDefault();
         setUploading(true);
@@ -114,13 +165,11 @@ export default function VaultEditDoc() {
             return;
         }
 
-        const {
-            data: { user },
-        } = await supabase.auth.getUser();
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
             setUploading(false);
             setSuccessMsg("❌ User not authenticated.");
-        return;
+            return;
         }
 
         if (!vaultCode) {
@@ -129,7 +178,7 @@ export default function VaultEditDoc() {
             return;
         }
 
-        const fileMetas = [];
+        let updatedFileMetas = [...existingFiles]; // Already removed deleted ones
         let noteIv = "";
 
         for (const file of files) {
@@ -140,14 +189,14 @@ export default function VaultEditDoc() {
             const filePath = `${user.id}/${Date.now()}-${sanitizedName}`;
 
             const { error: uploadError } = await supabase.storage
-                .from("vaulted")
-                .upload(filePath, encryptedBlob, { contentType: file.type });
+            .from("vaulted")
+            .upload(filePath, encryptedBlob, { contentType: file.type });
 
             if (!uploadError) {
-                const { data } = supabase.storage.from("vaulted").getPublicUrl(filePath);
-                if (data?.publicUrl) {
-                fileMetas.push({ name: file.name, url: data.publicUrl, iv: ivHex });
-                }
+            const { data: urlData } = await supabase.storage.from("vaulted").getPublicUrl(filePath);
+            if (urlData?.publicUrl) {
+                updatedFileMetas.push({ name: file.name, url: urlData.publicUrl, iv: ivHex });
+            }
             }
         }
 
@@ -159,16 +208,16 @@ export default function VaultEditDoc() {
         }
 
         const { error: updateError } = await supabase
-        .from("vaulted_documents")
-        .update({
+            .from("vault_items")
+            .update({
             title,
             tags,
             notes,
             encrypted_note: encryptedNote || undefined,
             note_iv: noteIv || undefined,
-            file_metas: fileMetas.length > 0 ? fileMetas : undefined,
-        })
-        .eq("id", id);
+            file_metas: updatedFileMetas,
+            })
+            .eq("id", id);
 
         if (updateError) {
             console.error(updateError);
@@ -183,6 +232,36 @@ export default function VaultEditDoc() {
 
     return (
         <Layout>
+            {/* Confirmation popup for file deletion */}
+            {showConfirmPopup && fileToDeleteIndex !== null && (
+                <div className="fixed top-6 right-6  bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
+                    <p className="mt-10 text-gray-800">
+                    Are you sure you want to delete <strong>{existingFiles[fileToDeleteIndex]?.name}</strong>?
+                    </p>
+                    <div className="flex gap-3 justify-end">
+                    <button
+                        onClick={async () => {
+                        await handleRemoveExistingFile(fileToDeleteIndex);
+                        setShowConfirmPopup(false);
+                        setFileToDeleteIndex(null);
+                        }}
+                        className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+                    >
+                        Yes, Delete
+                    </button>
+                    <button
+                        onClick={() => {
+                        setShowConfirmPopup(false);
+                        setFileToDeleteIndex(null);
+                        }}
+                        className="px-3 py-1 bg-gray-300 text-gray-800 rounded hover:bg-gray-400"
+                    >
+                        Cancel
+                    </button>
+                    </div>
+                </div>
+            )}
+
             <div className="relative max-w-xl mx-auto mt-10 p-6 bg-white rounded shadow border border-gray-200">
             <button
                 onClick={() => navigate("/private/vaults")}
@@ -230,6 +309,57 @@ export default function VaultEditDoc() {
                     onChange={(e) => setFiles(Array.from(e.target.files))}
                     className="w-full border border-gray-300 p-2 rounded text-gray-500"
                 />
+
+                {/* Existing Files */}
+                {existingFiles.length > 0 && (
+                    <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Previously Uploaded Files:</h4>
+                        <ul className="space-y-1">
+                        {existingFiles.map((file, index) => (
+                            <li
+                            key={index}
+                            className="flex items-center justify-between px-3 py-2 border border-gray-200 rounded text-sm text-gray-800 bg-gray-50"
+                            >
+                            {file.name}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setFileToDeleteIndex(index);
+                                    setShowConfirmPopup(true);
+                                }}
+                                className="text-red-500 hover:text-red-700"
+                            >
+                                <X size={16} />
+                            </button>
+                            </li>
+                        ))}
+                        </ul>
+                    </div>
+                    )}
+
+                    {/* Current Selected Files */}
+                    {files.length > 0 && (
+                    <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Newly Selected Files:</h4>
+                        <ul className="space-y-1">
+                        {files.map((file, index) => (
+                            <li
+                            key={index}
+                            className="flex items-center justify-between px-3 py-2 border border-gray-200 rounded text-sm text-gray-800 bg-gray-50"
+                            >
+                            {file.name}
+                            <button
+                                type="button"
+                                onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}
+                                className="text-red-500 hover:text-red-700"
+                            >
+                                <X size={16} />
+                            </button>
+                            </li>
+                        ))}
+                        </ul>
+                    </div>
+                )}
 
                 {/* Title */}
                 <div>

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { X, Search } from "lucide-react";
 import { encryptText } from "../../utils/encryption";
 import Layout from "../Layout/Layout";
+import { file } from "jszip";
 
 const VaultedNoteUpload = () => {
     const [title, setTitle] = useState("");
@@ -55,8 +56,9 @@ const VaultedNoteUpload = () => {
 
         const { encryptedData, iv } = await encryptText(privateNote, vaultCode); // ✅ Use vaultCode
 
-        const { error } = await supabase.from("vaulted_notes").insert({
+        const { error } = await supabase.from("vault_items").insert({
             user_id: user.id,
+            file_name: title || "Untitled Note",
             title,
             encrypted_note: encryptedData,
             note_iv: iv, // ✅ save IV under note_iv

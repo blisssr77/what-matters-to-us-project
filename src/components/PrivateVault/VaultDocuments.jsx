@@ -33,19 +33,13 @@ export default function VaultedDocuments() {
   useEffect(() => {
     const fetchDocs = async () => {
       const { data, error } = await supabase
-        .from("vaulted_documents")
+        .from("vault_items")
         .select("*")
         .order("created_at", { ascending: false });
 
-      const { data: notes, error: noteError } = await supabase
-        .from("vaulted_notes")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (!error && !noteError) {
-        const merged = [...data, ...notes].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        setAllDocuments(merged);
-        const tags = Array.from(new Set(merged.flatMap((doc) => doc.tags || [])));
+      if (!error) {
+        setAllDocuments(data);
+        const tags = Array.from(new Set(data.flatMap((doc) => doc.tags || [])));
         setAllTags(tags);
       }
     };

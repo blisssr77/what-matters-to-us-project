@@ -34,11 +34,12 @@ export default function VaultViewDoc() {
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
+  const [showConfirmPopup, setShowConfirmPopup] = useState(false);
+  
   // Fetch document data on mount
   useEffect(() => {
     const fetchDoc = async () => {
-    const { data, error } = await supabase.from("vaulted_documents").select("*").eq("id", id).single();
+    const { data, error } = await supabase.from("vault_items").select("*").eq("id", id).single();
     if (error) {
         setErrorMsg("Failed to load document.");
         console.error("❌ Failed to fetch doc:", error);
@@ -54,6 +55,13 @@ export default function VaultViewDoc() {
     const decrypt = async () => {
         if (!doc || !vaultCode) return;
         setLoading(true);
+
+        // 1. Fetch vault code hash
+        if (!doc.note_iv || !doc.encrypted_note) {
+            setErrorMsg("❌ Nothing to decrypt for this document.");
+            setLoading(false);
+            return;
+        }
 
         try {
         // ✅ Decrypt note using stored Base64 IV
@@ -101,21 +109,51 @@ export default function VaultViewDoc() {
     if (entered && doc) {
         decrypt();
     }
-    }, [entered, doc, vaultCode]);
+  }, [entered, doc, vaultCode]);
 
-    // Handle delete confirmation
-    const handleDelete = async () => {
-        setShowDeleteConfirm(false);
-        await supabase.from("vaulted_documents").delete().eq("id", id);
-        navigate("/private/vaults");
-    };
+  // Handle delete confirmation
+  const handleDeleteDoc = async () => {
+    setShowDeleteConfirm(false);
 
+    if (!doc) return;
+
+    // Delete from storage if files exist
+    if (doc.file_metas && doc.file_metas.length > 0) {
+      const paths = doc.file_metas.map((meta) => {
+        const urlParts = meta.url.split("/");
+        return decodeURIComponent(urlParts.slice(4).join("/"));
+      });
+
+      const { error: storageError } = await supabase.storage
+        .from("vaulted")
+        .remove(paths);
+
+      if (storageError) {
+        console.error("❌ Error deleting from storage:", storageError);
+      }
+    }
+
+    // Delete from DB
+    const { error: dbError } = await supabase
+      .from("vault_items")
+      .delete()
+      .eq("id", doc.id);
+
+    if (dbError) {
+      console.error("❌ Error deleting from DB:", dbError);
+    } else {
+      navigate("/private/vaults");
+    }
+  };
+
+  // Handle copy to clipboard
   const handleCopy = async () => {
     if (decryptedNote) {
       await navigator.clipboard.writeText(decryptedNote);
     }
   };
 
+  // Render file viewer based on type
   const renderFileViewer = () => {
     if (!decryptedFileUrl || !decryptedFileType) return null;
 
@@ -141,11 +179,38 @@ export default function VaultViewDoc() {
       );
     }
 
+    console.log("Decrypted file type:", decryptedFileType);
     return <p className="text-sm text-gray-600">File type not supported for inline viewing.</p>;
   };
 
   return (
     <Layout>
+      {/* Delete confirmation modal */}
+      {showConfirmPopup && (
+        <div className="fixed top-6 right-6 bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
+          <p className="mt-10 text-gray-800">
+            Are you sure you want to delete <strong>{doc?.title || "this document"}</strong>?
+          </p>
+          <div className="flex gap-3 justify-end mt-4">
+            <button
+              onClick={async () => {
+                await handleDeleteDoc();
+                setShowConfirmPopup(false);
+              }}
+              className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+            >
+              Yes, Delete
+            </button>
+            <button
+              onClick={() => setShowConfirmPopup(false)}
+              className="px-3 py-1 bg-gray-300 text-gray-800 rounded hover:bg-gray-400"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="relative max-w-4xl mx-auto p-6 mt-10 bg-white rounded shadow border border-gray-200">
         <button
           onClick={() => navigate("/private/vaults")}
@@ -163,6 +228,7 @@ export default function VaultViewDoc() {
             {decryptedNote}
           </div>
         )}
+        {doc?.file_name && <p className="text-sm text-blue-700 mb-2">{doc.file_name}</p>}
 
         {/* Vault code entry */}
         {!entered ? (
@@ -198,12 +264,12 @@ export default function VaultViewDoc() {
             <button onClick={() => navigate(`/private/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
                 <Edit2 size={16} /> Edit
             </button>
-            <button onClick={() => setShowDeleteConfirm(true)} className="flex items-center gap-1 text-red-600 hover:underline">
+            <button onClick={() => setShowConfirmPopup(true)} className="flex items-center gap-1 text-red-600 hover:underline">
                 <Trash2 size={16} /> Delete
             </button>
             </div>
 
-            {/* Delete confirmation modal */}
+            {/* Delete confirmation modal
             {showDeleteConfirm && (
                 <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
                     <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full">
@@ -227,7 +293,7 @@ export default function VaultViewDoc() {
                         </div>
                     </div>
                 </div>
-            )}
+            )} */}
 
             {/* File viewer */}
             {renderFileViewer()}

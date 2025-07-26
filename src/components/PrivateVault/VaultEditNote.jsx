@@ -39,7 +39,7 @@ export default function VaultEditNote() {
     useEffect(() => {
         const fetchNote = async () => {
             const { data: note, error } = await supabase
-                .from("vaulted_notes")
+                .from("vault_items")
                 .select("*")
                 .eq("id", id)
                 .single();
@@ -148,7 +148,7 @@ export default function VaultEditNote() {
             .filter((tag) => tag.length > 0);
 
             const { error: updateError } = await supabase
-            .from("vaulted_notes")
+            .from("vault_items")
             .update({
                 title: editedTitle,
                 tags: updatedTags,

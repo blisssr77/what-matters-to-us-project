@@ -142,9 +142,9 @@ export default function VaultedFileUpload() {
             noteIv = result.iv;
         }
 
-        const { error: insertError } = await supabase.from("vaulted_documents").insert({
+        const { error: insertError } = await supabase.from("vault_items").insert({
             user_id: userId,
-            name: files.map((f) => f.name).join(", "),
+            file_name: files.map((f) => f.name).join(", "),
             file_metas: fileMetas, // ✅ instead of file_urls
             title,
             tags,

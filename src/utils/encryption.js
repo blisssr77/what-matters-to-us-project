@@ -42,16 +42,6 @@ export const encryptText = async (text, passphrase) => {
 };
 
 // Text Decryption
-// export const decryptText = async (encryptedData, ivBase64, passphrase) => {
-//   const iv = Uint8Array.from(atob(ivBase64), (c) => c.charCodeAt(0));
-//   const key = await getKey(passphrase, "vault-salt");
-//   const data = Uint8Array.from(atob(encryptedData), (c) => c.charCodeAt(0));
-
-//   const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
-//   return decoder.decode(decrypted);
-// };
-
-// Text Decryption
 export const decryptText = async (encryptedData, ivBase64, passphrase) => {
   const key = await getKey(passphrase);
   const iv = Uint8Array.from(atob(ivBase64), (c) => c.charCodeAt(0));
