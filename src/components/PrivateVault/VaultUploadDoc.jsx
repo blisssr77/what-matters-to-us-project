@@ -122,6 +122,7 @@ export default function VaultedFileUpload() {
                 name: file.name,
                 url: data.publicUrl,
                 iv: ivHex,
+                type: file.type,
                 });
             }
         }

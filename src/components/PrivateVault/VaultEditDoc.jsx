@@ -147,6 +147,7 @@ export default function VaultEditDoc() {
     }
     };
 
+    // Handle file upload and document update
     const handleUpload = async (e) => {
         e.preventDefault();
         setUploading(true);
@@ -195,7 +196,7 @@ export default function VaultEditDoc() {
             if (!uploadError) {
             const { data: urlData } = await supabase.storage.from("vaulted").getPublicUrl(filePath);
             if (urlData?.publicUrl) {
-                updatedFileMetas.push({ name: file.name, url: urlData.publicUrl, iv: ivHex });
+                updatedFileMetas.push({ name: file.name, url: urlData.publicUrl, iv: ivHex, type: file.type });
             }
             }
         }

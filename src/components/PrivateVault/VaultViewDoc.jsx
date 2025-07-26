@@ -5,6 +5,8 @@ import { decryptFile, decryptText } from "../../utils/encryption";
 import Layout from "../Layout/Layout";
 import { X, Copy, Edit2, Trash2 } from "lucide-react";
 import { saveAs } from "file-saver";
+import bcrypt from "bcryptjs";
+
 
 const mimeToExtension = {
   "application/pdf": ".pdf",
@@ -27,7 +29,7 @@ export default function VaultViewDoc() {
   const [vaultCode, setVaultCode] = useState("");
   const [entered, setEntered] = useState(false);
   const [doc, setDoc] = useState(null);
-  const [decryptedFileUrl, setDecryptedFileUrl] = useState(null);
+  const [decryptedFiles, setDecryptedFiles] = useState([]);
   const [decryptedFileType, setDecryptedFileType] = useState("");
   const [decryptedBlob, setDecryptedBlob] = useState(null);
   const [decryptedNote, setDecryptedNote] = useState(null);
@@ -50,66 +52,102 @@ export default function VaultViewDoc() {
     fetchDoc();
   }, [id]);
 
-  // Handle vault code entry
-  useEffect(() => {
-    const decrypt = async () => {
-        if (!doc || !vaultCode) return;
-        setLoading(true);
+  // Handle vault code entry and decryption
+  const handleDecrypt = async () => {
+    if (!doc || !vaultCode) return;
 
-        // 1. Fetch vault code hash
-        if (!doc.note_iv || !doc.encrypted_note) {
-            setErrorMsg("❌ Nothing to decrypt for this document.");
-            setLoading(false);
-            return;
-        }
+    setLoading(true);
+    setErrorMsg("");
+
+    console.log("✅ Vault code verification initiated");
+
+    // 1. Validate content
+    if (!doc.note_iv || !doc.encrypted_note) {
+      setErrorMsg("Nothing to decrypt for this document.");
+      setLoading(false);
+      return;
+    }
+
+    // 2. Fetch vault code hash from Supabase
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const { data: vaultCodeRow, error: codeError } = await supabase
+      .from("vault_codes")
+      .select("private_code")
+      .eq("id", user.id)
+      .single();
+
+    if (codeError || !vaultCodeRow?.private_code) {
+      setErrorMsg("Vault code not set. Please try again later.");
+      setLoading(false);
+      return;
+    }
+
+    // 3. Validate input code
+    const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
+    if (!isMatch) {
+      setErrorMsg("Incorrect Vault Code.");
+      setLoading(false);
+      return;
+    }
+
+    sessionStorage.setItem("vaultCode", vaultCode);
+
+    // 4. Decrypt private note
+    try {
+      const note = await decryptText(doc.encrypted_note, doc.note_iv, vaultCode);
+      setDecryptedNote(note);
+      console.log("✅ Decrypted note:", note);
+    } catch (err) {
+      console.error("❌ Note decryption failed:", err);
+      setErrorMsg("Incorrect Vault Code or decryption failed.");
+    }
+
+    // 5. Decrypt each file
+    const files = [];
+
+    if (doc.file_metas?.length) {
+      for (const fileMeta of doc.file_metas) {
+        const { url, iv, type, name } = fileMeta;
 
         try {
-        // ✅ Decrypt note using stored Base64 IV
-        if (doc.encrypted_note && doc.note_iv) {
-            try {
-            const note = await decryptText(doc.encrypted_note, doc.note_iv, vaultCode);
-            setDecryptedNote(note);
-            console.log("✅ Decrypted note:", note);
-            } catch (err) {
-            console.error("❌ Note decryption failed:", err);
-            }
-        }
-
-        // ✅ Decrypt file
-        if (doc.file_metas?.length) {
-            const fileMeta = doc.file_metas[0];
-            const { url, iv } = fileMeta;
-            const urlObj = new URL(url);
-            const pathname = urlObj.pathname;
-            const bucket = "vaulted";
-            const publicPathPrefix = `/storage/v1/object/public/${bucket}/`;
-            const filePath = pathname.startsWith(publicPathPrefix)
-            ? pathname.slice(publicPathPrefix.length)
+          const urlObj = new URL(url);
+          const pathname = urlObj.pathname;
+          const bucket = "vaulted";
+          const prefix = `/storage/v1/object/public/${bucket}/`;
+          const filePath = pathname.startsWith(prefix)
+            ? pathname.slice(prefix.length)
             : pathname;
 
-            const { data, error } = await supabase.storage.from(bucket).download(filePath);
-            if (error) throw error;
+          const { data, error } = await supabase.storage.from(bucket).download(filePath);
+          if (error) throw error;
 
-            const encryptedBuffer = await data.arrayBuffer();
-            const blob = await decryptFile(encryptedBuffer, iv, vaultCode);
-            const blobUrl = URL.createObjectURL(blob);
+          const encryptedBuffer = await data.arrayBuffer();
+          const blob = await decryptFile(encryptedBuffer, iv, vaultCode, type);
+          const blobUrl = URL.createObjectURL(blob);
 
-            setDecryptedBlob(blob);
-            setDecryptedFileUrl(blobUrl);
-            setDecryptedFileType(blob.type || "application/octet-stream");
-        }
+          files.push({ url: blobUrl, type: blob.type, name });
         } catch (err) {
-        console.error("❌ Decryption error:", err);
-        setErrorMsg("Decryption failed. Please check your Vault Code.");
-        } finally {
-        setLoading(false);
+          console.error(`❌ Failed to decrypt file "${name}":`, err);
         }
-    };
+      }
 
+      setDecryptedFiles(files);
+    }
+
+    setEntered(true); // ✅ Mark entry complete
+    setLoading(false);
+  };
+
+  // Triggers decryption when vault code is entered
+  useEffect(() => {
     if (entered && doc) {
-        decrypt();
+      handleDecrypt();
     }
   }, [entered, doc, vaultCode]);
+
 
   // Handle delete confirmation
   const handleDeleteDoc = async () => {
@@ -155,33 +193,73 @@ export default function VaultViewDoc() {
 
   // Render file viewer based on type
   const renderFileViewer = () => {
-    if (!decryptedFileUrl || !decryptedFileType) return null;
+    if (!decryptedFiles?.length) return null;
 
-    if (decryptedFileType.startsWith("image/")) {
-      return <img src={decryptedFileUrl} alt={doc.title} className="w-full max-w-3xl rounded shadow" />;
-    }
+    return decryptedFiles.map((file, i) => {
+      const { url, type, name } = file;
 
-    if (decryptedFileType === "application/pdf") {
-      return <iframe src={decryptedFileUrl} title="PDF Viewer" className="w-full h-[80vh] rounded border" />;
-    }
-
-    if (["application/json", "text/csv"].includes(decryptedFileType) || decryptedFileType.includes("text")) {
-      return <iframe src={decryptedFileUrl} title="Text Viewer" className="w-full h-[80vh] rounded border" />;
-    }
-
-    if (decryptedFileType.includes("word") || decryptedFileType.includes("excel") || decryptedFileType.includes("powerpoint")) {
       return (
-        <iframe
-          src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(decryptedFileUrl)}`}
-          title="Office Viewer"
-          className="w-full h-[80vh] rounded border"
-        />
-      );
-    }
+        <div key={i} className="mb-6 mt-6 p-4 bg-gray-100 rounded shadow-sm border border-gray-200">
+          {/* File name and Download button */}
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-medium text-gray-800">{name}</span>
+            <a
+              href={url}
+              download={name}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              ⬇ Download
+            </a>
+          </div>
 
-    console.log("Decrypted file type:", decryptedFileType);
-    return <p className="text-sm text-gray-600">File type not supported for inline viewing.</p>;
+          {/* File Preview */}
+          {type.startsWith("image/") && (
+            <img src={url} alt={name} className="w-full max-w-3xl rounded shadow" />
+          )}
+
+          {type === "application/pdf" && (
+            <iframe
+              src={url}
+              title={`PDF-${i}`}
+              className="w-full h-[80vh] rounded border"
+            />
+          )}
+
+          {["application/json", "text/csv"].includes(type) || type.includes("text") ? (
+            <iframe
+              src={url}
+              title={`Text-${i}`}
+              className="w-full h-[80vh] rounded border"
+            />
+          ) : null}
+
+          {(type.includes("word") || type.includes("excel") || type.includes("powerpoint")) && (
+            <iframe
+              src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`}
+              title={`Office-${i}`}
+              className="w-full h-[80vh] rounded border"
+            />
+          )}
+
+          {/* Fallback */}
+          {!(
+            type.startsWith("image/") ||
+            type === "application/pdf" ||
+            ["application/json", "text/csv"].includes(type) ||
+            type.includes("text") ||
+            type.includes("word") ||
+            type.includes("excel") ||
+            type.includes("powerpoint")
+          ) && (
+            <p className="text-sm text-gray-600">
+              {name}: File type not supported for inline viewing.
+            </p>
+          )}
+        </div>
+      );
+    });
   };
+
 
   return (
     <Layout>
@@ -228,7 +306,13 @@ export default function VaultViewDoc() {
             {decryptedNote}
           </div>
         )}
-        {doc?.file_name && <p className="text-sm text-blue-700 mb-2">{doc.file_name}</p>}
+        {doc?.file_metas?.length > 0 && (
+          <ul className="text-sm text-blue-500 mb-2 space-y-1">
+            {doc.file_metas.map((file, index) => (
+              <li key={index}>📄 {file.name}</li>
+            ))}
+          </ul>
+        )}
 
         {/* Vault code entry */}
         {!entered ? (
@@ -244,16 +328,17 @@ export default function VaultViewDoc() {
               placeholder="Vault Code"
             />
             <button
-              onClick={() => setEntered(true)}
+              onClick={handleDecrypt}
               className="mt-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
             >
-              Decrypt
-            </button>
+              {loading ? "Decrypting..." : "Decrypt"}
+          </button>
+            {errorMsg && (
+              <p className="text-sm text-red-600 mt-2">{errorMsg}</p>
+            )}
           </div>
         ) : loading ? (
           <p className="text-sm text-gray-500">🔐 Decrypting document...</p>
-        ) : errorMsg ? (
-          <p className="text-sm text-red-600">{errorMsg}</p>
         ) : (
           <>
             {/* Action buttons */}
@@ -268,32 +353,6 @@ export default function VaultViewDoc() {
                 <Trash2 size={16} /> Delete
             </button>
             </div>
-
-            {/* Delete confirmation modal
-            {showDeleteConfirm && (
-                <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
-                    <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full">
-                        <h4 className="text-lg font-semibold mb-2 text-gray-800">Delete Note?</h4>
-                        <p className="text-sm text-gray-600 mb-4">
-                            This action cannot be undone. Are you sure you want to delete this note?
-                        </p>
-                        <div className="flex justify-end gap-3">
-                            <button
-                                onClick={() => setShowDeleteConfirm(false)}
-                                className="px-3 py-1 text-gray-700 border border-gray-300 rounded hover:bg-gray-100"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleDelete}
-                                className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
-                            >
-                                Delete
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )} */}
 
             {/* File viewer */}
             {renderFileViewer()}
