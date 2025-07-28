@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabaseClient";
 import Layout from "../Layout/Layout";
 import { X, Search, Loader2 } from "lucide-react";
 import { encryptFile, encryptText, decryptText } from "../../utils/encryption";
+import bcrypt from "bcryptjs";
 
 export default function VaultEditDoc() {
     const { id } = useParams();
@@ -11,7 +12,6 @@ export default function VaultEditDoc() {
 
     const [files, setFiles] = useState([]);
     const [existingFiles, setExistingFiles] = useState([]);
-    const [removedFiles, setRemovedFiles] = useState([]);
     const [dragging, setDragging] = useState(false);
     const [title, setTitle] = useState("");
     const [tags, setTags] = useState([]);
@@ -26,6 +26,7 @@ export default function VaultEditDoc() {
     const [loading, setLoading] = useState(false);
     const [showConfirmPopup, setShowConfirmPopup] = useState(false);
     const [fileToDeleteIndex, setFileToDeleteIndex] = useState(null);
+    const [filesToRemove, setFilesToRemove] = useState([]);
 
     const allowedMimes = [
         "application/pdf",
@@ -93,7 +94,14 @@ export default function VaultEditDoc() {
     const handleFileDrop = (e) => {
         e.preventDefault();
         setDragging(false);
-        setFiles(Array.from(e.dataTransfer.files));
+
+        const droppedFiles = Array.from(e.dataTransfer.files);
+        setFiles((prevFiles) => {
+            const newFiles = droppedFiles.filter(
+                (file) => !prevFiles.some((f) => f.name === file.name && f.size === file.size)
+            );
+            return [...prevFiles, ...newFiles];
+        });
     };
 
     // Handle drag over
@@ -108,80 +116,87 @@ export default function VaultEditDoc() {
     };
 
     // Remove existing file from the list
-    const handleRemoveExistingFile = async (index) => {
+    const handleRemoveExistingFile = (index) => {
         const fileToRemove = existingFiles[index];
-
         if (!fileToRemove?.url) return;
 
-        // Derive file path from public URL
-        const urlParts = fileToRemove.url.split("/");
-        const filePath = decodeURIComponent(urlParts.slice(4).join("/")); // vault_items/[user.id]/filename
+        setFilesToRemove((prev) => [...prev, fileToRemove.url]);
 
-        // Delete file from storage
-        const { error: deleteError } = await supabase
-            .storage
-            .from("vaulted")
-            .remove([filePath]);
-
-        if (deleteError) {
-            console.error("❌ Storage deletion error:", deleteError);
-            setSuccessMsg("❌ Failed to delete file from storage.");
-            return;
-    }
-
-    // Update state by removing from UI and prepare for DB update
-    const updatedFiles = existingFiles.filter((_, i) => i !== index);
-
-    // Update the vault_items row immediately
-    const { error: updateError } = await supabase
-        .from("vault_items")
-        .update({ file_metas: updatedFiles })
-        .eq("id", id);
-
-    if (updateError) {
-        console.error("❌ DB update error:", updateError);
-        setSuccessMsg("❌ Failed to update database after deleting file.");
-    } else {
+        // Optionally: remove it from visible UI
+        const updatedFiles = existingFiles.filter((_, i) => i !== index);
         setExistingFiles(updatedFiles);
-        setSuccessMsg("✅ File deleted successfully.");
-    }
     };
 
     // Handle file upload and document update
     const handleUpload = async (e) => {
         e.preventDefault();
         setUploading(true);
+        setErrorMsg("");
         setSuccessMsg("");
 
-        if (!files.length && !privateNote && !title && !tags.length && !notes) {
+        if (!files.length && !privateNote && !title && !tags.length && !notes && filesToRemove.length === 0) {
             setUploading(false);
-            setSuccessMsg("⚠️ Nothing to update.");
+            setErrorMsg("⚠️ Nothing to update.");
             return;
         }
 
         const invalidFiles = files.filter((f) => !allowedMimes.includes(f.type));
         if (invalidFiles.length > 0) {
             setUploading(false);
-            setSuccessMsg("❌ One or more files have unsupported types.");
+            setErrorMsg("❌ One or more files have unsupported types.");
             return;
         }
 
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
             setUploading(false);
-            setSuccessMsg("❌ User not authenticated.");
+            setErrorMsg("❌ User not authenticated.");
             return;
         }
 
         if (!vaultCode) {
             setUploading(false);
-            setSuccessMsg("❌ Please enter your Vault Code to encrypt.");
+            setErrorMsg("❌ Please enter your Vault Code to encrypt.");
             return;
         }
 
-        let updatedFileMetas = [...existingFiles]; // Already removed deleted ones
+        // ✅ Validate vault code
+        const { data: vaultRow, error: vaultError } = await supabase
+            .from("vault_codes")
+            .select("private_code")
+            .eq("id", user.id)
+            .single();
+
+        if (vaultError || !vaultRow?.private_code) {
+            setUploading(false);
+            setErrorMsg("❌ Vault code not found or not set.");
+            return;
+        }
+
+        const isMatch = await bcrypt.compare(vaultCode, vaultRow.private_code);
+        if (!isMatch) {
+            setUploading(false);
+            setErrorMsg("❌ Incorrect Vault Code.");
+            return;
+        }
+
+        // ✅ Delete marked files from Supabase Storage
+        for (const url of filesToRemove) {
+            const urlParts = url.split("/");
+            const filePath = decodeURIComponent(urlParts.slice(4).join("/"));
+            const { error: deleteError } = await supabase.storage.from("vaulted").remove([filePath]);
+
+            if (deleteError) {
+            console.error("❌ Storage deletion error:", deleteError);
+            setErrorMsg("❌ Failed to delete one or more files from storage.");
+            }
+        }
+
+        // ✅ Exclude deleted files from updatedFileMetas
+        let updatedFileMetas = existingFiles.filter((f) => !filesToRemove.includes(f.url));
         let noteIv = "";
 
+        // ✅ Upload new files
         for (const file of files) {
             const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
             const { encryptedBlob, ivHex } = await encryptFile(file, vaultCode, ivBytes);
@@ -201,13 +216,22 @@ export default function VaultEditDoc() {
             }
         }
 
+        // ✅ Encrypt private note if changed
         let encryptedNote = "";
         if (privateNote && privateNote !== "🔐 Encrypted") {
+            try {
             const result = await encryptText(privateNote, vaultCode);
             encryptedNote = result.encryptedData;
             noteIv = result.iv;
+            } catch (err) {
+            console.error(err);
+            setUploading(false);
+            setErrorMsg("❌ Failed to encrypt private note.");
+            return;
+            }
         }
 
+        // ✅ Final DB update
         const { error: updateError } = await supabase
             .from("vault_items")
             .update({
@@ -222,14 +246,16 @@ export default function VaultEditDoc() {
 
         if (updateError) {
             console.error(updateError);
-            setSuccessMsg("❌ Failed to update document.");
+            setErrorMsg("❌ Failed to update document.");
         } else {
             setSuccessMsg("✅ Document updated successfully!");
+            setFilesToRemove([]); // ✅ clear removed file list
             setTimeout(() => navigate("/private/vaults"), 1300);
         }
 
         setUploading(false);
     };
+
 
     return (
         <Layout>
@@ -307,14 +333,17 @@ export default function VaultEditDoc() {
                     type="file"
                     multiple
                     accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.jpg,.jpeg,.png,.gif,.zip,.json"
-                    onChange={(e) => setFiles(Array.from(e.target.files))}
+                    onChange={(e) => {
+                        const selectedFiles = Array.from(e.target.files);
+                        setFiles((prevFiles) => [...prevFiles, ...selectedFiles]);
+                    }}
                     className="w-full border border-gray-300 p-2 rounded text-gray-500 text-sm"
                 />
 
                 {/* Existing Files */}
                 {existingFiles.length > 0 && (
                     <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-1">Previously Uploaded Files:</h4>
+                        <h4 className="text-sm font-medium text-gray-700 mb-1">Previously uploaded files:</h4>
                         <ul className="space-y-1">
                         {existingFiles.map((file, index) => (
                             <li
@@ -341,7 +370,7 @@ export default function VaultEditDoc() {
                     {/* Current Selected Files */}
                     {files.length > 0 && (
                     <div>
-                        <h4 className="text-sm font-medium text-blue-800 mb-1">Newly Selected Files:</h4>
+                        <h4 className="text-sm font-medium text-blue-800 mb-1">Newly selected files:</h4>
                         <ul className="space-y-1">
                         {files.map((file, index) => (
                             <li
@@ -498,8 +527,12 @@ export default function VaultEditDoc() {
                 )}
                 </button>
 
+                <br />
                 {successMsg && (
                 <p className="text-sm text-green-600 text-center">{successMsg}</p>
+                )}
+                {errorMsg && (
+                <p className="text-sm text-red-600 text-center">{errorMsg}</p>
                 )}
             </form>
             </div>

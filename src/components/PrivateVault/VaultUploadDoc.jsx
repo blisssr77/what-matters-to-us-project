@@ -3,7 +3,8 @@ import { supabase } from "../../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 import { Loader2, X, Search } from "lucide-react";
 import Layout from "../Layout/Layout";
-import { encryptText, encryptFile } from "../../utils/encryption"; // AES-GCM helper
+import { encryptText, encryptFile } from "../../utils/encryption"; 
+import bcrypt from "bcryptjs";
 
 export default function VaultedFileUpload() {
     const [files, setFiles] = useState([]);
@@ -14,6 +15,7 @@ export default function VaultedFileUpload() {
     const [privateNote, setPrivateNote] = useState("");
     const [uploading, setUploading] = useState(false);
     const [successMsg, setSuccessMsg] = useState("");
+    const [errorMsg, setErrorMsg] = useState("");
     const [dragging, setDragging] = useState(false);
     const [title, setTitle] = useState("");
     const [vaultCode, setVaultCode] = useState("");
@@ -67,18 +69,19 @@ export default function VaultedFileUpload() {
     const handleUpload = async (e) => {
         e.preventDefault();
         setUploading(true);
+        setErrorMsg("");
         setSuccessMsg("");
 
         if (!files.length) {
             setUploading(false);
-            setSuccessMsg("⚠️ Please attach file(s) before uploading.");
+            setErrorMsg("⚠️ Please attach file(s) before uploading.");
             return;
         }
 
         const invalidFiles = files.filter((f) => !allowedMimes.includes(f.type));
         if (invalidFiles.length > 0) {
             setUploading(false);
-            setSuccessMsg(`❌ One or more files have unsupported types.`);
+            setErrorMsg("❌ One or more files have unsupported types.");
             return;
         }
 
@@ -86,18 +89,38 @@ export default function VaultedFileUpload() {
         const userId = userData?.user?.id;
         if (!userId) {
             setUploading(false);
-            setSuccessMsg("❌ User not authenticated.");
+            setErrorMsg("❌ User not authenticated.");
             return;
         }
 
         if (!vaultCode) {
             setUploading(false);
-            setSuccessMsg("❌ Please enter your Vault Code to encrypt.");
+            setErrorMsg("❌ Please enter your Vault Code to encrypt.");
             return;
         }
 
-        const fileMetas = []; // to hold file info: url, iv, name
-        let noteIv = ""; // optional IV for private note
+        // ✅ Check if vault code is correct
+        const { data: vaultCodeRow, error: vaultError } = await supabase
+            .from("vault_codes")
+            .select("private_code")
+            .eq("id", userId)
+            .single();
+
+        if (vaultError || !vaultCodeRow?.private_code) {
+            setUploading(false);
+            setErrorMsg("❌ Vault code not found or not set.");
+            return;
+        }
+
+        const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
+        if (!isMatch) {
+            setUploading(false);
+            setErrorMsg("❌ Incorrect Vault Code.");
+            return;
+        }
+
+        const fileMetas = [];
+        let noteIv = "";
         let uploadedCount = 0;
 
         for (const file of files) {
@@ -119,34 +142,41 @@ export default function VaultedFileUpload() {
             const { data } = supabase.storage.from("vaulted").getPublicUrl(filePath);
             if (data?.publicUrl) {
                 fileMetas.push({
-                name: file.name,
-                url: data.publicUrl,
-                iv: ivHex,
-                type: file.type,
+                    name: file.name,
+                    url: data.publicUrl,
+                    iv: ivHex,
+                    type: file.type,
                 });
+                uploadedCount++;
             }
         }
 
         if (!fileMetas.length) {
             setUploading(false);
-            setSuccessMsg("❌ Upload failed for all files.");
+            setErrorMsg("❌ Upload failed for all files.");
             return;
         } else if (uploadedCount < files.length) {
-            setSuccessMsg(`⚠️ Only ${uploadedCount} of ${files.length} files uploaded successfully.`);
+            setErrorMsg(`⚠️ Only ${uploadedCount} of ${files.length} files uploaded successfully.`);
         }
 
-        // Encrypt private note (if provided)
         let encryptedNote = "";
         if (privateNote) {
-            const result = await encryptText(privateNote, vaultCode);
-            encryptedNote = result.encryptedData;
-            noteIv = result.iv;
+            try {
+                const result = await encryptText(privateNote, vaultCode);
+                encryptedNote = result.encryptedData;
+                noteIv = result.iv;
+            } catch (err) {
+                console.error("❌ Note encryption error:", err);
+                setUploading(false);
+                setErrorMsg("❌ Failed to encrypt private note.");
+                return;
+            }
         }
 
         const { error: insertError } = await supabase.from("vault_items").insert({
             user_id: userId,
             file_name: files.map((f) => f.name).join(", "),
-            file_metas: fileMetas, // ✅ instead of file_urls
+            file_metas: fileMetas,
             title,
             tags,
             notes,
@@ -157,7 +187,7 @@ export default function VaultedFileUpload() {
 
         if (insertError) {
             console.error(insertError);
-            setSuccessMsg("❌ Failed to save document.");
+            setErrorMsg("❌ Failed to save document.");
         } else {
             setSuccessMsg("✅ Files uploaded successfully!");
             setTimeout(() => navigate("/private/vaults"), 1300);
@@ -165,6 +195,7 @@ export default function VaultedFileUpload() {
 
         setUploading(false);
     };
+
 
     return (
         <Layout>
@@ -347,8 +378,12 @@ export default function VaultedFileUpload() {
                     )}
                 </button>
 
+                <br />
                 {successMsg && (
                     <p className="text-sm text-green-600 text-center">{successMsg}</p>
+                )}
+                {errorMsg && (
+                    <p className="text-sm text-red-600 text-center">{errorMsg}</p>
                 )}
             </form>
         </div>

@@ -12,14 +12,14 @@ export default function VaultEditNote() {
 
     const [vaultCode, setVaultCode] = useState("");
     const [noteData, setNoteData] = useState(null);
-    const [errorMsg, setErrorMsg] = useState("");
     const [loading, setLoading] = useState(false);
     const [editedTitle, setEditedTitle] = useState("");
     const [editedNote, setEditedNote] = useState("");
     const [toastMessage, setToastMessage] = useState("");
     const [saving, setSaving] = useState(false);
-    const [error, setError] = useState("");
     const [successMsg, setSuccessMsg] = useState("");
+    const [errorMsg, setErrorMsg] = useState("");
+
 
     // Tag-related
     const [availableTags, setAvailableTags] = useState([]);
@@ -116,49 +116,73 @@ export default function VaultEditNote() {
         setLoading(false);
     };
 
-
-
-    // Handle vault code change
+    // Handle saving the edited note
     const handleSave = async () => {
         setSaving(true);
-        setError("");
+        setErrorMsg("");
+
+        if (!vaultCode.trim()) {
+            setErrorMsg("Vault Code is required to save the note.");
+            setSaving(false);
+            return;
+        }
 
         const {
             data: { user },
         } = await supabase.auth.getUser();
 
+        // Step 1: Fetch hashed vault code
+        const { data: vaultCodeRow, error: codeError } = await supabase
+            .from("vault_codes")
+            .select("private_code")
+            .eq("id", user.id)
+            .single();
+
+        if (codeError || !vaultCodeRow?.private_code) {
+            setErrorMsg("Vault Code not set or fetch failed.");
+            setSaving(false);
+            return;
+        }
+
+        // Step 2: Compare input vaultCode with hashed version
+        const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
+        if (!isMatch) {
+            setErrorMsg("❌ Incorrect Vault Code.");
+            setSaving(false);
+            return;
+        }
+
         try {
+            // Step 3: Encrypt and save
             const { encryptedData, iv } = await encryptText(editedNote, vaultCode);
 
             const updatedTags = selectedTags
-            .map((tag) => tag.trim())
-            .filter((tag) => tag.length > 0);
+                .map((tag) => tag.trim())
+                .filter((tag) => tag.length > 0);
 
             const { error: updateError } = await supabase
-            .from("vault_items")
-            .update({
-                title: editedTitle,
-                tags: updatedTags,
-                encrypted_note: encryptedData,
-                note_iv: iv, // ✅ save as note_iv instead of iv
-                updated_at: new Date().toISOString(),
-            })
-            .eq("id", id);
+                .from("vault_items")
+                .update({
+                    title: editedTitle,
+                    tags: updatedTags,
+                    encrypted_note: encryptedData,
+                    note_iv: iv,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq("id", id);
 
             if (updateError) {
-            console.error("❌ Update error:", updateError);
-            setError("Failed to update note.");
+                console.error("❌ Update error:", updateError);
+                setErrorMsg("Failed to update note.");
             } else {
-            console.log("🔐 Encrypted Note:", encryptedData);
-            console.log("🧂 Note IV:", iv);
-            setSuccessMsg("✅ Note updated successfully!");
-            setTimeout(() => {
-                navigate(`/private/vaults/note-view/${id}`);
-            }, 1300);
+                setSuccessMsg("✅ Note updated successfully!");
+                setTimeout(() => {
+                    navigate(`/private/vaults/note-view/${id}`);
+                }, 1300);
             }
         } catch (err) {
             console.error("❌ Encryption error:", err);
-            setError("Encryption failed.");
+            setErrorMsg("Encryption failed.");
         } finally {
             setSaving(false);
         }
@@ -193,7 +217,7 @@ export default function VaultEditNote() {
 
                 <h2 className="text-xl font-bold mb-5 text-gray-900">✏️ Edit Note</h2>
 
-                <label className="text-sm font-medium text-gray-800 mb-1 block">Edit title:</label>
+                <label className="text-sm font-medium text-gray-800 mb-1 block">Note title:</label>
                 <input
                     value={editedTitle}
                     onChange={(e) => setEditedTitle(e.target.value)}
@@ -213,7 +237,7 @@ export default function VaultEditNote() {
                 />
 
                 <div className="mb-4">
-                    <label className="text-sm font-medium text-gray-800 mb-1 block">Edit tags:</label>
+                    <label className="text-sm font-medium text-gray-800 mb-1 block">Tags:</label>
 
                     <div className="relative flex items-center gap-2 mb-2">
                         <Search className="absolute left-3 text-gray-400" size={16} />
@@ -280,6 +304,13 @@ export default function VaultEditNote() {
                         Save Note
                     </button>
                 </div>
+                <br />
+                {successMsg && (
+                <p className="text-sm text-green-600 text-center">{successMsg}</p>
+                )}
+                {errorMsg && (
+                    <p className="text-sm text-red-600 text-center">{errorMsg}</p>
+                )}
             </div>
         </Layout>
     );

@@ -5,6 +5,7 @@ import { X, Search } from "lucide-react";
 import { encryptText } from "../../utils/encryption";
 import Layout from "../Layout/Layout";
 import { file } from "jszip";
+import bcrypt from "bcryptjs"; 
 
 const VaultedNoteUpload = () => {
     const [title, setTitle] = useState("");
@@ -14,6 +15,7 @@ const VaultedNoteUpload = () => {
     const [tags, setTags] = useState([]);
     const [availableTags, setAvailableTags] = useState([]);
     const [successMsg, setSuccessMsg] = useState("");
+    const [errorMsg, setErrorMsg] = useState("");
     const [vaultCode, setVaultCode] = useState("");
 
 
@@ -39,39 +41,68 @@ const VaultedNoteUpload = () => {
         setNewTag("");
     };
 
-    // Encrypt the note before saving
+    // Handle creating the note
     const handleCreate = async () => {
         setLoading(true);
         setSuccessMsg("");
+        setErrorMsg("");
 
         const {
             data: { user },
         } = await supabase.auth.getUser();
 
-        if (!user || !vaultCode) {
-            setSuccessMsg("❌ Missing user or vault code");
+        if (!user || !vaultCode.trim()) {
+            setErrorMsg("❌ Missing user or vault code.");
             setLoading(false);
             return;
         }
 
-        const { encryptedData, iv } = await encryptText(privateNote, vaultCode); // ✅ Use vaultCode
+        // Step 1: Fetch hashed vault code from Supabase
+        const { data: vaultCodeRow, error: codeError } = await supabase
+            .from("vault_codes")
+            .select("private_code")
+            .eq("id", user.id)
+            .single();
 
-        const { error } = await supabase.from("vault_items").insert({
-            user_id: user.id,
-            file_name: title || "Untitled Note",
-            title,
-            encrypted_note: encryptedData,
-            note_iv: iv, // ✅ save IV under note_iv
-            tags,
-        });
+        if (codeError || !vaultCodeRow?.private_code) {
+            setErrorMsg("❌ Vault code not found.");
+            setLoading(false);
+            return;
+        }
 
-        setLoading(false);
-        if (error) {
-            console.error(error);
-            setSuccessMsg("❌ Failed to create note");
-        } else {
-            setSuccessMsg("✅ Note created successfully!");
-            setTimeout(() => navigate("/private/vaults"), 1300);
+        // Step 2: Validate input vaultCode against hash
+        const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
+        if (!isMatch) {
+            setErrorMsg("❌ Incorrect Vault Code.");
+            setLoading(false);
+            return;
+        }
+
+        // Step 3: Encrypt and save note
+        try {
+            const { encryptedData, iv } = await encryptText(privateNote, vaultCode);
+
+            const { error } = await supabase.from("vault_items").insert({
+                user_id: user.id,
+                file_name: title || "Untitled Note",
+                title,
+                encrypted_note: encryptedData,
+                note_iv: iv,
+                tags,
+            });
+
+            if (error) {
+                console.error(error);
+                setErrorMsg("❌ Failed to create note.");
+            } else {
+                setSuccessMsg("✅ Note created successfully!");
+                setTimeout(() => navigate("/private/vaults"), 1300);
+            }
+        } catch (err) {
+            console.error("❌ Encryption failed:", err);
+            setErrorMsg("❌ Encryption error.");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -105,20 +136,8 @@ const VaultedNoteUpload = () => {
                 placeholder="Write your note here.."
             />
 
-            {/* Vault Code Section */}
-            <label className="block text-sm font-medium mb-1 text-gray-700">
-                Enter <strong>Private</strong> vault code to encrypt note:
-            </label>
-            <input
-                type="password"
-                value={vaultCode}
-                onChange={(e) => setVaultCode(e.target.value)}
-                className="w-full p-2 border rounded mb-3 text-gray-600 text-sm bg-gray-50"
-                placeholder="Vault code"
-            />
-
             {/* Tag Section */}
-            <div>
+            <div className="mb-4">
                 <label className="text-sm font-medium text-gray-700 mb-1 block">Add tags:</label>
 
                 <div className="relative flex items-center gap-2 mb-2">
@@ -179,6 +198,18 @@ const VaultedNoteUpload = () => {
                 )}
             </div>
 
+            {/* Vault Code Section */}
+            <label className="block text-sm font-medium mb-1 text-gray-700">
+                Enter <strong>Private</strong> vault code to encrypt note:
+            </label>
+            <input
+                type="password"
+                value={vaultCode}
+                onChange={(e) => setVaultCode(e.target.value)}
+                className="w-full p-2 border rounded mb-3 text-gray-600 text-sm bg-gray-50"
+                placeholder="Vault code"
+            />
+
             <button
                 onClick={handleCreate}
                 disabled={loading}
@@ -187,8 +218,12 @@ const VaultedNoteUpload = () => {
                 {loading ? "Creating..." : "Upload Note"}
             </button>
 
+            <br />
             {successMsg && (
                 <p className="text-sm text-center mt-3 text-green-600">{successMsg}</p>
+            )}
+            {errorMsg && (
+                <p className="text-sm text-center mt-3 text-red-600">{errorMsg}</p>
             )}
         </div>
     </Layout>

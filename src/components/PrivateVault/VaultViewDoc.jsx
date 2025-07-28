@@ -65,8 +65,7 @@ export default function VaultViewDoc() {
     // 1. Validate content
     if (!doc.note_iv || !doc.encrypted_note) {
       setErrorMsg("Nothing to decrypt for this document.");
-      setLoading(false);
-      return;
+      setLoading(true);
     }
 
     // 2. Fetch vault code hash from Supabase
