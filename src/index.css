@@ -8,3 +8,15 @@ body {
   background-color: #0f0f1c;
   color: #e0e0f0;
 }
+
+.btn-main {
+  @apply px-3 py-1.5 bg-gradient-to-r from-indigo-800 via-purple-800 to-violet-900 
+          text-white rounded-xl shadow-lg 
+          hover:from-indigo-900 hover:to-purple-900 
+          transition;
+}
+
+.btn-secondary {
+  @apply px-3 py-1.5 bg-gradient-to-r from-zinc-600 via-neutral-700 to-zinc-800 text-white 
+          rounded-xl shadow hover:from-neutral-800 hover:to-black transition;
+}

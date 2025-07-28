@@ -1,3 +1,4 @@
+import React from "react";
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
@@ -111,6 +112,32 @@ export default function VaultViewNote() {
 
     return (
         <Layout>
+            {/* Delete confirmation modal */}
+            {showDeleteConfirm && (
+                <div className="fixed top-6 right-6 bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
+                    <p className="mt-10 text-gray-800">
+                    Are you sure you want to delete <strong>{noteData?.title || "this note"}</strong>?
+                    </p>
+                    <div className="flex gap-3 justify-end mt-4">
+                    <button
+                        onClick={async () => {
+                        await handleDelete();
+                        setShowDeleteConfirm(false);
+                        }}
+                        className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+                    >
+                        Yes, Delete
+                    </button>
+                    <button
+                        onClick={() => setShowDeleteConfirm(false)}
+                        className="px-3 py-1 bg-gray-300 text-gray-800 rounded hover:bg-gray-400"
+                    >
+                        Cancel
+                    </button>
+                    </div>
+                </div>
+            )}
+
             <div className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
                 <button
                     onClick={() => navigate("/private/vaults")}
@@ -120,8 +147,8 @@ export default function VaultViewNote() {
                     <X size={20} />
                 </button>
 
-                <h2 className="text-xl font-bold mb-4 text-gray-800">🔓 View Note</h2>
-                {noteData?.title && <h3 className="text-lg text-gray-800 font-semibold mb-1">{noteData.title}</h3>}
+                <h2 className="text-xl font-bold mb-5 text-gray-900">🔓 View Note</h2>
+                {noteData?.title && <h3 className="text-lg text-gray-800 font-semibold mb-3">{noteData.title}</h3>}
                 {noteData?.notes && <p className="text-s text-gray-700 mb-4">{noteData.notes}</p>}
 
                 {!codeEntered ? (
@@ -137,13 +164,13 @@ export default function VaultViewNote() {
                                 setVaultCode(newCode);
                                 sessionStorage.setItem("vaultCode", newCode); // ✅ persist vault code immediately
                             }}
-                            className="w-full p-2 border rounded mb-3 text-gray-600"
+                            className="w-full p-2 border rounded mb-3 text-gray-600 text-sm"
                             placeholder="Vault Code"
                         />
                         <button
                             onClick={handleDecrypt}
                             disabled={loading}
-                            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                            className="btn-secondary"
                         >
                             {loading ? "Decrypting..." : "Decrypt"}
                         </button>
@@ -152,20 +179,30 @@ export default function VaultViewNote() {
                 ) : (
                     <>
                         {noteData.tags?.length > 0 && (
-                            <div className="mb-2 text-sm text-gray-700">
-                                <strong>Tags:</strong> {noteData.tags.join(", ")}
+                            <div className="mb-3 text-sm text-gray-700">
+                                <strong>Tags:</strong>{" "}
+                                {/* Map over each tag to apply individual styling */}
+                                {noteData.tags.map((tag, index) => (
+                                <React.Fragment key={tag}> {/* Use React.Fragment for grouping without extra DOM node */}
+                                    <span className="bg-yellow-50 px-1 rounded"> {/* Apply highlight classes to each tag */}
+                                    {tag}
+                                    </span>
+                                    {/* Add a comma and space after each tag, except the last one */}
+                                    {index < noteData.tags.length - 1 && ", "}
+                                </React.Fragment>
+                                ))}
                             </div>
                         )}
 
-                        <div className="mb-3 text-xs text-gray-400">
+                        <div className="mb-1 text-xs text-gray-400">
                             Created: {dayjs(noteData.created_at).format("MMM D, YYYY h:mm A")}
                         </div>
                         <div className="mb-3 text-xs text-gray-400">
                             Updated: {dayjs(noteData.updated_at).format("MMM D, YYYY h:mm A")}
                         </div>
 
-                        <div className="text-gray-900 mb-2 text-sm">Private note:</div>
-                        <div className="whitespace-pre-wrap border border-gray-100 p-4 rounded bg-gray-50 text-sm text-purple-900 leading-relaxed mb-4">
+                        <div className="text-gray-900 mb-1 text-sm">Private note:</div>
+                        <div className="whitespace-pre-wrap border border-gray-100 p-4 rounded bg-gray-50 text-sm text-gray-900 leading-relaxed mb-4">
                             {decryptedNote ? decryptedNote : "⚠️ Decryption returned nothing."}
                         </div>
 
@@ -195,36 +232,11 @@ export default function VaultViewNote() {
                         </div>
 
                         <div className="mt-4 text-xs text-gray-400">
-                            Last viewed just now (personal log). Audit trail for teams coming soon.
+                            Last viewed just now · Private log only. Team audit history coming soon.
                         </div>
                     </>
                 )}
 
-                {/* Delete confirmation modal */}
-                {showDeleteConfirm && (
-                    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
-                        <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full">
-                            <h4 className="text-lg font-semibold mb-2 text-gray-800">Delete Note?</h4>
-                            <p className="text-sm text-gray-600 mb-4">
-                                This action cannot be undone. Are you sure you want to delete this note?
-                            </p>
-                            <div className="flex justify-end gap-3">
-                                <button
-                                    onClick={() => setShowDeleteConfirm(false)}
-                                    className="px-3 py-1 text-gray-700 border border-gray-300 rounded hover:bg-gray-100"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleDelete}
-                                    className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
-                                >
-                                    Delete
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div>
         </Layout>
     );

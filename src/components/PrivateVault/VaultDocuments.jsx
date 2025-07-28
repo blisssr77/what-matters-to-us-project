@@ -1,3 +1,4 @@
+import React from "react";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText, Search, ChevronDown, XCircle } from "lucide-react";
@@ -59,18 +60,19 @@ export default function VaultedDocuments() {
 
   return (
     <Layout>
-      <div className="p-6 max-w-5xl mx-auto">
+      <div className="p-6 max-w-5xl mx-auto text-sm">
         {/* Buttons Row */}
         <div className="flex justify-end gap-2 mb-4">
           <button
             onClick={() => navigate("/private/vaults/file-upload")}
-            className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition"
+            className="btn-main"
           >
             + Upload Document
           </button>
+          <br />
           <button
             onClick={() => navigate("/private/vaults/note-upload")}
-            className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition"
+            className="btn-main"
           >
             + Create Note
           </button>
@@ -115,6 +117,7 @@ export default function VaultedDocuments() {
               <ChevronDown className="ml-2 text-gray-400" size={18} />
             </button>
 
+            {/* Tag Filter Dropdown */}
             {showTagFilter && (
               <div className="absolute z-30 mt-2 w-full max-h-60 bg-white border border-gray-300 rounded-lg shadow p-3 text-gray-700">
                 <input
@@ -124,6 +127,8 @@ export default function VaultedDocuments() {
                   onChange={(e) => setTagSearchTerm(e.target.value)}
                   className="w-full p-2 mb-2 border border-gray-300 rounded text-sm text-gray-700"
                 />
+
+                {/* Display filtered tags */}
                 <div className="max-h-40 overflow-y-auto">
                   {allTags
                     .filter((tag) => tag.toLowerCase().includes(tagSearchTerm.toLowerCase()))
@@ -142,6 +147,8 @@ export default function VaultedDocuments() {
                       </div>
                     ))}
                 </div>
+
+                {/* Clear Filter Button */}
                 {selectedTag && (
                   <button
                     className="mt-2 text-xs text-red-500 underline"
@@ -180,8 +187,18 @@ export default function VaultedDocuments() {
                 </div>
 
                 {doc.tags?.length > 0 && (
-                  <div className="mb-2 text-sm text-gray-700">
-                    <strong>Tags:</strong> {doc.tags.join(", ")}
+                  <div className="mb-2 text-xs text-gray-700">
+                    <strong>Tags:</strong>{" "}
+                    {/* Map over each tag to apply individual styling */}
+                    {doc.tags.map((tag, index) => (
+                      <React.Fragment key={tag}> 
+                        <span className="bg-yellow-50 px-1 rounded">
+                          {tag}
+                        </span>
+                        {/* Add a comma and space after each tag, except the last one */}
+                        {index < doc.tags.length - 1 && ", "}
+                      </React.Fragment>
+                    ))}
                   </div>
                 )}
 
@@ -189,7 +206,7 @@ export default function VaultedDocuments() {
                   <p className="text-sm text-gray-800 mb-2">{doc.notes}</p>
                 )}
 
-                {doc.updated_at !== doc.created_at && (
+                {doc.updated_at && doc.updated_at !== doc.created_at && (
                   <div className="text-xs text-gray-400 mb-1">
                     <strong>Last Modified:</strong>{" "}
                     {dayjs(doc.updated_at).format("MMM D, YYYY h:mm A")}
@@ -203,7 +220,7 @@ export default function VaultedDocuments() {
 
                 {hasFiles && (
                   <div className="text-xs text-red-500 font-semibold mt-2">
-                    Contains File
+                    - Contains file -
                   </div>
                 )}
               </div>

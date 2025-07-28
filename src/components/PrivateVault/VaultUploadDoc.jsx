@@ -211,16 +211,16 @@ export default function VaultedFileUpload() {
                     multiple
                     accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.jpg,.jpeg,.png"
                     onChange={(e) => setFiles(Array.from(e.target.files))}
-                    className="w-full border border-gray-300 p-2 rounded text-gray-500"
+                    className="w-full border border-gray-300 p-2 rounded text-gray-500 text-sm"
                 />
 
-                {/* File input */}
+                {/* Document title input */}
                 <div>
                     <label className="block text-sm font-medium mb-1 text-gray-800 mt-4">Document title:</label>
                     <input
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full p-2 border rounded text-gray-700"
+                    className="w-full p-2 border rounded text-gray-700 text-sm bg-gray-50"
                     placeholder="Enter document title (Public)"
                     />
                 </div>
@@ -237,12 +237,12 @@ export default function VaultedFileUpload() {
                             value={newTag}
                             onChange={(e) => setNewTag(e.target.value)}
                             placeholder="Search existing tags or create new"
-                            className="w-full pl-8 border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
+                            className="w-full pl-8 border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400  text-sm"
                         />
                         <button
                             type="button"
                             onClick={handleTagAdd}
-                            className="ml-2 px-3 py-2 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
+                            className="btn-secondary text-sm px-3 py-1"
                         >
                         Create
                         </button>
@@ -267,7 +267,7 @@ export default function VaultedFileUpload() {
                                     )
                                     }
                                 />
-                            <span className="text-sm text-gray-700">{tag}</span>
+                            <span className="text-xs text-gray-700">{tag}</span>
                             </div>
                         ))}
                     </div>
@@ -278,7 +278,7 @@ export default function VaultedFileUpload() {
                             {tags.map((tag) => (
                                 <span
                                 key={tag}
-                                className="bg-purple-100 text-gray-800 text-xs px-3 py-1 rounded-full flex items-center gap-1"
+                                className="bg-yellow-50 text-gray-800 text-sm px-3 py-1 rounded-full flex items-center gap-1"
                                 >
                                 {tag}
                                 <X
@@ -300,7 +300,7 @@ export default function VaultedFileUpload() {
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Public notes (Visible to shared contacts)"
                         rows={2}
-                        className="w-full border bg-gray-50 border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
+                        className="w-full border bg-gray-50 border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
                     />
                 </div>
 
@@ -314,7 +314,7 @@ export default function VaultedFileUpload() {
                         onChange={(e) => setPrivateNote(e.target.value)}
                         placeholder="Private notes (For your eyes only)"
                         rows={2}
-                        className="bg-gray-50 w-full border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
+                        className="bg-gray-50 w-full border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
                     />
                 </div>
 
@@ -327,7 +327,7 @@ export default function VaultedFileUpload() {
                         type="password"
                         value={vaultCode}
                         onChange={(e) => setVaultCode(e.target.value)}
-                        className="w-full p-2 border rounded mb-3 text-gray-600"
+                        className="w-full p-2 border rounded mb-3 text-gray-600 text-sm bg-gray-50"
                         placeholder="Vault code"
                     />
                 </div>
@@ -336,7 +336,7 @@ export default function VaultedFileUpload() {
                 <button
                     type="submit"
                     disabled={uploading}
-                    className="bg-purple-600 text-white w-full py-2 rounded hover:bg-purple-700 transition"
+                    className="btn-secondary w-full mt-4"
                     >
                     {uploading ? (
                         <span className="flex justify-center items-center gap-2">

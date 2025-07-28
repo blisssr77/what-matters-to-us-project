@@ -19,6 +19,7 @@ import { supabase } from "../../lib/supabaseClient";
 export default function Sidebar() {
   const navigate = useNavigate();
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
+  const [privateOpen, setPrivateOpen] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
 
   const navLink = (label, icon, route, textSize = "text-base") => (
@@ -47,7 +48,7 @@ export default function Sidebar() {
             </h1>
           )}
           <button onClick={() => setCollapsed(!collapsed)}>
-            {collapsed ? <Menu size={20} /> : <Menu size={20} />}
+            <Menu size={20} />
           </button>
         </div>
 
@@ -61,7 +62,7 @@ export default function Sidebar() {
             onClick={() => setWorkspaceOpen(!workspaceOpen)}
             className="flex items-center justify-between px-4 py-2 rounded hover:bg-gray-800 cursor-pointer"
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 text-purple-400">
               <FolderKanban size={18} />
               {!collapsed && <span>Workspace Vault</span>}
             </div>
@@ -92,16 +93,39 @@ export default function Sidebar() {
 
           <hr className="my-6 border-gray-800" />
 
-          {!collapsed && (
-            <li className="text-sm uppercase tracking-wide text-purple-400 mt-4 mb-2 px-3">
-              My Private Vault
-            </li>
-          )}
-          {navLink("Projects Planner", <FolderKanban size={18} />, "/private/projects")}
-          {navLink("Messenger", <MessageCircle size={18} />, "/private/messenger")}
-          {navLink("Calendar", <CalendarDays size={18} />, "/private/calendar")}
-          {navLink("Documents", <FileText size={18} />, "/private/documents")}
-          {navLink("Vaulted Documents", <Lock size={18} />, "/private/vaults")}
+          {/* My Private Vault Toggle */}
+          <li
+            onClick={() => setPrivateOpen(!privateOpen)}
+            className="flex items-center justify-between px-4 py-2 rounded hover:bg-gray-800 cursor-pointer"
+          >
+            <div className="flex items-center gap-3 text-purple-400">
+              <Lock size={18} />
+              {!collapsed && <span>My Private Vault</span>}
+            </div>
+            {!collapsed &&
+              (privateOpen ? (
+                <ChevronDown size={16} className="text-gray-400" />
+              ) : (
+                <ChevronRight size={16} className="text-gray-400" />
+              ))}
+          </li>
+
+          <AnimatePresence>
+            {privateOpen && !collapsed && (
+              <motion.ul
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="ml-5 border-l border-gray-800 pl-3 space-y-1"
+              >
+                {navLink("Projects Planner", <FolderKanban size={16} />, "/private/projects", "text-sm")}
+                {navLink("Messenger", <MessageCircle size={16} />, "/private/messenger", "text-sm")}
+                {navLink("Calendar", <CalendarDays size={16} />, "/private/calendar", "text-sm")}
+                {navLink("Documents", <FileText size={16} />, "/private/documents", "text-sm")}
+                {navLink("Vaulted Documents", <Lock size={16} />, "/private/vaults", "text-sm")}
+              </motion.ul>
+            )}
+          </AnimatePresence>
         </ul>
       </div>
 

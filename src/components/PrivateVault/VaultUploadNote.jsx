@@ -86,41 +86,40 @@ const VaultedNoteUpload = () => {
             </button>
             <h2 className="text-xl font-bold mb-4 text-gray-800">📝 Upload to My Private Vault</h2>
 
-            <label className="block text-sm font-medium mb-1 text-gray-700">Title</label>
+            <label className="block text-sm font-medium mb-1 text-gray-700">Note title:</label>
             <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full p-2 mb-4 border rounded text-gray-700"
+                className="w-full p-2 mb-4 border rounded text-gray-700 text-sm bg-gray-50"
                 placeholder="Enter note title (Public)"
             />
 
-             <p className="text-sm text-red-400 mb-4">
-                🔐 Private Note will be encrypted using your saved Vault Code. 
+            <p className="text-sm text-red-400 mb-1">
+                🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
             </p>
-            <label className="block text-sm font-medium mb-1 text-gray-700">Private Note</label>
             <textarea
                 value={privateNote}
                 onChange={(e) => setPrivateNote(e.target.value)}
                 rows="6"
-                className="w-full p-2 border bg-gray-50 rounded mb-4 text-gray-700"
-                placeholder="Write your note here..."
+                className="w-full p-2 border bg-gray-50 rounded mb-3 text-gray-700 text-sm"
+                placeholder="Write your note here.."
             />
 
             {/* Vault Code Section */}
             <label className="block text-sm font-medium mb-1 text-gray-700">
-                Enter <strong>Private</strong> Vault Code to Encrypt Note
+                Enter <strong>Private</strong> vault code to encrypt note:
             </label>
             <input
                 type="password"
                 value={vaultCode}
                 onChange={(e) => setVaultCode(e.target.value)}
-                className="w-full p-2 border rounded mb-3 text-gray-600"
-                placeholder="Vault Code"
+                className="w-full p-2 border rounded mb-3 text-gray-600 text-sm bg-gray-50"
+                placeholder="Vault code"
             />
 
             {/* Tag Section */}
             <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">Add tags</label>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Add tags:</label>
 
                 <div className="relative flex items-center gap-2 mb-2">
                 <Search className="absolute left-3 text-gray-400" size={16} />
@@ -129,12 +128,12 @@ const VaultedNoteUpload = () => {
                     value={newTag}
                     onChange={(e) => setNewTag(e.target.value)}
                     placeholder="Search existing tags or create new"
-                    className="w-full pl-8 border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
+                    className="w-full pl-8 border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
                 />
                 <button
                     type="button"
                     onClick={handleTagAdd}
-                    className="ml-2 px-3 py-2 text-sm bg-purple-600 text-white rounded hover:bg-purple-700"
+                    className="btn-secondary text-sm"
                 >
                     Create
                 </button>
@@ -156,7 +155,7 @@ const VaultedNoteUpload = () => {
                             )
                         }
                         />
-                        <span className="text-sm text-gray-700">{tag}</span>
+                        <span className="text-xs text-gray-700">{tag}</span>
                     </div>
                     ))}
                 </div>
@@ -166,7 +165,7 @@ const VaultedNoteUpload = () => {
                     {tags.map((tag) => (
                     <span
                         key={tag}
-                        className="bg-purple-100 text-gray-800 text-xs px-3 py-1 rounded-full flex items-center gap-1"
+                        className="bg-yellow-50 text-gray-800 text-xs px-3 py-1 rounded-full flex items-center gap-1"
                     >
                         {tag}
                         <X
@@ -183,9 +182,9 @@ const VaultedNoteUpload = () => {
             <button
                 onClick={handleCreate}
                 disabled={loading}
-                className="mt-6 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 w-full"
+                className="btn-secondary w-full mt-4"
             >
-                {loading ? "Creating..." : "Save Note"}
+                {loading ? "Creating..." : "Upload Note"}
             </button>
 
             {successMsg && (

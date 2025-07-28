@@ -31,9 +31,10 @@ export default function VaultEditNote() {
     // Load vault code from session storage on mount
     useEffect(() => {
         const storedCode = sessionStorage.getItem("vaultCode");
-        console.log("🔑 Loaded vaultCode from sessionStorage:", storedCode);
-        if (storedCode) setVaultCode(storedCode);
-    }, []);
+        if (storedCode && noteData) {
+            handleDecrypt(storedCode);
+        }
+    }, [noteData]);
 
     // Fetch note data and available tags on mount
     useEffect(() => {
@@ -73,14 +74,13 @@ export default function VaultEditNote() {
     }, [vaultCode, noteData]);
 
     // Handle vault code change
-    const handleDecrypt = async () => {
+    const handleDecrypt = async (code) => {
         setLoading(true);
         setErrorMsg("");
 
         const {
             data: { user },
         } = await supabase.auth.getUser();
-        console.log("🔐 User ID:", user.id);
 
         const { data: vaultCodeRow, error: codeError } = await supabase
             .from("vault_codes")
@@ -88,36 +88,22 @@ export default function VaultEditNote() {
             .eq("id", user.id)
             .single();
 
-        console.log("🔐 Running handleDecrypt()");
-
         if (codeError || !vaultCodeRow?.private_code) {
             setErrorMsg("❌ Vault code not set.");
             setLoading(false);
             return;
         }
 
-        const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
+        const isMatch = await bcrypt.compare(code, vaultCodeRow.private_code);
         if (!isMatch) {
             setErrorMsg("Incorrect Vault Code.");
             setLoading(false);
             return;
         }
 
-        if (!noteData) {
-            console.error("❌ Note data not yet loaded");
-            setErrorMsg("Please wait for note data to load.");
-            setLoading(false);
-            return;
-        }
-
         try {
-            const ivToUse = noteData.note_iv || noteData.iv; // ✅ fallback for backward compatibility
-
-            const decrypted = await decryptText(
-            noteData.encrypted_note,
-            ivToUse,
-            vaultCode
-            );
+            const ivToUse = noteData.note_iv || noteData.iv;
+            const decrypted = await decryptText(noteData.encrypted_note, ivToUse, code);
 
             console.log("✅ Decrypted note:", decrypted);
             setEditedNote(decrypted);
@@ -129,6 +115,7 @@ export default function VaultEditNote() {
 
         setLoading(false);
     };
+
 
 
     // Handle vault code change
@@ -204,25 +191,29 @@ export default function VaultEditNote() {
                     <X size={20} />
                 </button>
 
-                <h2 className="text-xl font-bold mb-4 text-gray-800">✏️ Edit Note</h2>
+                <h2 className="text-xl font-bold mb-5 text-gray-900">✏️ Edit Note</h2>
 
+                <label className="text-sm font-medium text-gray-800 mb-1 block">Edit title:</label>
                 <input
                     value={editedTitle}
                     onChange={(e) => setEditedTitle(e.target.value)}
-                    className="w-full p-2 border rounded mb-3  text-gray-800 font-semibold"
+                    className="w-full p-2 border rounded mb-3 text-gray-800 font-semibold text-sm bg-gray-50"
                     placeholder="Title"
                 />
 
+                <p className="text-sm text-red-400 mb-1">
+                    🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
+                </p>
                 <textarea
                     value={editedNote}
                     onChange={(e) => setEditedNote(e.target.value)}
                     rows="8"
-                    className="w-full p-3 border rounded bg-gray-50 text-sm text-gray-800 leading-relaxed mb-4"
+                    className="w-full p-3 border rounded bg-gray-50 text-sm font-medium text-gray-800 leading-relaxed mb-3"
                     placeholder="Edit your note..."
                 />
 
                 <div className="mb-4">
-                    <label className="text-sm font-medium text-gray-600 mb-1 block">Tags</label>
+                    <label className="text-sm font-medium text-gray-800 mb-1 block">Edit tags:</label>
 
                     <div className="relative flex items-center gap-2 mb-2">
                         <Search className="absolute left-3 text-gray-400" size={16} />
@@ -236,13 +227,13 @@ export default function VaultEditNote() {
                         <button
                             type="button"
                             onClick={handleTagAdd}
-                            className="ml-2 px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm"
+                            className="btn-secondary text-sm"
                         >
                             Create
                         </button>
                     </div>
 
-                    <div className="max-h-40 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50">
+                    <div className="max-h-40 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50 mb-1">
                         {availableTags
                             .filter(tag => tag.toLowerCase().includes(newTag.toLowerCase()) && !selectedTags.includes(tag))
                             .map(tag => (
@@ -252,7 +243,7 @@ export default function VaultEditNote() {
                                         checked={selectedTags.includes(tag)}
                                         onChange={() => setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
                                     />
-                                    <span className="text-sm text-gray-700">{tag}</span>
+                                    <span className="text-xs text-gray-700">{tag}</span>
                                 </div>
                             ))}
                     </div>
@@ -260,7 +251,7 @@ export default function VaultEditNote() {
                     {selectedTags.length > 0 && (
                         <div className="flex flex-wrap gap-2 mt-3">
                             {selectedTags.map(tag => (
-                                <span key={tag} className="bg-purple-100 text-gray-800 text-xs px-3 py-1 rounded-full flex items-center gap-1">
+                                <span key={tag} className="bg-yellow-50 text-gray-800 text-xs px-3 py-1 rounded-full flex items-center gap-1">
                                     {tag}
                                     <X size={12} className="cursor-pointer" onClick={() => setSelectedTags(prev => prev.filter(t => t !== tag))} />
                                 </span>
@@ -269,12 +260,24 @@ export default function VaultEditNote() {
                     )}
                 </div>
 
+                {/* Vault Code */}
+                <div>
+                    <label className="block text-sm font-medium mb-1 text-gray-800">
+                        Re-enter <strong>Private</strong> vault code to encrypt:
+                    </label>
+                    <input
+                        type="password"
+                        value={vaultCode}
+                        onChange={(e) => setVaultCode(e.target.value)}
+                        className="w-full p-2 border font-medium rounded mb-3 text-gray-600 text-sm bg-gray-50"
+                        placeholder="Vault code"
+                        autoComplete="off"
+                    />
+                </div>
+
                 <div className="flex gap-4 mt-4">
-                    <button onClick={handleSave} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
-                        Save
-                    </button>
-                    <button onClick={() => navigate(`/private/vaults/note-view/${id}`)} className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400">
-                        Cancel
+                    <button onClick={handleSave} className="btn-secondary w-full mt-3" disabled={saving}>
+                        Save Note
                     </button>
                 </div>
             </div>

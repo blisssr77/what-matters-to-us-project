@@ -1,3 +1,4 @@
+import React from "react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
@@ -266,7 +267,7 @@ export default function VaultViewDoc() {
       {/* Delete confirmation modal */}
       {showConfirmPopup && (
         <div className="fixed top-6 right-6 bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
-          <p className="mt-10 text-gray-800">
+          <p className="mt-10 text-gray-900">
             Are you sure you want to delete <strong>{doc?.title || "this document"}</strong>?
           </p>
           <div className="flex gap-3 justify-end mt-4">
@@ -298,16 +299,16 @@ export default function VaultViewDoc() {
           <X size={20} />
         </button>
 
-        <h2 className="text-xl font-bold text-gray-800 mb-2">📂 View Document</h2>
-        {doc?.title && <h3 className="text-lg text-gray-800 font-semibold mb-1">{doc.title}</h3>}
-        {doc?.notes && <p className="text-sm text-gray-700 mb-2">{doc.notes}</p>}
+        <h2 className="text-xl font-bold text-gray-800 mb-5">📂 View Document</h2>
+        {doc?.title && <h3 className="text-lg text-gray-800 font-semibold mb-2">{doc.title}</h3>}
+        {doc?.notes && <p className="text-sm text-gray-700 mb-3">{doc.notes}</p>}
         {entered && decryptedNote && (
-          <div className="text-sm text-purple-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
+          <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
             {decryptedNote}
           </div>
         )}
         {doc?.file_metas?.length > 0 && (
-          <ul className="text-sm text-blue-500 mb-2 space-y-1">
+          <ul className="text-sm text-blue-500 space-y-1 mb-3">
             {doc.file_metas.map((file, index) => (
               <li key={index}>📄 {file.name}</li>
             ))}
@@ -324,12 +325,12 @@ export default function VaultViewDoc() {
               type="password"
               value={vaultCode}
               onChange={(e) => setVaultCode(e.target.value)}
-              className="border border-gray-300 rounded px-3 py-2 w-full text-gray-600"
+              className="border border-gray-300 rounded px-3 py-2 w-full text-gray-600 mb-4 text-sm"
               placeholder="Vault Code"
             />
             <button
               onClick={handleDecrypt}
-              className="mt-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+              className="btn-secondary"
             >
               {loading ? "Decrypting..." : "Decrypt"}
           </button>
@@ -341,6 +342,23 @@ export default function VaultViewDoc() {
           <p className="text-sm text-gray-500">🔐 Decrypting document...</p>
         ) : (
           <>
+            {/* Display tags if available */}
+            {doc?.tags?.length > 0 && (
+              <div className="mb-4 text-sm text-gray-700">
+                  <strong>Tags:</strong>{" "}
+                  {/* Map over each tag to apply individual styling */}
+                  {doc.tags.map((tag, index) => (
+                  <React.Fragment key={tag}> {/* Use React.Fragment for grouping without extra DOM node */}
+                      <span className="bg-yellow-50 px-1 rounded"> {/* Apply highlight classes to each tag */}
+                      {tag}
+                      </span>
+                      {/* Add a comma and space after each tag, except the last one */}
+                      {index < doc.tags.length - 1 && ", "}
+                  </React.Fragment>
+                  ))}
+              </div>
+            )}
+
             {/* Action buttons */}
             <div className="flex gap-4 text-sm mb-4">
             <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
