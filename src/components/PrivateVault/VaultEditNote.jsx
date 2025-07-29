@@ -19,6 +19,8 @@ export default function VaultEditNote() {
     const [saving, setSaving] = useState(false);
     const [successMsg, setSuccessMsg] = useState("");
     const [errorMsg, setErrorMsg] = useState("");
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
 
 
     // Tag-related
@@ -183,8 +185,10 @@ export default function VaultEditNote() {
         } catch (err) {
             console.error("❌ Encryption error:", err);
             setErrorMsg("Encryption failed.");
+            
         } finally {
             setSaving(false);
+            setHasUnsavedChanges(false);
         }
     };
 
@@ -206,12 +210,45 @@ export default function VaultEditNote() {
 
     return (
         <Layout>
+            {/* Unsaved changes popup */}
+            {showUnsavedPopup && (
+                <div className="fixed top-6 right-6 bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
+                    <p className="mt-10 text-gray-800">
+                    You have unsaved changes. Are you sure you want to leave?
+                    </p>
+                    <div className="flex gap-3 justify-end mt-4">
+                    <button
+                        onClick={() => navigate("/private/vaults")}
+                        className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+                    >
+                        Leave Anyway
+                    </button>
+                    <button
+                        onClick={() => setShowUnsavedPopup(false)}
+                        className="px-3 py-1 bg-gray-300 text-gray-800 rounded hover:bg-gray-400"
+                    >
+                        Cancel
+                    </button>
+                    </div>
+                </div>
+            )}
+
             <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded shadow-lg z-50 transition duration-300 ${toastMessage ? "opacity-100 bg-green-500" : "opacity-0"} text-white`}>
                 {toastMessage}
             </div>
 
             <div className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
-                <button onClick={() => navigate(-1)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+                {/* Close button */}
+                <button
+                    onClick={() => {
+                        if (hasUnsavedChanges) {
+                        setShowUnsavedPopup(true);
+                        } else {
+                        navigate("/private/vaults");
+                        }
+                    }}
+                    className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
+                    >
                     <X size={20} />
                 </button>
 
@@ -220,7 +257,10 @@ export default function VaultEditNote() {
                 <label className="text-sm font-medium text-gray-800 mb-1 block">Note title:</label>
                 <input
                     value={editedTitle}
-                    onChange={(e) => setEditedTitle(e.target.value)}
+                    onChange={(e) => {
+                        setEditedTitle(e.target.value);
+                        setHasUnsavedChanges(true);
+                    }}
                     className="w-full p-2 border rounded mb-3 text-gray-800 font-semibold text-sm bg-gray-50"
                     placeholder="Title"
                 />
@@ -230,7 +270,10 @@ export default function VaultEditNote() {
                 </p>
                 <textarea
                     value={editedNote}
-                    onChange={(e) => setEditedNote(e.target.value)}
+                    onChange={(e) => {
+                        setEditedNote(e.target.value);
+                        setHasUnsavedChanges(true);
+                    }}
                     rows="8"
                     className="w-full p-3 border rounded bg-gray-50 text-sm font-medium text-gray-800 leading-relaxed mb-3"
                     placeholder="Edit your note..."
@@ -244,7 +287,10 @@ export default function VaultEditNote() {
                         <input
                             type="text"
                             value={newTag}
-                            onChange={(e) => setNewTag(e.target.value)}
+                            onChange={(e) => {
+                                setNewTag(e.target.value);
+                                setHasUnsavedChanges(true);
+                            }}
                             placeholder="Search or create new tag"
                             className="w-full pl-8 border border-gray-300 p-2 text-gray-700 rounded text-sm"
                         />
@@ -257,6 +303,7 @@ export default function VaultEditNote() {
                         </button>
                     </div>
 
+                    {/* Display available tags */}
                     <div className="max-h-40 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50 mb-1">
                         {availableTags
                             .filter(tag => tag.toLowerCase().includes(newTag.toLowerCase()) && !selectedTags.includes(tag))
@@ -265,7 +312,10 @@ export default function VaultEditNote() {
                                     <input
                                         type="checkbox"
                                         checked={selectedTags.includes(tag)}
-                                        onChange={() => setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
+                                        onChange={() => {
+                                            setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+                                            setHasUnsavedChanges(true);
+                                        }}
                                     />
                                     <span className="text-xs text-gray-700">{tag}</span>
                                 </div>

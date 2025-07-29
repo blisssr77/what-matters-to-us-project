@@ -17,6 +17,8 @@ const VaultedNoteUpload = () => {
     const [successMsg, setSuccessMsg] = useState("");
     const [errorMsg, setErrorMsg] = useState("");
     const [vaultCode, setVaultCode] = useState("");
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
 
 
     const navigate = useNavigate();
@@ -103,130 +105,171 @@ const VaultedNoteUpload = () => {
             setErrorMsg("❌ Encryption error.");
         } finally {
             setLoading(false);
+            setHasUnsavedChanges(false);
         }
     };
 
     return (
         <Layout>
-        <div className="relative max-w-xl mx-auto mt-10 p-6 bg-white rounded shadow border border-gray-200">
-            <button
-                onClick={() => navigate("/private/vaults")}
-                className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
-            >
-                <X size={20} />
-            </button>
-            <h2 className="text-xl font-bold mb-4 text-gray-800">📝 Upload to My Private Vault</h2>
-
-            <label className="block text-sm font-medium mb-1 text-gray-700">Note title:</label>
-            <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full p-2 mb-4 border rounded text-gray-700 text-sm bg-gray-50"
-                placeholder="Enter note title (Public)"
-            />
-
-            <p className="text-sm text-red-400 mb-1">
-                🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
-            </p>
-            <textarea
-                value={privateNote}
-                onChange={(e) => setPrivateNote(e.target.value)}
-                rows="6"
-                className="w-full p-2 border bg-gray-50 rounded mb-3 text-gray-700 text-sm"
-                placeholder="Write your note here.."
-            />
-
-            {/* Tag Section */}
-            <div className="mb-4">
-                <label className="text-sm font-medium text-gray-700 mb-1 block">Add tags:</label>
-
-                <div className="relative flex items-center gap-2 mb-2">
-                <Search className="absolute left-3 text-gray-400" size={16} />
-                <input
-                    type="text"
-                    value={newTag}
-                    onChange={(e) => setNewTag(e.target.value)}
-                    placeholder="Search existing tags or create new"
-                    className="w-full pl-8 border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
-                />
-                <button
-                    type="button"
-                    onClick={handleTagAdd}
-                    className="btn-secondary text-sm"
-                >
-                    Create
-                </button>
-                </div>
-
-                <div className="max-h-40 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50">
-                {availableTags
-                    .filter((tag) => tag.toLowerCase().includes(newTag.toLowerCase()) && !tags.includes(tag))
-                    .map((tag) => (
-                    <div key={tag} className="flex items-center gap-2 py-1">
-                        <input
-                        type="checkbox"
-                        checked={tags.includes(tag)}
-                        onChange={() =>
-                            setTags((prev) =>
-                            prev.includes(tag)
-                                ? prev.filter((t) => t !== tag)
-                                : [...prev, tag]
-                            )
-                        }
-                        />
-                        <span className="text-xs text-gray-700">{tag}</span>
-                    </div>
-                    ))}
-                </div>
-
-                {tags.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-3">
-                    {tags.map((tag) => (
-                    <span
-                        key={tag}
-                        className="bg-yellow-50 text-gray-800 text-xs px-3 py-1 rounded-full flex items-center gap-1"
+            {/* Unsaved Changes Popup */}
+            {showUnsavedPopup && (
+                <div className="fixed top-6 right-6 bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
+                    <p className="mt-10 text-gray-800">
+                    You have unsaved changes. Are you sure you want to leave?
+                    </p>
+                    <div className="flex gap-3 justify-end mt-4">
+                    <button
+                        onClick={() => navigate("/private/vaults")}
+                        className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
                     >
-                        {tag}
-                        <X
-                        size={12}
-                        className="cursor-pointer"
-                        onClick={() => setTags(tags.filter((t) => t !== tag))}
-                        />
-                    </span>
-                    ))}
+                        Leave Anyway
+                    </button>
+                    <button
+                        onClick={() => setShowUnsavedPopup(false)}
+                        className="px-3 py-1 bg-gray-300 text-gray-800 rounded hover:bg-gray-400"
+                    >
+                        Cancel
+                    </button>
+                    </div>
                 </div>
                 )}
+
+            <div className="relative max-w-xl mx-auto mt-10 p-6 bg-white rounded shadow border border-gray-200">
+                <button
+                    onClick={() => {
+                        if (hasUnsavedChanges) {
+                        setShowUnsavedPopup(true);
+                        } else {
+                        navigate("/private/vaults");
+                        }
+                    }}
+                    className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
+                    >
+                    <X size={20} />
+                </button>
+
+                <h2 className="text-xl font-bold mb-4 text-gray-800">📝 Upload to My Private Vault</h2>
+
+                <label className="block text-sm font-medium mb-1 text-gray-700">Note title:</label>
+                <input
+                    value={title}
+                    onChange={(e) => {
+                        setTitle(e.target.value);
+                        setHasUnsavedChanges(true);
+                    }}
+                    className="w-full p-2 mb-4 border rounded text-gray-700 text-sm bg-gray-50"
+                    placeholder="Enter note title (Public)"
+                />
+
+                <p className="text-sm text-red-400 mb-1">
+                    🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
+                </p>
+                <textarea
+                    value={privateNote}
+                    onChange={(e) => {
+                        setPrivateNote(e.target.value);
+                        setHasUnsavedChanges(true);
+                    }}
+                    rows="6"
+                    className="w-full p-2 border bg-gray-50 rounded mb-3 text-gray-700 text-sm"
+                    placeholder="Write your note here.."
+                />
+
+                {/* Tag Section */}
+                <div className="mb-4">
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">Add tags:</label>
+
+                    <div className="relative flex items-center gap-2 mb-2">
+                    <Search className="absolute left-3 text-gray-400" size={16} />
+                    <input
+                        type="text"
+                        value={newTag}
+                        onChange={(e) => {
+                            setNewTag(e.target.value);
+                            setHasUnsavedChanges(true);
+                        }}
+                        placeholder="Search existing tags or create new"
+                        className="w-full pl-8 border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
+                    />
+                    <button
+                        type="button"
+                        onClick={handleTagAdd}
+                        className="btn-secondary text-sm"
+                    >
+                        Create
+                    </button>
+                    </div>
+
+                    <div className="max-h-40 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50">
+                    {availableTags
+                        .filter((tag) => tag.toLowerCase().includes(newTag.toLowerCase()) && !tags.includes(tag))
+                        .map((tag) => (
+                        <div key={tag} className="flex items-center gap-2 py-1">
+                            <input
+                            type="checkbox"
+                            checked={tags.includes(tag)}
+                            onChange={() => {
+                                setHasUnsavedChanges(true);
+                                setTags((prev) =>
+                                prev.includes(tag)
+                                    ? prev.filter((t) => t !== tag)
+                                    : [...prev, tag]
+                                )
+                            }}
+                            />
+                            <span className="text-xs text-gray-700">{tag}</span>
+                        </div>
+                        ))}
+                    </div>
+
+                    {tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                        {tags.map((tag) => (
+                        <span
+                            key={tag}
+                            className="bg-yellow-50 text-gray-800 text-xs px-3 py-1 rounded-full flex items-center gap-1"
+                        >
+                            {tag}
+                            <X
+                            size={12}
+                            className="cursor-pointer"
+                            onClick={() => setTags(tags.filter((t) => t !== tag))}
+                            />
+                        </span>
+                        ))}
+                    </div>
+                    )}
+                </div>
+
+                {/* Vault Code Section */}
+                <label className="block text-sm font-medium mb-1 text-gray-700">
+                    Enter <strong>Private</strong> vault code to encrypt note:
+                </label>
+                <input
+                    type="password"
+                    value={vaultCode}
+                    onChange={(e) => setVaultCode(e.target.value)}
+                    className="w-full p-2 border rounded mb-3 text-gray-600 text-sm bg-gray-50"
+                    placeholder="Vault code"
+                />
+
+                <button
+                    onClick={handleCreate}
+                    disabled={loading}
+                    className="btn-secondary w-full mt-4"
+                >
+                    {loading ? "Creating..." : "Upload Note"}
+                </button>
+
+                <br />
+                {successMsg && (
+                    <p className="text-sm text-center mt-3 text-green-600">{successMsg}</p>
+                )}
+                {errorMsg && (
+                    <p className="text-sm text-center mt-3 text-red-600">{errorMsg}</p>
+                )}
             </div>
-
-            {/* Vault Code Section */}
-            <label className="block text-sm font-medium mb-1 text-gray-700">
-                Enter <strong>Private</strong> vault code to encrypt note:
-            </label>
-            <input
-                type="password"
-                value={vaultCode}
-                onChange={(e) => setVaultCode(e.target.value)}
-                className="w-full p-2 border rounded mb-3 text-gray-600 text-sm bg-gray-50"
-                placeholder="Vault code"
-            />
-
-            <button
-                onClick={handleCreate}
-                disabled={loading}
-                className="btn-secondary w-full mt-4"
-            >
-                {loading ? "Creating..." : "Upload Note"}
-            </button>
-
-            <br />
-            {successMsg && (
-                <p className="text-sm text-center mt-3 text-green-600">{successMsg}</p>
-            )}
-            {errorMsg && (
-                <p className="text-sm text-center mt-3 text-red-600">{errorMsg}</p>
-            )}
-        </div>
-    </Layout>
+        </Layout>
     );
 };
 

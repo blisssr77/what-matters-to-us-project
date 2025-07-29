@@ -23,10 +23,12 @@ export default function VaultEditDoc() {
     const [uploading, setUploading] = useState(false);
     const [successMsg, setSuccessMsg] = useState("");
     const [errorMsg, setErrorMsg] = useState("");
-    const [loading, setLoading] = useState(false);
     const [showConfirmPopup, setShowConfirmPopup] = useState(false);
     const [fileToDeleteIndex, setFileToDeleteIndex] = useState(null);
     const [filesToRemove, setFilesToRemove] = useState([]);
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
+
 
     const allowedMimes = [
         "application/pdf",
@@ -88,7 +90,7 @@ export default function VaultEditDoc() {
 
         fetchDoc();
         fetchTags();
-        }, [id]);
+    }, [id]);
 
     // Handle file drop
     const handleFileDrop = (e) => {
@@ -181,14 +183,32 @@ export default function VaultEditDoc() {
         }
 
         // ✅ Delete marked files from Supabase Storage
+        const filePathsToDelete = [];
+
         for (const url of filesToRemove) {
-            const urlParts = url.split("/");
-            const filePath = decodeURIComponent(urlParts.slice(4).join("/"));
-            const { error: deleteError } = await supabase.storage.from("vaulted").remove([filePath]);
+            try {
+                const urlParts = url.split("/");
+                // Expecting structure: https://your-supabase-url/storage/v1/object/public/vaulted/[userId]/filename
+                const index = urlParts.findIndex(part => part === "vaulted");
+                const filePath = decodeURIComponent(urlParts.slice(index + 1).join("/"));
+
+                if (filePath) {
+                    filePathsToDelete.push(filePath);
+                }
+            } catch (err) {
+                console.warn("⚠️ Failed to parse file path from URL:", url, err);
+            }
+        }
+
+        if (filePathsToDelete.length > 0) {
+            const { error: deleteError } = await supabase
+                .storage
+                .from("vaulted")
+                .remove(filePathsToDelete);
 
             if (deleteError) {
-            console.error("❌ Storage deletion error:", deleteError);
-            setErrorMsg("❌ Failed to delete one or more files from storage.");
+                console.error("❌ Storage deletion error:", deleteError);
+                setErrorMsg("❌ Failed to delete one or more files from storage.");
             }
         }
 
@@ -250,10 +270,12 @@ export default function VaultEditDoc() {
         } else {
             setSuccessMsg("✅ Document updated successfully!");
             setFilesToRemove([]); // ✅ clear removed file list
+            setHasUnsavedChanges(false);
             setTimeout(() => navigate("/private/vaults"), 1300);
         }
 
         setUploading(false);
+        setHasUnsavedChanges(false);
     };
 
 
@@ -264,6 +286,8 @@ export default function VaultEditDoc() {
                 <div className="fixed top-6 right-6  bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
                     <p className="mt-10 text-gray-800">
                     Are you sure you want to delete <strong>{existingFiles[fileToDeleteIndex]?.name}</strong>?
+                    <br />
+                    This action cannot be undone.
                     </p>
                     <div className="flex gap-3 justify-end">
                     <button
@@ -288,12 +312,40 @@ export default function VaultEditDoc() {
                     </div>
                 </div>
             )}
+            {/* Unsaved changes confirmation popup */}
+            {showUnsavedPopup && (
+                <div className="fixed top-6 right-6 bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
+                    <p className="mt-10 text-gray-800">
+                    You have unsaved changes. Are you sure you want to leave?
+                    </p>
+                    <div className="flex gap-3 justify-end mt-4">
+                    <button
+                        onClick={() => navigate("/private/vaults")}
+                        className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+                    >
+                        Leave Anyway
+                    </button>
+                    <button
+                        onClick={() => setShowUnsavedPopup(false)}
+                        className="px-3 py-1 bg-gray-300 text-gray-800 rounded hover:bg-gray-400"
+                    >
+                        Cancel
+                    </button>
+                    </div>
+                </div>
+            )}
 
             <div className="relative max-w-xl mx-auto mt-10 p-6 bg-white rounded shadow border border-gray-200">
             <button
-                onClick={() => navigate("/private/vaults")}
+                onClick={() => {
+                    if (hasUnsavedChanges) {
+                    setShowUnsavedPopup(true);
+                    } else {
+                    navigate("/private/vaults");
+                    }
+                }}
                 className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
-            >
+                >
                 <X size={20} />
             </button>
 
@@ -336,6 +388,7 @@ export default function VaultEditDoc() {
                     onChange={(e) => {
                         const selectedFiles = Array.from(e.target.files);
                         setFiles((prevFiles) => [...prevFiles, ...selectedFiles]);
+                        setHasUnsavedChanges(true);
                     }}
                     className="w-full border border-gray-300 p-2 rounded text-gray-500 text-sm"
                 />
@@ -356,6 +409,7 @@ export default function VaultEditDoc() {
                                 onClick={() => {
                                     setFileToDeleteIndex(index);
                                     setShowConfirmPopup(true);
+                                    setHasUnsavedChanges(true); 
                                 }}
                                 className="text-red-500 hover:text-red-700"
                             >
@@ -380,7 +434,10 @@ export default function VaultEditDoc() {
                             {file.name}
                             <button
                                 type="button"
-                                onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}
+                                onClick={() => {
+                                    setFiles((prev) => prev.filter((_, i) => i !== index));
+                                    setHasUnsavedChanges(true); 
+                                }}
                                 className="text-red-500 hover:text-red-700"
                             >
                                 <X size={16} />
@@ -396,7 +453,10 @@ export default function VaultEditDoc() {
                     <label className="block text-sm font-medium mb-1 text-gray-800 mt-4">Edit title:</label>
                     <input
                         value={title}
-                        onChange={(e) => setTitle(e.target.value)}
+                        onChange={(e) => {
+                            setTitle(e.target.value);
+                            setHasUnsavedChanges(true);
+                        }}
                         className="w-full p-2 mb-1 border rounded text-gray-700 text-sm bg-gray-50 font-bold"
                         placeholder="Enter document title (Public)"
                     />
@@ -410,7 +470,10 @@ export default function VaultEditDoc() {
                         <input
                             type="text"
                             value={newTag}
-                            onChange={(e) => setNewTag(e.target.value)}
+                            onChange={(e) => {
+                                setNewTag(e.target.value);
+                                setHasUnsavedChanges(true);
+                            }}
                             placeholder="Search existing tags or create new"
                             className="w-full pl-8 border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
                         />
@@ -436,13 +499,14 @@ export default function VaultEditDoc() {
                         <input
                             type="checkbox"
                             checked={tags.includes(tag)}
-                            onChange={() =>
-                            setTags((prev) =>
-                                prev.includes(tag)
-                                ? prev.filter((t) => t !== tag)
-                                : [...prev, tag]
-                            )
-                            }
+                            onChange={() => {
+                                setTags((prev) =>
+                                    prev.includes(tag)
+                                    ? prev.filter((t) => t !== tag)
+                                    : [...prev, tag]
+                                )
+                                setHasUnsavedChanges(true);
+                            }}
                         />
                         <span className="text-xs text-gray-700">{tag}</span>
                         </div>
@@ -474,7 +538,10 @@ export default function VaultEditDoc() {
                     <label className="text-sm font-medium text-gray-800 mb-1 block">Edit public note:</label>
                     <textarea
                         value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
+                        onChange={(e) => {
+                            setNotes(e.target.value);
+                            setHasUnsavedChanges(true);
+                        }}
                         placeholder="Public notes (Visible to shared contacts)"
                         rows={2}
                         className="w-full border bg-gray-50 border-gray-300 p-2 rounded font-medium text-gray-800 placeholder-gray-400 text-sm"
@@ -491,7 +558,10 @@ export default function VaultEditDoc() {
                     {/* Private Notes */}
                     <textarea
                         value={privateNote}
-                        onChange={(e) => setPrivateNote(e.target.value)}
+                        onChange={(e) => {
+                            setPrivateNote(e.target.value);
+                            setHasUnsavedChanges(true);
+                        }}
                         placeholder="Private notes (For your eyes only)"
                         rows={2}
                         className="bg-gray-50 w-full border border-gray-300 p-2 rounded text-gray-800 font-medium placeholder-gray-400 text-sm"
@@ -506,7 +576,9 @@ export default function VaultEditDoc() {
                     <input
                         type="password"
                         value={vaultCode}
-                        onChange={(e) => setVaultCode(e.target.value)}
+                        onChange={(e) => {
+                            setVaultCode(e.target.value);
+                        }}
                         className="w-full p-2 border font-medium rounded mb-3 text-gray-600 text-sm bg-gray-50"
                         placeholder="Vault code"
                     />

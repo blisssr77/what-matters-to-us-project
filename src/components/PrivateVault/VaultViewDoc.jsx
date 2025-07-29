@@ -157,10 +157,7 @@ export default function VaultViewDoc() {
 
     // Delete from storage if files exist
     if (doc.file_metas && doc.file_metas.length > 0) {
-      const paths = doc.file_metas.map((meta) => {
-        const urlParts = meta.url.split("/");
-        return decodeURIComponent(urlParts.slice(4).join("/"));
-      });
+      const paths = doc.file_metas.map((meta) => meta.path);
 
       const { error: storageError } = await supabase.storage
         .from("vaulted")
@@ -268,6 +265,8 @@ export default function VaultViewDoc() {
         <div className="fixed top-6 right-6 bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
           <p className="mt-10 text-gray-900">
             Are you sure you want to delete <strong>{doc?.title || "this document"}</strong>?
+            <br />
+              This action cannot be undone.
           </p>
           <div className="flex gap-3 justify-end mt-4">
             <button
