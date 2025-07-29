@@ -51,7 +51,7 @@ export default function VaultEditDoc() {
     useEffect(() => {
         const fetchDoc = async () => {
             const { data, error } = await supabase
-            .from("vault_items")
+            .from("private_vault_items")
             .select("*")
             .eq("id", id)
             .single();
@@ -106,16 +106,31 @@ export default function VaultEditDoc() {
         });
     };
 
-    // Handle drag over
+    // Handle tags addition
     const handleTagAdd = async () => {
         if (!newTag.trim()) return;
-        if (!availableTags.includes(newTag)) {
-        await supabase.from("vault_tags").insert({ name: newTag });
-        setAvailableTags((prev) => [...prev, newTag]);
+
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user?.id) {
+            console.error("❌ Unable to get user.");
+            return;
         }
+
+        // Insert only if not already in DB
+        if (!availableTags.includes(newTag)) {
+            await supabase.from("vault_tags").insert({
+                name: newTag,
+                section: "My Private",
+                user_id: user.id,
+            });
+            setAvailableTags((prev) => [...prev, newTag]);
+        }
+
+        // Add to local tag list if not already added
         if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
         setNewTag("");
     };
+
 
     // Remove existing file from the list
     const handleRemoveExistingFile = (index) => {
@@ -229,7 +244,7 @@ export default function VaultEditDoc() {
             .upload(filePath, encryptedBlob, { contentType: file.type });
 
             if (!uploadError) {
-            const { data: urlData } = await supabase.storage.from("vaulted").getPublicUrl(filePath);
+                const { data: urlData } = await supabase.storage.from("vaulted").getPublicUrl(filePath);
             if (urlData?.publicUrl) {
                 updatedFileMetas.push({ name: file.name, url: urlData.publicUrl, iv: ivHex, type: file.type });
             }
@@ -240,20 +255,20 @@ export default function VaultEditDoc() {
         let encryptedNote = "";
         if (privateNote && privateNote !== "🔐 Encrypted") {
             try {
-            const result = await encryptText(privateNote, vaultCode);
-            encryptedNote = result.encryptedData;
-            noteIv = result.iv;
+                const result = await encryptText(privateNote, vaultCode);
+                encryptedNote = result.encryptedData;
+                noteIv = result.iv;
             } catch (err) {
-            console.error(err);
-            setUploading(false);
-            setErrorMsg("❌ Failed to encrypt private note.");
-            return;
+                console.error(err);
+                setUploading(false);
+                setErrorMsg("❌ Failed to encrypt private note.");
+                return;
             }
         }
 
         // ✅ Final DB update
         const { error: updateError } = await supabase
-            .from("vault_items")
+            .from("private_vault_items")
             .update({
             title,
             tags,

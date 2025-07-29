@@ -24,7 +24,7 @@ export default function VaultViewNote() {
     useEffect(() => {
         const fetchNote = async () => {
             const { data, error } = await supabase
-                .from("vault_items")
+                .from("private_vault_items")
                 .select("*")
                 .eq("id", id)
                 .single();
@@ -106,7 +106,7 @@ export default function VaultViewNote() {
     // Handle delete confirmation
     const handleDelete = async () => {
         setShowDeleteConfirm(false);
-        await supabase.from("vault_items").delete().eq("id", id);
+        await supabase.from("private_vault_items").delete().eq("id", id);
         navigate("/private/vaults");
     };
 
@@ -202,7 +202,7 @@ export default function VaultViewNote() {
                         </div>
 
                         <div className="text-gray-900 mb-1 text-sm">Private note:</div>
-                        <div className="whitespace-pre-wrap border border-gray-100 p-4 rounded bg-gray-50 text-sm text-gray-900 leading-relaxed mb-4">
+                        <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
                             {decryptedNote ? decryptedNote : "⚠️ Decryption returned nothing."}
                         </div>
 

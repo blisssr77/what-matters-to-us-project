@@ -22,11 +22,11 @@ export default function VaultEditNote() {
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
 
-
     // Tag-related
     const [availableTags, setAvailableTags] = useState([]);
     const [selectedTags, setSelectedTags] = useState([]);
     const [newTag, setNewTag] = useState("");
+    const [tags, setTags] = useState([]);
 
     const tagBoxRef = useRef(null);
 
@@ -42,7 +42,7 @@ export default function VaultEditNote() {
     useEffect(() => {
         const fetchNote = async () => {
             const { data: note, error } = await supabase
-                .from("vault_items")
+                .from("private_vault_items")
                 .select("*")
                 .eq("id", id)
                 .single();
@@ -53,7 +53,7 @@ export default function VaultEditNote() {
                 setErrorMsg("Failed to load note.");
             } else {
                 setNoteData(note);
-                setSelectedTags(note.tags || []);
+                setTags(note.tags || []);
                 setEditedTitle(note.title || "");
             }
         };
@@ -163,7 +163,7 @@ export default function VaultEditNote() {
                 .filter((tag) => tag.length > 0);
 
             const { error: updateError } = await supabase
-                .from("vault_items")
+                .from("private_vault_items")
                 .update({
                     title: editedTitle,
                     tags: updatedTags,
@@ -196,15 +196,24 @@ export default function VaultEditNote() {
     const handleTagAdd = async () => {
         if (!newTag.trim()) return;
 
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user?.id) {
+            console.error("❌ Unable to get user.");
+            return;
+        }
+
+        // Insert only if not already in DB
         if (!availableTags.includes(newTag)) {
-            await supabase.from("vault_tags").insert({ name: newTag });
+            await supabase.from("vault_tags").insert({
+                name: newTag,
+                section: "My Private",
+                user_id: user.id,
+            });
             setAvailableTags((prev) => [...prev, newTag]);
         }
 
-        if (!selectedTags.includes(newTag)) {
-            setSelectedTags((prev) => [...prev, newTag]);
-        }
-
+        // Add to local tag list if not already added
+        if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
         setNewTag("");
     };
 
@@ -279,10 +288,10 @@ export default function VaultEditNote() {
                     placeholder="Edit your note..."
                 />
 
+                {/* Tag Input Section */}
                 <div className="mb-4">
-                    <label className="text-sm font-medium text-gray-800 mb-1 block">Tags:</label>
-
-                    <div className="relative flex items-center gap-2 mb-2">
+                    <label className="text-sm font-medium text-gray-800 mb-1 block">Edit tags:</label>
+                    <div className="relative flex items-center gap-2 mb-1 text-sm">
                         <Search className="absolute left-3 text-gray-400" size={16} />
                         <input
                             type="text"
@@ -291,45 +300,61 @@ export default function VaultEditNote() {
                                 setNewTag(e.target.value);
                                 setHasUnsavedChanges(true);
                             }}
-                            placeholder="Search or create new tag"
-                            className="w-full pl-8 border border-gray-300 p-2 text-gray-700 rounded text-sm"
+                            placeholder="Search existing tags or create new"
+                            className="w-full pl-8 border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
                         />
                         <button
                             type="button"
                             onClick={handleTagAdd}
-                            className="btn-secondary text-sm"
+                            className="btn-secondary"
                         >
                             Create
                         </button>
                     </div>
 
                     {/* Display available tags */}
-                    <div className="max-h-40 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50 mb-1">
+                    <div className="max-h-40 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50">
                         {availableTags
-                            .filter(tag => tag.toLowerCase().includes(newTag.toLowerCase()) && !selectedTags.includes(tag))
-                            .map(tag => (
-                                <div key={tag} className="flex items-center gap-2 py-1">
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedTags.includes(tag)}
-                                        onChange={() => {
-                                            setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
-                                            setHasUnsavedChanges(true);
-                                        }}
-                                    />
-                                    <span className="text-xs text-gray-700">{tag}</span>
-                                </div>
-                            ))}
+                    .filter(
+                        (tag) =>
+                            (!newTag || tag.toLowerCase().includes(newTag.toLowerCase())) &&
+                            !tags.includes(tag)
+                        )
+                        .map((tag) => (
+                            <div key={tag} className="flex items-center gap-2 py-1">
+                            <input
+                                type="checkbox"
+                                checked={tags.includes(tag)}
+                                onChange={() => {
+                                    setTags((prev) =>
+                                        prev.includes(tag)
+                                        ? prev.filter((t) => t !== tag)
+                                        : [...prev, tag]
+                                    )
+                                    setHasUnsavedChanges(true);
+                                }}
+                            />
+                            <span className="text-xs text-gray-700">{tag}</span>
+                            </div>
+                        ))}
                     </div>
 
-                    {selectedTags.length > 0 && (
+                    {/* Display selected tags */}
+                    {tags.length > 0 && (
                         <div className="flex flex-wrap gap-2 mt-3">
-                            {selectedTags.map(tag => (
-                                <span key={tag} className="bg-yellow-50 text-gray-800 text-xs px-3 py-1 rounded-full flex items-center gap-1">
-                                    {tag}
-                                    <X size={12} className="cursor-pointer" onClick={() => setSelectedTags(prev => prev.filter(t => t !== tag))} />
-                                </span>
-                            ))}
+                        {tags.map((tag) => (
+                            <span
+                            key={tag}
+                            className="bg-yellow-50 text-gray-800 text-xs px-3 py-1 rounded-full font-medium flex items-center gap-1"
+                            >
+                            {tag}
+                            <X
+                                size={12}
+                                className="cursor-pointer"
+                                onClick={() => setTags(tags.filter((t) => t !== tag))}
+                            />
+                            </span>
+                        ))}
                         </div>
                     )}
                 </div>

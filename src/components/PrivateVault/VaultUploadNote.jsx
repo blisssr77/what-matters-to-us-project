@@ -35,10 +35,24 @@ const VaultedNoteUpload = () => {
     // Handle adding a new tag
     const handleTagAdd = async () => {
         if (!newTag.trim()) return;
-        if (!availableTags.includes(newTag)) {
-        await supabase.from("vault_tags").insert({ name: newTag });
-        setAvailableTags((prev) => [...prev, newTag]);
+
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user?.id) {
+            console.error("❌ Unable to get user.");
+            return;
         }
+
+        // Insert only if not already in DB
+        if (!availableTags.includes(newTag)) {
+            await supabase.from("vault_tags").insert({
+                name: newTag,
+                section: "My Private",
+                user_id: user.id,
+            });
+            setAvailableTags((prev) => [...prev, newTag]);
+        }
+
+        // Add to local tag list if not already added
         if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
         setNewTag("");
     };
@@ -84,7 +98,7 @@ const VaultedNoteUpload = () => {
         try {
             const { encryptedData, iv } = await encryptText(privateNote, vaultCode);
 
-            const { error } = await supabase.from("vault_items").insert({
+            const { error } = await supabase.from("private_vault_items").insert({
                 user_id: user.id,
                 file_name: title || "Untitled Note",
                 title,

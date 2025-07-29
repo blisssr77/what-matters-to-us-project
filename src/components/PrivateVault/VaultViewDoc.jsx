@@ -42,7 +42,7 @@ export default function VaultViewDoc() {
   // Fetch document data on mount
   useEffect(() => {
     const fetchDoc = async () => {
-    const { data, error } = await supabase.from("vault_items").select("*").eq("id", id).single();
+    const { data, error } = await supabase.from("private_vault_items").select("*").eq("id", id).single();
     if (error) {
         setErrorMsg("Failed to load document.");
         console.error("❌ Failed to fetch doc:", error);
@@ -170,7 +170,7 @@ export default function VaultViewDoc() {
 
     // Delete from DB
     const { error: dbError } = await supabase
-      .from("vault_items")
+      .from("private_vault_items")
       .delete()
       .eq("id", doc.id);
 
@@ -300,6 +300,8 @@ export default function VaultViewDoc() {
         <h2 className="text-xl font-bold text-gray-800 mb-5">📂 View Document</h2>
         {doc?.title && <h3 className="text-lg text-gray-800 font-semibold mb-2">{doc.title}</h3>}
         {doc?.notes && <p className="text-sm text-gray-700 mb-3">{doc.notes}</p>}
+
+        {/* Display decrypted note if available */}
         {entered && decryptedNote && (
           <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
             {decryptedNote}
@@ -385,6 +387,10 @@ export default function VaultViewDoc() {
                 ⬇️ Download File
               </button>
             )}
+
+            <div className="mt-4 text-xs text-gray-400">
+              Last viewed just now · Private log only. Team audit history coming soon.
+            </div>
           </>
         )}
       </div>

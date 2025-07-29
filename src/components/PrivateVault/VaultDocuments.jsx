@@ -34,7 +34,7 @@ export default function VaultedDocuments() {
   useEffect(() => {
     const fetchDocs = async () => {
       const { data, error } = await supabase
-        .from("vault_items")
+        .from("private_vault_items")
         .select("*")
         .order("created_at", { ascending: false });
 

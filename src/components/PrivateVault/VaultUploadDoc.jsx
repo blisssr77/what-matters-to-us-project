@@ -60,10 +60,24 @@ export default function VaultedFileUpload() {
     // Handle tags selection
     const handleTagAdd = async () => {
         if (!newTag.trim()) return;
+
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user?.id) {
+            console.error("❌ Unable to get user.");
+            return;
+        }
+
+        // Insert only if not already in DB
         if (!availableTags.includes(newTag)) {
-            await supabase.from("vault_tags").insert({ name: newTag });
+            await supabase.from("vault_tags").insert({
+                name: newTag,
+                section: "My Private",
+                user_id: user.id,
+            });
             setAvailableTags((prev) => [...prev, newTag]);
         }
+
+        // Add to local tag list if not already added
         if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
         setNewTag("");
     };
@@ -178,7 +192,7 @@ export default function VaultedFileUpload() {
             }
         }
         // Prepare document metadata
-        const { error: insertError } = await supabase.from("vault_items").insert({
+        const { error: insertError } = await supabase.from("private_vault_items").insert({
             user_id: userId,
             file_name: files.map((f) => f.name).join(", "),
             file_metas: fileMetas,
