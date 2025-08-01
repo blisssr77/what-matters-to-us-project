@@ -165,7 +165,7 @@ export default function WorkspaceUploadDoc() {
         if (vaultError || !vaultCodeRow?.private_code) {
             setUploading(false);
             setErrorMsg(
-                'Please set your Vault Code in <a href="/account/manage" class="text-purple-600 underline">Account Settings</a> before uploading.'
+                'Please set your Vault Code in <a href="/account/manage" class="text-blue-600 underline">Account Settings</a> before uploading.'
             );
             return;
         }
@@ -518,7 +518,10 @@ export default function WorkspaceUploadDoc() {
                         <p className="text-sm text-green-600 text-center">{successMsg}</p>
                     )}
                     {errorMsg && (
-                        <p className="text-sm text-red-600 text-center">{errorMsg}</p>
+                        <div
+                            className="text-sm text-red-500 mt-2 text-center"
+                            dangerouslySetInnerHTML={{ __html: errorMsg }}
+                        />
                     )}
                 </form>
             </div>

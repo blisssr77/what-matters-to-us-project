@@ -106,13 +106,13 @@ export default function VaultedFileUpload() {
         const userId = userData?.user?.id;
         if (!userId) {
             setUploading(false);
-            setErrorMsg("❌ User not authenticated.");
+            setErrorMsg("User not authenticated.");
             return;
         }
         // Check if user has a vault code set
         if (!vaultCode) {
             setUploading(false);
-            setErrorMsg("❌ Please enter your Vault Code to encrypt.");
+            setErrorMsg("Please enter your Vault Code to encrypt.");
             return;
         }
 
@@ -125,7 +125,9 @@ export default function VaultedFileUpload() {
         // If no vault code is set or there's an error fetching it
         if (vaultError || !vaultCodeRow?.private_code) {
             setUploading(false);
-            setErrorMsg("❌ Vault code not found or not set.");
+            setErrorMsg(
+                'Please set your Vault Code in <a href="/account/manage" class="text-blue-600 underline">Account Settings</a> before uploading.'
+            );
             return;
         }
         // Compare provided vault code with stored hash
@@ -450,7 +452,10 @@ export default function VaultedFileUpload() {
                         <p className="text-sm text-green-600 text-center">{successMsg}</p>
                     )}
                     {errorMsg && (
-                        <p className="text-sm text-red-600 text-center">{errorMsg}</p>
+                        <div
+                            className="text-sm text-red-500 mt-2 text-center"
+                            dangerouslySetInnerHTML={{ __html: errorMsg }}
+                        />
                     )}
                 </form>
             </div>
