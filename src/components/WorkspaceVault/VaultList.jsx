@@ -179,8 +179,8 @@ export default function WorkspaceVaultList() {
                 onClick={() =>
                   navigate(
                     hasFiles
-                      ? `/private/vaults/doc-view/${doc.id}` // 🔐 Encrypted document
-                      : `/private/vaults/note-view/${doc.id}`
+                      ? `/workspace/vaults/doc-view/${doc.id}` // 🔐 Encrypted document
+                      : `/workspace/vaults/note-view/${doc.id}`
                   )
                 }
                 className="cursor-pointer bg-white border border-gray-200 rounded-xl shadow-md p-4 hover:shadow-lg transition"

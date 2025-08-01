@@ -7,7 +7,7 @@ import Layout from "../Layout/Layout";
 import { X, Copy, Edit2, Trash2 } from "lucide-react";
 import { saveAs } from "file-saver";
 import bcrypt from "bcryptjs";
-
+import { useWorkspaceStore } from "../../store/useWorkspaceStore";
 
 const mimeToExtension = {
   "application/pdf": ".pdf",
@@ -26,6 +26,8 @@ const mimeToExtension = {
 export default function WorkspaceViewDoc() {
   const navigate = useNavigate();
   const { id } = useParams();
+  // Get active workspace ID from store
+  const { activeWorkspaceId } = useWorkspaceStore();
 
   const [vaultCode, setVaultCode] = useState("");
   const [entered, setEntered] = useState(false);
@@ -42,16 +44,24 @@ export default function WorkspaceViewDoc() {
   // Fetch document data on mount
   useEffect(() => {
     const fetchDoc = async () => {
-    const { data, error } = await supabase.from("workspace_vault_items").select("*").eq("workspace_id", activeWorkspaceId).single();
-    if (error) {
+      if (!id || !activeWorkspaceId) return;
+
+      const { data, error } = await supabase
+        .from("workspace_vault_items")
+        .select("*")
+        .eq("id", id)
+        .eq("workspace_id", activeWorkspaceId) 
+        .single();
+
+      if (error) {
         setErrorMsg("Failed to load document.");
-        console.error("❌ Failed to fetch doc:", error);
-    } else {
+        console.error("Failed to fetch doc:", error);
+      } else {
         setDoc(data);
-    }
+      }
     };
     fetchDoc();
-  }, [id]);
+  }, [id, activeWorkspaceId]);
 
   // Handle vault code entry and decryption
   const handleDecrypt = async () => {
@@ -60,7 +70,7 @@ export default function WorkspaceViewDoc() {
     setLoading(true);
     setErrorMsg("");
 
-    console.log("✅ Vault code verification initiated");
+    console.log("Vault code verification initiated");
 
     // 1. Validate content
     if (!doc.note_iv || !doc.encrypted_note) {
@@ -99,9 +109,9 @@ export default function WorkspaceViewDoc() {
     try {
       const note = await decryptText(doc.encrypted_note, doc.note_iv, vaultCode);
       setDecryptedNote(note);
-      console.log("✅ Decrypted note:", note);
+      console.log("Decrypted note:", note);
     } catch (err) {
-      console.error("❌ Note decryption failed:", err);
+      console.error("Note decryption failed:", err);
       setErrorMsg("Incorrect Vault Code or decryption failed.");
     }
 
@@ -130,14 +140,14 @@ export default function WorkspaceViewDoc() {
 
           files.push({ url: blobUrl, type: blob.type, name });
         } catch (err) {
-          console.error(`❌ Failed to decrypt file "${name}":`, err);
+          console.error(`Failed to decrypt file "${name}":`, err);
         }
       }
 
       setDecryptedFiles(files);
     }
 
-    setEntered(true); // ✅ Mark entry complete
+    setEntered(true); // Mark entry complete
     setLoading(false);
   };
 
@@ -164,7 +174,7 @@ export default function WorkspaceViewDoc() {
         .remove(paths);
 
       if (storageError) {
-        console.error("❌ Error deleting from storage:", storageError);
+        console.error("Error deleting from storage:", storageError);
       }
     }
 
@@ -175,9 +185,9 @@ export default function WorkspaceViewDoc() {
       .eq("id", doc.id);
 
     if (dbError) {
-      console.error("❌ Error deleting from DB:", dbError);
+      console.error("Error deleting from DB:", dbError);
     } else {
-      navigate("/private/vaults");
+      navigate("/workspace/vaults");
     }
   };
 
@@ -290,7 +300,7 @@ export default function WorkspaceViewDoc() {
 
       <div className="relative max-w-4xl mx-auto p-6 mt-10 bg-white rounded shadow border border-gray-200">
         <button
-          onClick={() => navigate("/private/vaults")}
+          onClick={() => navigate("/workspace/vaults")}
           className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl"
           aria-label="Close"
         >
@@ -364,7 +374,7 @@ export default function WorkspaceViewDoc() {
             <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
                 <Copy size={16} /> Copy
             </button>
-            <button onClick={() => navigate(`/private/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
+            <button onClick={() => navigate(`/workspace/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
                 <Edit2 size={16} /> Edit
             </button>
             <button onClick={() => setShowConfirmPopup(true)} className="flex items-center gap-1 text-red-600 hover:underline">

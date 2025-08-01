@@ -44,9 +44,9 @@ export default function WorkspaceViewNote() {
         setErrorMsg("");
 
         // If we reach here, the vault code is correct
-        console.log("✅ Vault code verified successfully");
+        console.log("Vault code verified successfully");
         if (!noteData.note_iv || !noteData.encrypted_note) {
-            setErrorMsg("❌ Nothing to decrypt for this document.");
+            setErrorMsg("Nothing to decrypt for this document.");
             setLoading(false);
             return;
         }
@@ -63,7 +63,7 @@ export default function WorkspaceViewNote() {
             .single();
 
         if (codeError || !vaultCodeRow?.private_code) {
-            setErrorMsg("❌ Vault code not set. Please try again later.");
+            setErrorMsg("Vault code not set. Please try again later.");
             setLoading(false);
             return;
         }
@@ -80,18 +80,18 @@ export default function WorkspaceViewNote() {
 
         // 3. Decrypt the note
         try {
-            const ivToUse = noteData.note_iv || noteData.iv; // ✅ fallback if note_iv is missing
+            const ivToUse = noteData.note_iv || noteData.iv; // fallback if note_iv is missing
 
             const decrypted = await decryptText(
             noteData.encrypted_note,
             ivToUse,
             vaultCode
             );
-            console.log("✅ Decrypted note:", decrypted);
+            console.log("Decrypted note:", decrypted);
             setDecryptedNote(decrypted);
             setCodeEntered(true);
         } catch (err) {
-            console.error("❌ Decryption failed:", err);
+            console.error("Decryption failed:", err);
             setErrorMsg("Failed to decrypt note.");
         }
 
@@ -162,7 +162,7 @@ export default function WorkspaceViewNote() {
                             onChange={(e) => {
                                 const newCode = e.target.value;
                                 setVaultCode(newCode);
-                                sessionStorage.setItem("vaultCode", newCode); // ✅ persist vault code immediately
+                                sessionStorage.setItem("vaultCode", newCode); // persist vault code immediately
                             }}
                             className="w-full p-2 border rounded mb-3 text-gray-600 text-sm"
                             placeholder="Vault Code"

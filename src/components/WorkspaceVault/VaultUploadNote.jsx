@@ -38,7 +38,7 @@ const WorkspaceUploadNote = () => {
 
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError || !user?.id) {
-            console.error("❌ Unable to get user.");
+            console.error("Unable to get user.");
             return;
         }
 
@@ -69,7 +69,7 @@ const WorkspaceUploadNote = () => {
         } = await supabase.auth.getUser();
 
         if (!user || !vaultCode.trim()) {
-            setErrorMsg("❌ Missing user or vault code.");
+            setErrorMsg("Missing user or vault code.");
             setLoading(false);
             return;
         }
@@ -82,7 +82,7 @@ const WorkspaceUploadNote = () => {
             .single();
 
         if (codeError || !vaultCodeRow?.private_code) {
-            setErrorMsg("❌ Vault code not found.");
+            setErrorMsg("Vault code not found.");
             setLoading(false);
             return;
         }
@@ -90,7 +90,7 @@ const WorkspaceUploadNote = () => {
         // Step 2: Validate input vaultCode against hash
         const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
         if (!isMatch) {
-            setErrorMsg("❌ Incorrect Vault Code.");
+            setErrorMsg("Incorrect Vault Code.");
             setLoading(false);
             return;
         }
@@ -112,14 +112,14 @@ const WorkspaceUploadNote = () => {
 
             if (error) {
                 console.error(error);
-                setErrorMsg("❌ Failed to create note.");
+                setErrorMsg("Failed to create note.");
             } else {
-                setSuccessMsg("✅ Note created successfully!");
+                setSuccessMsg("Note created successfully!");
                 setTimeout(() => navigate("/private/vaults"), 1300);
             }
         } catch (err) {
-            console.error("❌ Encryption failed:", err);
-            setErrorMsg("❌ Encryption error.");
+            console.error("Encryption failed:", err);
+            setErrorMsg("Encryption error.");
         } finally {
             setLoading(false);
             setHasUnsavedChanges(false);

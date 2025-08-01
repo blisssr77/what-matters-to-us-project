@@ -48,7 +48,7 @@ export default function WorkspaceUploadDoc() {
             const authUserId = userData?.user?.id;
 
             if (!authUserId) {
-                console.error("❌ No authenticated user found");
+                console.error("No authenticated user found");
                 return;
             }
 
@@ -60,7 +60,7 @@ export default function WorkspaceUploadDoc() {
 
             if (data?.workspace_id) {
                 useWorkspaceStore.getState().setActiveWorkspaceId(data.workspace_id);
-                console.log("✅ Active Workspace ID:", data.workspace_id);
+                console.log("Active Workspace ID:", data.workspace_id);
             } else {
                 console.warn("⚠️ No workspace found for user.");
             }
@@ -93,12 +93,12 @@ export default function WorkspaceUploadDoc() {
 
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError || !user?.id) {
-            console.error("❌ Unable to get user.");
+            console.error("Unable to get user.");
             return;
         }
         
         if (!activeWorkspaceId) {
-            setErrorMsg("❌ No active workspace selected.");
+            setErrorMsg("No active workspace selected.");
             return;
         }
 
@@ -125,22 +125,22 @@ export default function WorkspaceUploadDoc() {
         setErrorMsg("");
         setSuccessMsg("");
 
-        // ✅ Validate files
+        // Validate files
         if (!files.length) {
             setUploading(false);
             setErrorMsg("⚠️ Please attach file(s) before uploading.");
             return;
         }
 
-        // ✅ Validate file types
+        // Validate file types
         const invalidFiles = files.filter((f) => !allowedMimes.includes(f.type));
         if (invalidFiles.length > 0) {
             setUploading(false);
-            setErrorMsg("❌ One or more files have unsupported types.");
+            setErrorMsg("One or more files have unsupported types.");
             return;
         }
 
-        // ✅ Authenticate user
+        // Authenticate user
         const { data: userData } = await supabase.auth.getUser();
         const userId = userData?.user?.id;
         if (!userId) {
@@ -149,13 +149,14 @@ export default function WorkspaceUploadDoc() {
             return;
         }
 
-        // ✅ Check Vault Code
+        // Check Vault Code
         if (!vaultCode) {
             setUploading(false);
             setErrorMsg("Please enter your Vault Code.");
             return;
         }
 
+        // Fetch user's vault code from DB
         const { data: vaultCodeRow, error: vaultError } = await supabase
             .from("vault_codes")
             .select("private_code")
@@ -177,7 +178,7 @@ export default function WorkspaceUploadDoc() {
             return;
         }
 
-        // ✅ Upload files
+        // Upload files
         if (!activeWorkspaceId) {
             setUploading(false);
             console.error("Missing activeWorkspaceId");
@@ -233,7 +234,7 @@ export default function WorkspaceUploadDoc() {
             }
         }
 
-        // ✅ Post-upload status
+        // Post-upload status
         if (!fileMetas.length) {
             setUploading(false);
             setErrorMsg("All uploads failed. Please try again.");
@@ -242,7 +243,7 @@ export default function WorkspaceUploadDoc() {
             setErrorMsg(`⚠️ Only ${uploadedCount} of ${files.length} files uploaded.`);
         }
 
-        // ✅ Encrypt private note if needed
+        // Encrypt private note if needed
         let encryptedNote = "";
         if (privateNote) {
             try {
@@ -250,14 +251,32 @@ export default function WorkspaceUploadDoc() {
                 encryptedNote = result.encryptedData;
                 noteIv = result.iv;
             } catch (err) {
-                console.error("❌ Note encryption failed:", err);
+                console.error("Note encryption failed:", err);
                 setUploading(false);
                 setErrorMsg("Failed to encrypt private note.");
                 return;
             }
         }
 
-        // ✅ Insert metadata into DB
+        // Ensure all selected tags exist in vault_tags
+        for (const tag of tags) {
+            if (!availableTags.includes(tag)) {
+                const { error: tagInsertError } = await supabase.from("vault_tags").insert({
+                    name: tag,
+                    section: "Workspace",
+                    user_id: userId,
+                    workspace_id: activeWorkspaceId,
+                });
+
+                if (!tagInsertError) {
+                    setAvailableTags((prev) => [...prev, tag]); // optional, updates state
+                } else {
+                    console.error("❌ Failed to insert tag:", tag, tagInsertError.message);
+                }
+            }
+        }
+
+        // Insert metadata into DB
         const { error: insertError } = await supabase.from("workspace_vault_items").insert({
             user_id: userId,
             file_name: files.map((f) => f.name).join(", "),
@@ -276,7 +295,7 @@ export default function WorkspaceUploadDoc() {
             console.error("Insert error:", insertError);
             setErrorMsg("Failed to save file metadata.");
         } else {
-            setSuccessMsg("✅ Files uploaded successfully!");
+            setSuccessMsg("Files uploaded successfully!");
             setTimeout(() => navigate("/workspace/vaults"), 1300);
         }
 

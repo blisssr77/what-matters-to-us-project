@@ -90,7 +90,7 @@ export default function WorkspaceEditNote() {
             .single();
 
         if (codeError || !vaultCodeRow?.private_code) {
-            setErrorMsg("❌ Vault code not set.");
+            setErrorMsg("Vault code not set.");
             setLoading(false);
             return;
         }
@@ -106,11 +106,11 @@ export default function WorkspaceEditNote() {
             const ivToUse = noteData.note_iv || noteData.iv;
             const decrypted = await decryptText(noteData.encrypted_note, ivToUse, code);
 
-            console.log("✅ Decrypted note:", decrypted);
+            console.log("Decrypted note:", decrypted);
             setEditedNote(decrypted);
             setEditedTitle(noteData.title || "");
         } catch (err) {
-            console.error("❌ Decryption error:", err);
+            console.error("Decryption error:", err);
             setErrorMsg("Failed to decrypt note.");
         }
 
@@ -148,7 +148,7 @@ export default function WorkspaceEditNote() {
         // Step 2: Compare input vaultCode with hashed version
         const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
         if (!isMatch) {
-            setErrorMsg("❌ Incorrect Vault Code.");
+            setErrorMsg("Incorrect Vault Code.");
             setSaving(false);
             return;
         }
@@ -173,16 +173,16 @@ export default function WorkspaceEditNote() {
                 .eq("id", id);
 
             if (updateError) {
-                console.error("❌ Update error:", updateError);
+                console.error("Update error:", updateError);
                 setErrorMsg("Failed to update note.");
             } else {
-                setSuccessMsg("✅ Note updated successfully!");
+                setSuccessMsg("Note updated successfully!");
                 setTimeout(() => {
                     navigate(`/private/vaults/`);
                 }, 1300);
             }
         } catch (err) {
-            console.error("❌ Encryption error:", err);
+            console.error("Encryption error:", err);
             setErrorMsg("Encryption failed.");
             
         } finally {
@@ -197,7 +197,7 @@ export default function WorkspaceEditNote() {
 
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError || !user?.id) {
-            console.error("❌ Unable to get user.");
+            console.error("Unable to get user.");
             return;
         }
 

@@ -98,7 +98,7 @@ export default function VaultedFileUpload() {
         const invalidFiles = files.filter((f) => !allowedMimes.includes(f.type));
         if (invalidFiles.length > 0) {
             setUploading(false);
-            setErrorMsg("❌ One or more files have unsupported types.");
+            setErrorMsg("One or more files have unsupported types.");
             return;
         }
         // ✅ Validate file size
@@ -134,7 +134,7 @@ export default function VaultedFileUpload() {
         const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
         if (!isMatch) {
             setUploading(false);
-            setErrorMsg("❌ Incorrect Vault Code.");
+            setErrorMsg("Incorrect Vault Code.");
             return;
         }
 
@@ -173,7 +173,7 @@ export default function VaultedFileUpload() {
 
         if (!fileMetas.length) {
             setUploading(false);
-            setErrorMsg("❌ Upload failed for all files.");
+            setErrorMsg("Upload failed for all files.");
             return;
         } else if (uploadedCount < files.length) {
             setErrorMsg(`⚠️ Only ${uploadedCount} of ${files.length} files uploaded successfully.`);
@@ -189,7 +189,7 @@ export default function VaultedFileUpload() {
             } catch (err) {
                 console.error("❌ Note encryption error:", err);
                 setUploading(false);
-                setErrorMsg("❌ Failed to encrypt private note.");
+                setErrorMsg("Failed to encrypt private note.");
                 return;
             }
         }
@@ -208,7 +208,7 @@ export default function VaultedFileUpload() {
 
         if (insertError) {
             console.error(insertError);
-            setErrorMsg("❌ Failed to save document.");
+            setErrorMsg("Failed to save document.");
         } else {
             setSuccessMsg("✅ Files uploaded successfully!");
             setTimeout(() => navigate("/private/vaults"), 1300);
