@@ -5,9 +5,6 @@ import { UploadCloud, Camera } from "lucide-react";
 import bcrypt from "bcryptjs";
 import { ShieldCheck } from "lucide-react";
 
-/* =========================================================
-   ManageAccount.jsx – modern AI‑styled settings page
-   ========================================================= */
 export default function ManageAccount() {
     /* ────────────────── Profile / Basic Info state ────────────────── */
     const [avatar, setAvatar] = useState(null);

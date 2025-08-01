@@ -6,7 +6,7 @@ import Layout from "../Layout/Layout";
 import { X, Search } from "lucide-react";
 import bcrypt from "bcryptjs";
 
-export default function VaultEditNote() {
+export default function WorkspaceEditNote() {
     const { id } = useParams();
     const navigate = useNavigate();
 
@@ -41,7 +41,7 @@ export default function VaultEditNote() {
     useEffect(() => {
         const fetchNote = async () => {
             const { data: note, error } = await supabase
-                .from("private_vault_items")
+                .from("workspace_vault_items")
                 .select("*")
                 .eq("id", id)
                 .single();
@@ -58,7 +58,7 @@ export default function VaultEditNote() {
         };
 
         const fetchTags = async () => {
-            const { data, error } = await supabase.from("vault_tags").select("*");
+            const { data, error } = await supabase.from("vault_tags").select("*").eq("workspace_id", activeWorkspaceId);
             if (!error) setAvailableTags(data.map((tag) => tag.name));
         };
 
@@ -162,7 +162,7 @@ export default function VaultEditNote() {
                 .filter((tag) => tag.length > 0);
 
             const { error: updateError } = await supabase
-                .from("private_vault_items")
+                .from("workspace_vault_items")
                 .update({
                     title: editedTitle,
                     tags: updatedTags,
@@ -205,8 +205,9 @@ export default function VaultEditNote() {
         if (!availableTags.includes(newTag)) {
             await supabase.from("vault_tags").insert({
                 name: newTag,
-                section: "My Private",
+                section: "Workspace",
                 user_id: user.id,
+                workspace_id: activeWorkspaceId,
             });
             setAvailableTags((prev) => [...prev, newTag]);
         }

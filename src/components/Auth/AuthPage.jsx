@@ -2,6 +2,7 @@ import { useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { generateSeedPhrase } from "../../utils/generateSeedPhrase";
 import { useNavigate } from "react-router-dom";
+import { useWorkspaceStore } from "../../store/useWorkspaceStore";
 
 export default function AuthPage() {
   const [formData, setFormData] = useState({ email: "", password: "" });
@@ -11,6 +12,7 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [confirmationEmailSent, setConfirmationEmailSent] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showPassword2, setShowPassword2] = useState(false);
 
   const navigate = useNavigate();
 
@@ -18,6 +20,7 @@ export default function AuthPage() {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
+  // Handle form submission for login or signup
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
@@ -32,42 +35,60 @@ export default function AuthPage() {
     }
 
     try {
-      const { data, error } = isLogin
+      const authResult = isLogin
         ? await supabase.auth.signInWithPassword({ email, password })
         : await supabase.auth.signUp({ email, password });
 
-      if (error) throw error;
+      if (authResult.error) throw authResult.error;
 
-      if (isLogin) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
-        if (user) {
-          const { data: existing } = await supabase
-            .from("user_seeds")
-            .select("*")
-            .eq("id", user.id)
-            .single();
-
-          if (!existing) {
-            const seedWords = generateSeedPhrase();
-            await supabase.from("user_seeds").insert({
-              id: user.id,
-              seed_words: seedWords,
-            });
-
-            alert(`Your seed phrase: ${seedWords.join(" ")}`);
-          }
-
-          navigate("/dashboard");
-        } else {
-          setError("Login failed. Please check your credentials.");
-        }
-      } else {
+      if (!isLogin) {
+        // Signup success (no auto-login yet), show confirmation message
         setConfirmationEmailSent(true);
-        setIsLogin(true); // Switch to login screen
+        setIsLogin(true);
+        return;
       }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setError("Authentication failed.");
+        return;
+      }
+
+      const userId = user.id;
+
+      // Create Workspace
+      const { data: workspaceData, error: workspaceError } = await supabase
+        .from("workspaces")
+        .insert({
+          name: "My First Workspace",
+          created_by: userId
+        })
+        .select("id")
+        .single();
+
+      if (workspaceError || !workspaceData?.id) {
+        setError("Failed to create workspace.");
+        return;
+      }
+
+      // Add Membership Row
+      const { data: memberData, error: memberError } = await supabase.from("workspace_members").insert({
+        user_id: userId,
+        workspace_id: workspaceData.id,
+        role: "owner",
+        is_admin: true
+      }).select();
+
+      if (memberError) {
+        setError("Failed to create workspace membership.");
+        return;
+      }
+      console.log("Workspace member inserted successfully. Data:", memberData);
+
+      navigate("/dashboard");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -75,15 +96,14 @@ export default function AuthPage() {
     }
   };
 
-const handleGoogleLogin = async () => {
+  // Handle Google login
+  const handleGoogleLogin = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-            redirectTo: `${window.location.origin}/dashboard`,
-        },
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/dashboard` },
     });
     if (error) setError(error.message);
-};
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
@@ -129,15 +149,26 @@ const handleGoogleLogin = async () => {
           </div>
 
           {!isLogin && (
+            <div className="relative">
             <input
               name="confirmPassword"
-              type="password"
+              type={showPassword2 ? "text" : "password"}
               placeholder="Confirm Password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
               required
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword2((prev) => !prev)}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500"
+            >
+              {showPassword2 ? "🙈" : "👁️"}
+            </button>
+            </div>
+
+            
           )}
 
           {error && <div className="text-sm text-red-500 text-center">{error}</div>}
