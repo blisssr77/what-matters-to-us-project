@@ -1,12 +1,12 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "../../lib/supabaseClient";
-import { decryptText, encryptText } from "../../utils/encryption";
-import Layout from "../Layout/Layout";
+import { supabase } from "../../../lib/supabaseClient";
+import { decryptText, encryptText } from "../../../lib/encryption";
+import Layout from "../../Layout/Layout";
 import { X, Search } from "lucide-react";
 import bcrypt from "bcryptjs";
 
-export default function WorkspaceEditNote() {
+export default function VaultEditNote() {
     const { id } = useParams();
     const navigate = useNavigate();
 
@@ -41,7 +41,7 @@ export default function WorkspaceEditNote() {
     useEffect(() => {
         const fetchNote = async () => {
             const { data: note, error } = await supabase
-                .from("workspace_vault_items")
+                .from("private_vault_items")
                 .select("*")
                 .eq("id", id)
                 .single();
@@ -58,7 +58,7 @@ export default function WorkspaceEditNote() {
         };
 
         const fetchTags = async () => {
-            const { data, error } = await supabase.from("vault_tags").select("*").eq("workspace_id", activeWorkspaceId);
+            const { data, error } = await supabase.from("vault_tags").select("*");
             if (!error) setAvailableTags(data.map((tag) => tag.name));
         };
 
@@ -90,7 +90,7 @@ export default function WorkspaceEditNote() {
             .single();
 
         if (codeError || !vaultCodeRow?.private_code) {
-            setErrorMsg("Vault code not set.");
+            setErrorMsg("❌ Vault code not set.");
             setLoading(false);
             return;
         }
@@ -106,11 +106,11 @@ export default function WorkspaceEditNote() {
             const ivToUse = noteData.note_iv || noteData.iv;
             const decrypted = await decryptText(noteData.encrypted_note, ivToUse, code);
 
-            console.log("Decrypted note:", decrypted);
+            console.log("✅ Decrypted note:", decrypted);
             setEditedNote(decrypted);
             setEditedTitle(noteData.title || "");
         } catch (err) {
-            console.error("Decryption error:", err);
+            console.error("❌ Decryption error:", err);
             setErrorMsg("Failed to decrypt note.");
         }
 
@@ -148,7 +148,7 @@ export default function WorkspaceEditNote() {
         // Step 2: Compare input vaultCode with hashed version
         const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
         if (!isMatch) {
-            setErrorMsg("Incorrect Vault Code.");
+            setErrorMsg("❌ Incorrect Vault Code.");
             setSaving(false);
             return;
         }
@@ -162,7 +162,7 @@ export default function WorkspaceEditNote() {
                 .filter((tag) => tag.length > 0);
 
             const { error: updateError } = await supabase
-                .from("workspace_vault_items")
+                .from("private_vault_items")
                 .update({
                     title: editedTitle,
                     tags: updatedTags,
@@ -173,16 +173,16 @@ export default function WorkspaceEditNote() {
                 .eq("id", id);
 
             if (updateError) {
-                console.error("Update error:", updateError);
+                console.error("❌ Update error:", updateError);
                 setErrorMsg("Failed to update note.");
             } else {
-                setSuccessMsg("Note updated successfully!");
+                setSuccessMsg("✅ Note updated successfully!");
                 setTimeout(() => {
                     navigate(`/private/vaults/`);
                 }, 1300);
             }
         } catch (err) {
-            console.error("Encryption error:", err);
+            console.error("❌ Encryption error:", err);
             setErrorMsg("Encryption failed.");
             
         } finally {
@@ -197,7 +197,7 @@ export default function WorkspaceEditNote() {
 
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError || !user?.id) {
-            console.error("Unable to get user.");
+            console.error("❌ Unable to get user.");
             return;
         }
 
@@ -205,9 +205,8 @@ export default function WorkspaceEditNote() {
         if (!availableTags.includes(newTag)) {
             await supabase.from("vault_tags").insert({
                 name: newTag,
-                section: "Workspace",
+                section: "My Private",
                 user_id: user.id,
-                workspace_id: activeWorkspaceId,
             });
             setAvailableTags((prev) => [...prev, newTag]);
         }

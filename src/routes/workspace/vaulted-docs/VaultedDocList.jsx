@@ -2,11 +2,13 @@ import React from "react";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText, Search, ChevronDown, XCircle } from "lucide-react";
-import Layout from "../Layout/Layout";
+import Layout from "../../../components/Layout/Layout";
 import dayjs from "dayjs";
-import { supabase } from "../../lib/supabaseClient";
+import { supabase } from "../../../lib/supabaseClient";
+import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 
-export default function VaultedDocuments() {
+
+export default function WorkspaceVaultList() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTag, setSelectedTag] = useState("");
@@ -16,6 +18,9 @@ export default function VaultedDocuments() {
   const [tagSearchTerm, setTagSearchTerm] = useState("");
 
   const tagBoxRef = useRef();
+  const { activeWorkspaceId } = useWorkspaceStore();
+
+  
 
   // Close tag filter when clicking outside
   useEffect(() => {
@@ -32,11 +37,14 @@ export default function VaultedDocuments() {
 
   // Fetch all documents and notes on component mount
   useEffect(() => {
+    if (!activeWorkspaceId) return;
+
     const fetchDocs = async () => {
       const { data, error } = await supabase
-        .from("private_vault_items")
+        .from("workspace_vault_items")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .eq("workspace_id", activeWorkspaceId);
 
       if (!error) {
         setAllDocuments(data);
@@ -46,7 +54,7 @@ export default function VaultedDocuments() {
     };
 
     fetchDocs();
-  }, []);
+  }, [activeWorkspaceId]);
 
   // Filter documents based on search term and selected tag
   const filteredDocs = allDocuments.filter((doc) => {
@@ -64,14 +72,14 @@ export default function VaultedDocuments() {
         {/* Buttons Row */}
         <div className="flex justify-end gap-2 mb-4">
           <button
-            onClick={() => navigate("/private/vaults/file-upload")}
+            onClick={() => navigate("/workspace/vaults/file-upload")}
             className="btn-main"
           >
             + Upload Document
           </button>
           <br />
           <button
-            onClick={() => navigate("/private/vaults/note-upload")}
+            onClick={() => navigate("/workspace/vaults/note-upload")}
             className="btn-main"
           >
             + Create Note
@@ -173,8 +181,8 @@ export default function VaultedDocuments() {
                 onClick={() =>
                   navigate(
                     hasFiles
-                      ? `/private/vaults/doc-view/${doc.id}` // 🔐 Encrypted document
-                      : `/private/vaults/note-view/${doc.id}`
+                      ? `/workspace/vaults/doc-view/${doc.id}` // 🔐 Encrypted document
+                      : `/workspace/vaults/note-view/${doc.id}`
                   )
                 }
                 className="cursor-pointer bg-white border border-gray-200 rounded-xl shadow-md p-4 hover:shadow-lg transition"

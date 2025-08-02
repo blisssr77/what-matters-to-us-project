@@ -3,21 +3,21 @@ import AuthPage from "./components/Auth/AuthPage";
 import Dashboard from "./pages/Dashboard";
 import ManageAccount from "./pages/Account/ManageAccount";
 // Importing components for the Private Vault
-import VaultedDocuments from "./components/PrivateVault/VaultList";
-import VaultedFileUpload from "./components/PrivateVault/VaultUploadDoc";
-import VaultedNoteUpload from "./components/PrivateVault/VaultUploadNote";
-import VaultViewNote from "./components/PrivateVault/VaultViewNote";
-import VaultEditNote from "./components/PrivateVault/VaultEditNote";
-import VaultViewDoc from "./components/PrivateVault/VaultViewDoc";
-import VaultEditDoc from "./components/PrivateVault/VaultEditDoc";
+import VaultedDocuments from "./routes/private/vaulted-docs/VaultedDocList";
+import VaultedFileUpload from "./components/PrivateVault/VaultedDocs/VaultUploadDoc";
+import VaultedNoteUpload from "./components/PrivateVault/VaultedDocs/VaultUploadNote";
+import VaultViewNote from "./components/PrivateVault/VaultedDocs/VaultViewNote";
+import VaultEditNote from "./components/PrivateVault/VaultedDocs/VaultEditNote";
+import VaultViewDoc from "./components/PrivateVault/VaultedDocs/VaultViewDoc";
+import VaultEditDoc from "./components/PrivateVault/VaultedDocs/VaultEditDoc";
 // Importing components for the Workspace Vault
-import WorkspaceVaultList from "./components/WorkspaceVault/VaultList";
-import WorkspaceUploadDoc from "./components/WorkspaceVault/VaultUploadDoc";
-import WorkspaceUploadNote from "./components/WorkspaceVault/VaultUploadNote";
-import WorkspaceViewNote from "./components/WorkspaceVault/VaultViewNote";
-import WorkspaceEditNote from "./components/WorkspaceVault/VaultEditNote";
-import WorkspaceViewDoc from "./components/WorkspaceVault/VaultViewDoc";
-import WorkspaceEditDoc from "./components/WorkspaceVault/VaultEditDoc";
+import WorkspaceVaultList from "./routes/workspace/vaulted-docs/VaultedDocList";
+import WorkspaceUploadDoc from "./components/WorkspaceVault/VaultedDocs/VaultUploadDoc";
+import WorkspaceUploadNote from "./components/WorkspaceVault/VaultedDocs/VaultUploadNote";
+import WorkspaceViewNote from "./components/WorkspaceVault/VaultedDocs/VaultViewNote";
+import WorkspaceEditNote from "./components/WorkspaceVault/VaultedDocs/VaultEditNote";
+import WorkspaceViewDoc from "./components/WorkspaceVault/VaultedDocs/VaultViewDoc";
+import WorkspaceEditDoc from "./components/WorkspaceVault/VaultedDocs/VaultEditDoc";
 
 function App() {
   return (

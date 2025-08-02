@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { supabase } from "../../lib/supabaseClient";
-import Layout from "../Layout/Layout";
+import { supabase } from "../../../lib/supabaseClient";
+import Layout from "../../Layout/Layout";
 import { X, Search, Loader2 } from "lucide-react";
-import { encryptFile, encryptText, decryptText } from "../../utils/encryption";
+import { encryptFile, encryptText, decryptText } from "../../../lib/encryption";
 import bcrypt from "bcryptjs";
+import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 
-export default function VaultEditDoc() {
+export default function WorkspaceEditDoc() {
     const { id } = useParams();
     const navigate = useNavigate();
 
@@ -29,7 +30,9 @@ export default function VaultEditDoc() {
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
 
+    const { activeWorkspaceId } = useWorkspaceStore();
 
+    // Allowed MIME types for file uploads
     const allowedMimes = [
         "application/pdf",
         "application/msword",
@@ -51,9 +54,9 @@ export default function VaultEditDoc() {
     useEffect(() => {
         const fetchDoc = async () => {
             const { data, error } = await supabase
-            .from("private_vault_items")
+            .from("workspace_vault_items")
             .select("*")
-            .eq("id", id)
+            .eq("workspace_id", activeWorkspaceId)
             .single();
 
             if (!error && data) {
@@ -73,17 +76,18 @@ export default function VaultEditDoc() {
                 );
                 setPrivateNote(decrypted);
                 } catch (err) {
-                console.error("❌ Failed to decrypt note:", err);
+                console.error("Failed to decrypt note:", err);
                 setPrivateNote("🔐 Encrypted");
                 }
             } else {
                 setPrivateNote(""); // no encrypted note
-            }
-        }
-    };
-
+            }}
+        };
         const fetchTags = async () => {
-            const { data } = await supabase.from("vault_tags").select("name");
+            const { data } = await supabase
+            .from("vault_tags")
+            .select("*")
+            .eq("workspace_id", activeWorkspaceId);
             const tagNames = data?.map((tag) => tag.name) || [];
             setAvailableTags(tagNames);
         };
@@ -112,7 +116,7 @@ export default function VaultEditDoc() {
 
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError || !user?.id) {
-            console.error("❌ Unable to get user.");
+            console.error("Unable to get user.");
             return;
         }
 
@@ -120,8 +124,9 @@ export default function VaultEditDoc() {
         if (!availableTags.includes(newTag)) {
             await supabase.from("vault_tags").insert({
                 name: newTag,
-                section: "My Private",
+                section: "Workspace",
                 user_id: user.id,
+                workspace_id: activeWorkspaceId,
             });
             setAvailableTags((prev) => [...prev, newTag]);
         }
@@ -160,24 +165,24 @@ export default function VaultEditDoc() {
         const invalidFiles = files.filter((f) => !allowedMimes.includes(f.type));
         if (invalidFiles.length > 0) {
             setUploading(false);
-            setErrorMsg("❌ One or more files have unsupported types.");
+            setErrorMsg("One or more files have unsupported types.");
             return;
         }
 
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
             setUploading(false);
-            setErrorMsg("❌ User not authenticated.");
+            setErrorMsg("User not authenticated.");
             return;
         }
 
         if (!vaultCode) {
             setUploading(false);
-            setErrorMsg("❌ Please enter your Vault Code to encrypt.");
+            setErrorMsg("Please enter your Vault Code to encrypt.");
             return;
         }
 
-        // ✅ Validate vault code
+        // Validate vault code
         const { data: vaultRow, error: vaultError } = await supabase
             .from("vault_codes")
             .select("private_code")
@@ -186,25 +191,24 @@ export default function VaultEditDoc() {
 
         if (vaultError || !vaultRow?.private_code) {
             setUploading(false);
-            setErrorMsg("❌ Vault code not found or not set.");
+            setErrorMsg("Vault code not found or not set.");
             return;
         }
 
         const isMatch = await bcrypt.compare(vaultCode, vaultRow.private_code);
         if (!isMatch) {
             setUploading(false);
-            setErrorMsg("❌ Incorrect Vault Code.");
+            setErrorMsg("Incorrect Vault Code.");
             return;
         }
 
-        // ✅ Delete marked files from Supabase Storage
+        // Delete marked files from Supabase Storage
         const filePathsToDelete = [];
 
         for (const url of filesToRemove) {
             try {
                 const urlParts = url.split("/");
-                // Expecting structure: https://your-supabase-url/storage/v1/object/public/vaulted/[userId]/filename
-                const index = urlParts.findIndex(part => part === "vaulted");
+                const index = urlParts.findIndex(part => part === "workspace.vaulted");
                 const filePath = decodeURIComponent(urlParts.slice(index + 1).join("/"));
 
                 if (filePath) {
@@ -218,40 +222,40 @@ export default function VaultEditDoc() {
         if (filePathsToDelete.length > 0) {
             const { error: deleteError } = await supabase
                 .storage
-                .from("vaulted")
+                .from("workspace.vaulted")
                 .remove(filePathsToDelete);
 
             if (deleteError) {
-                console.error("❌ Storage deletion error:", deleteError);
-                setErrorMsg("❌ Failed to delete one or more files from storage.");
+                console.error("Storage deletion error:", deleteError);
+                setErrorMsg("Failed to delete one or more files from storage.");
             }
         }
 
-        // ✅ Exclude deleted files from updatedFileMetas
+        // Exclude deleted files from updatedFileMetas
         let updatedFileMetas = existingFiles.filter((f) => !filesToRemove.includes(f.url));
         let noteIv = "";
 
-        // ✅ Upload new files
+        // Upload new files
         for (const file of files) {
             const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
             const { encryptedBlob, ivHex } = await encryptFile(file, vaultCode, ivBytes);
 
             const sanitizedName = file.name.replace(/[^\w.-]/g, "_");
-            const filePath = `${user.id}/${Date.now()}-${sanitizedName}`;
+            const filePath = `${activeWorkspaceId}/${Date.now()}-${sanitizedName}`;
 
             const { error: uploadError } = await supabase.storage
-            .from("vaulted")
+            .from("workspace.vaulted")
             .upload(filePath, encryptedBlob, { contentType: file.type });
 
             if (!uploadError) {
-                const { data: urlData } = await supabase.storage.from("vaulted").getPublicUrl(filePath);
+                const { data: urlData } = await supabase.storage.from("workspace.vaulted").getPublicUrl(filePath);
             if (urlData?.publicUrl) {
                 updatedFileMetas.push({ name: file.name, url: urlData.publicUrl, iv: ivHex, type: file.type });
             }
             }
         }
 
-        // ✅ Encrypt private note if changed
+        // Encrypt private note if changed
         let encryptedNote = "";
         if (privateNote && privateNote !== "🔐 Encrypted") {
             try {
@@ -261,14 +265,14 @@ export default function VaultEditDoc() {
             } catch (err) {
                 console.error(err);
                 setUploading(false);
-                setErrorMsg("❌ Failed to encrypt private note.");
+                setErrorMsg("Failed to encrypt private note.");
                 return;
             }
         }
 
-        // ✅ Final DB update
+        // Final DB update
         const { error: updateError } = await supabase
-            .from("private_vault_items")
+            .from("workspace_vault_items")
             .update({
             title,
             tags,
@@ -277,16 +281,17 @@ export default function VaultEditDoc() {
             note_iv: noteIv || undefined,
             file_metas: updatedFileMetas,
             })
-            .eq("id", id);
+            .eq("id", id)
+            .eq("workspace_id", activeWorkspaceId);
 
         if (updateError) {
             console.error(updateError);
-            setErrorMsg("❌ Failed to update document.");
+            setErrorMsg("Failed to update document.");
         } else {
-            setSuccessMsg("✅ Document updated successfully!");
-            setFilesToRemove([]); // ✅ clear removed file list
+            setSuccessMsg("Document updated successfully!");
+            setFilesToRemove([]); // clear removed file list
             setHasUnsavedChanges(false);
-            setTimeout(() => navigate("/private/vaults"), 1300);
+            setTimeout(() => navigate("/workspace/vaults"), 1300);
         }
 
         setUploading(false);
@@ -335,7 +340,7 @@ export default function VaultEditDoc() {
                     </p>
                     <div className="flex gap-3 justify-end mt-4">
                     <button
-                        onClick={() => navigate("/private/vaults")}
+                        onClick={() => navigate("/workspace/vaults")}
                         className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
                     >
                         Leave Anyway
@@ -356,7 +361,7 @@ export default function VaultEditDoc() {
                     if (hasUnsavedChanges) {
                     setShowUnsavedPopup(true);
                     } else {
-                    navigate("/private/vaults");
+                    navigate("/workspace/vaults");
                     }
                 }}
                 className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
@@ -364,7 +369,7 @@ export default function VaultEditDoc() {
                 <X size={20} />
             </button>
 
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">✏️ Edit Your Vaulted Document</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">✏️ Edit Your workspace.vaulted Document</h2>
             <p className="text-xs text-blue-700 mt-1">
                 Supported: PDF, Word, Excel, PowerPoint, Text, CSV, JPG, PNG, GIF, ZIP, JSON
             </p>

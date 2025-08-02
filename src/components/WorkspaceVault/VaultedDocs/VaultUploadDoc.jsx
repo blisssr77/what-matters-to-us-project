@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { supabase } from "../../lib/supabaseClient";
+import { supabase } from "../../../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 import { Loader2, X, Search } from "lucide-react";
-import Layout from "../Layout/Layout";
-import { encryptText, encryptFile } from "../../utils/encryption"; 
+import Layout from "../../Layout/Layout";
+import { encryptText, encryptFile } from "../../../lib/encryption"; 
 import bcrypt from "bcryptjs";
-import { useWorkspaceStore } from "../../store/useWorkspaceStore";
+import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 
 export default function WorkspaceUploadDoc() {
     const [files, setFiles] = useState([]);

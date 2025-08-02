@@ -382,13 +382,13 @@ export default function ManageAccount() {
                 </div>
                 <button
                     onClick={saveBasicInfo}
-                    className="bg-purple-600 text-white px-5 py-2 rounded hover:bg-purple-700 transition text-sm"
+                    className="btn-secondary text-sm"
                 >
                     Save basic info
                 </button>
 
                 {basicSaved && (
-                    <p className="text-xs text-green-600 mt-1">Profile saved successfully ✅</p>
+                    <p className="text-xs text-green-600 mt-1">Profile saved successfully!</p>
                 )}
                 </div>
             </div>
@@ -503,13 +503,13 @@ export default function ManageAccount() {
                 </ul>
                 <button
                     onClick={changePassword}
-                    className="bg-purple-600 text-white px-5 py-2 rounded hover:bg-purple-700 transition text-sm"
+                    className="btn-secondary text-sm"
                 >
                     Update password
                 </button>
 
                 {pwdSaved && (
-                    <p className="text-xs text-green-600 mt-1">Password updated successfully ✅</p>
+                    <p className="text-xs text-green-600 mt-1">Password updated successfully!</p>
                 )}
                 </div>
             </div>
@@ -532,11 +532,11 @@ export default function ManageAccount() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Workspace Card */}
             <div className="p-5 bg-gray-50 rounded border">
-                <h3 className="font-medium mb-3 text-gray-800">Set-up /change <strong>Workspace</strong> vault code</h3>
 
                 {codes.workspace === null ? (
                 /* CREATE form */
                 <>
+                <h3 className="font-medium mb-3 text-gray-900">Create a new <strong>Private</strong> vault code</h3>
                     <input
                     type="password"
                     placeholder="Create workspace code"
@@ -552,7 +552,7 @@ export default function ManageAccount() {
                     className="w-full border rounded px-3 py-2 text-sm mb-3 text-gray-800"
                     />
                     <button
-                    className="bg-purple-600 text-white px-4 py-1.5 rounded hover:bg-purple-700 transition text-sm"
+                    className="btn-secondary text-sm"
                     onClick={async () => {
                         const { ok, msg } = await createWorkspaceCode();
                         setWorkspaceMsg({ ok, msg });
@@ -569,6 +569,7 @@ export default function ManageAccount() {
                 ) : (
                 /* CHANGE form */
                 <>
+                <h3 className="font-medium mb-3 text-gray-900">Change your <strong>Private</strong> vault code</h3>
                     <input
                     type="password"
                     placeholder="Current workspace vault code"
@@ -591,7 +592,7 @@ export default function ManageAccount() {
                     className="w-full border rounded px-3 py-2 text-sm mb-3 text-gray-800"
                     />
                     <button
-                    className="bg-purple-600 text-white px-4 py-1.5 rounded hover:bg-purple-700 transition text-sm"
+                    className="btn-secondary text-sm"
                     onClick={async () => {
                         const { ok, msg } = await changeWorkspaceCode();
                         setWorkspaceMsg({ ok, msg });
@@ -610,11 +611,11 @@ export default function ManageAccount() {
 
             {/* Private Card */}
             <div className="p-5 bg-gray-50 rounded border">
-                <h3 className="font-medium mb-3 text-gray-900">Set-up /change <strong>Private</strong> vault code</h3>
 
                 {codes.private === null ? (
                 /* CREATE */
                 <>
+                <h3 className="font-medium mb-3 text-gray-900">Create a new <strong>Private</strong> vault code</h3>
                     <input
                     type="password"
                     placeholder="Create private code"
@@ -630,7 +631,7 @@ export default function ManageAccount() {
                     className="w-full border rounded px-3 py-2 text-sm mb-3 text-gray-800"
                     />
                     <button
-                    className="bg-purple-600 text-white px-4 py-1.5 rounded hover:bg-purple-700 transition text-sm"
+                    className="btn-secondary text-sm"
                     onClick={async () => {
                         const { ok, msg } = await createPrivateCode();
                         setPrivateMsg({ ok, msg });
@@ -647,6 +648,7 @@ export default function ManageAccount() {
                 ) : (
                 /* CHANGE */
                 <>
+                <h3 className="font-medium mb-3 text-gray-900">Change your <strong>Private</strong> vault code</h3>
                     <input
                     type="password"
                     placeholder="Current private vault code"
@@ -669,7 +671,7 @@ export default function ManageAccount() {
                     className="w-full border rounded px-3 py-2 text-sm mb-3 text-gray-800"
                     />
                     <button
-                    className="bg-purple-600 text-white px-4 py-1.5 rounded hover:bg-purple-700 transition text-sm"
+                    className="btn-secondary text-sm"
                     onClick={async () => {
                         const { ok, msg } = await changePrivateCode();
                         setPrivateMsg({ ok, msg });
