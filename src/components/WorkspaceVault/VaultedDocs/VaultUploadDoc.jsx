@@ -23,6 +23,7 @@ export default function WorkspaceUploadDoc() {
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
     const { activeWorkspaceId } = useWorkspaceStore();
+    const [isVaulted, setIsVaulted] = useState(true);
 
     const navigate = useNavigate();
 
@@ -132,7 +133,6 @@ export default function WorkspaceUploadDoc() {
             return;
         }
 
-        // Validate file types
         const invalidFiles = files.filter((f) => !allowedMimes.includes(f.type));
         if (invalidFiles.length > 0) {
             setUploading(false);
@@ -149,74 +149,86 @@ export default function WorkspaceUploadDoc() {
             return;
         }
 
-        // Check Vault Code
-        if (!vaultCode) {
-            setUploading(false);
-            setErrorMsg("Please enter your Vault Code.");
-            return;
+        // Check Vault Code if needed
+        if (isVaulted) {
+            if (!vaultCode) {
+                setUploading(false);
+                setErrorMsg("Please enter your Vault Code.");
+                return;
+            }
+
+            const { data: vaultCodeRow, error: vaultError } = await supabase
+                .from("vault_codes")
+                .select("private_code")
+                .eq("id", userId)
+                .single();
+
+            if (vaultError || !vaultCodeRow?.private_code) {
+                setUploading(false);
+                setErrorMsg(
+                    'Please set your Vault Code in <a href="/account/manage" class="text-blue-600 underline">Account Settings</a> before uploading.'
+                );
+                return;
+            }
+
+            const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
+            if (!isMatch) {
+                setUploading(false);
+                setErrorMsg("Incorrect Vault Code.");
+                return;
+            }
         }
 
-        // Fetch user's vault code from DB
-        const { data: vaultCodeRow, error: vaultError } = await supabase
-            .from("vault_codes")
-            .select("private_code")
-            .eq("id", userId)
-            .single();
-
-        if (vaultError || !vaultCodeRow?.private_code) {
-            setUploading(false);
-            setErrorMsg(
-                'Please set your Vault Code in <a href="/account/manage" class="text-blue-600 underline">Account Settings</a> before uploading.'
-            );
-            return;
-        }
-
-        const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
-        if (!isMatch) {
-            setUploading(false);
-            setErrorMsg("Incorrect Vault Code.");
-            return;
-        }
-
-        // Upload files
         if (!activeWorkspaceId) {
             setUploading(false);
-            console.error("Missing activeWorkspaceId");
             setErrorMsg("Workspace not selected. Please refresh or select a workspace.");
             return;
         }
 
         const fileMetas = [];
-        let noteIv = "";
         let uploadedCount = 0;
+        let noteIv = "";
 
         for (const file of files) {
             try {
-                const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
-                const { encryptedBlob, ivHex } = await encryptFile(file, vaultCode, ivBytes);
-
                 const sanitizedName = file.name.replace(/[^\w.-]/g, "_");
                 const filePath = `${activeWorkspaceId}/${Date.now()}-${sanitizedName}`;
 
-                const { error: uploadError } = await supabase.storage
-                    .from("workspace.vaulted")
-                    .upload(filePath, encryptedBlob, {
-                        contentType: file.type,
-                        upsert: false,
-                        metadata: { workspace_id: activeWorkspaceId }, // optional, useful for RLS
-                    });
+                let ivHex = "";
+                let uploadError, urlData;
 
-                if (uploadError) {
-                    console.error("Upload failed:", uploadError.message);
-                    continue;
+                if (isVaulted) {
+                    const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
+                    const { encryptedBlob, ivHex: hex } = await encryptFile(file, vaultCode, ivBytes);
+                    ivHex = hex;
+
+                    ({ error: uploadError } = await supabase.storage
+                        .from("workspace.vaulted")
+                        .upload(filePath, encryptedBlob, {
+                            contentType: file.type,
+                            upsert: false,
+                            metadata: { user_id: userId, workspace_id: activeWorkspaceId },
+                        }));
+
+                    ({ data: urlData } = supabase.storage
+                        .from("workspace.vaulted")
+                        .getPublicUrl(filePath));
+                } else {
+                    ({ error: uploadError } = await supabase.storage
+                        .from("workspace.public")
+                        .upload(filePath, file, {
+                            contentType: file.type,
+                            upsert: false,
+                            metadata: { user_id: userId, workspace_id: activeWorkspaceId },
+                        }));
+
+                    ({ data: urlData } = supabase.storage
+                        .from("workspace.public")
+                        .getPublicUrl(filePath));
                 }
 
-                const { data: urlData, error: urlError } = supabase.storage
-                    .from("workspace.vaulted")
-                    .getPublicUrl(filePath);
-
-                if (urlError || !urlData?.publicUrl) {
-                    console.error("Failed to retrieve public URL:", urlError?.message);
+                if (uploadError || !urlData?.publicUrl) {
+                    console.error("Upload failed:", uploadError);
                     continue;
                 }
 
@@ -226,26 +238,27 @@ export default function WorkspaceUploadDoc() {
                     iv: ivHex,
                     type: file.type,
                     path: filePath,
+                    user_id: userId,
+                    workspace_id: activeWorkspaceId,
                 });
 
                 uploadedCount++;
             } catch (err) {
-                console.error("Unexpected file upload error:", err);
+                console.error("Unexpected upload error:", err);
             }
         }
 
-        // Post-upload status
         if (!fileMetas.length) {
             setUploading(false);
-            setErrorMsg("All uploads failed. Please try again.");
+            setErrorMsg("Upload failed for all files.");
             return;
         } else if (uploadedCount < files.length) {
-            setErrorMsg(`⚠️ Only ${uploadedCount} of ${files.length} files uploaded.`);
+            setErrorMsg(`⚠️ Only ${uploadedCount} of ${files.length} files uploaded successfully.`);
         }
 
-        // Encrypt private note if needed
+        // Encrypt private note if provided
         let encryptedNote = "";
-        if (privateNote) {
+        if (isVaulted && privateNote) {
             try {
                 const result = await encryptText(privateNote, vaultCode);
                 encryptedNote = result.encryptedData;
@@ -258,25 +271,25 @@ export default function WorkspaceUploadDoc() {
             }
         }
 
-        // Ensure all selected tags exist in vault_tags
+        // Ensure tags exist
         for (const tag of tags) {
             if (!availableTags.includes(tag)) {
-                const { error: tagInsertError } = await supabase.from("vault_tags").insert({
+                const { error } = await supabase.from("vault_tags").insert({
                     name: tag,
                     section: "Workspace",
                     user_id: userId,
                     workspace_id: activeWorkspaceId,
                 });
 
-                if (!tagInsertError) {
-                    setAvailableTags((prev) => [...prev, tag]); // optional, updates state
+                if (!error) {
+                    setAvailableTags((prev) => [...prev, tag]);
                 } else {
-                    console.error("❌ Failed to insert tag:", tag, tagInsertError.message);
+                    console.error("❌ Failed to insert tag:", tag, error.message);
                 }
             }
         }
 
-        // Insert metadata into DB
+        // Save metadata to DB
         const { error: insertError } = await supabase.from("workspace_vault_items").insert({
             user_id: userId,
             file_name: files.map((f) => f.name).join(", "),
@@ -289,13 +302,14 @@ export default function WorkspaceUploadDoc() {
             created_at: new Date().toISOString(),
             workspace_id: activeWorkspaceId,
             created_by: userId,
+            is_vaulted: isVaulted,
         });
 
         if (insertError) {
-            console.error("Insert error:", insertError);
-            setErrorMsg("Failed to save file metadata.");
+            console.error(insertError);
+            setErrorMsg("Failed to save document.");
         } else {
-            setSuccessMsg("Files uploaded successfully!");
+            setSuccessMsg("✅ Files uploaded successfully!");
             setTimeout(() => navigate("/workspace/vaults"), 1300);
         }
 
@@ -484,38 +498,67 @@ export default function WorkspaceUploadDoc() {
                         />
                     </div>
 
-                    {/* Private Note Section */}
-                    <div>
-                        <p className="text-sm text-red-400 mb-1">
-                        🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
-                        </p>
-                        <textarea
-                            value={privateNote}
-                            onChange={(e) => {
-                                setPrivateNote(e.target.value);
-                                setHasUnsavedChanges(true);
-                            }}
-                            placeholder="Private notes (For your eyes only)"
-                            rows={2}
-                            className="bg-gray-50 w-full border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
-                        />
+                    {/* Privacy Section */}
+                    <div className="mb-4">
+                        <label className="mr-4 font-semibold text-gray-800 text-sm">Upload Type:</label>
+                        <label className="mr-4 text-gray-800 text-sm">
+                            <input
+                            type="radio"
+                            name="privacy"
+                            value="vaulted"
+                            checked={isVaulted}
+                            onChange={() => setIsVaulted(true)}
+                            />
+                            Vaulted (Encrypted)
+                        </label>
+                        <label className="text-gray-800 text-sm">
+                            <input
+                            type="radio"
+                            name="privacy"
+                            value="public"
+                            checked={!isVaulted}
+                            onChange={() => setIsVaulted(false)}
+                            />
+                            Public
+                        </label>
                     </div>
 
-                    {/* Vault Code Section */}
-                    <div>
-                        <label className="block text-sm font-medium mb-1 text-gray-500">
-                            Enter <strong>Private</strong> vault code to encrypt document:
-                        </label>
-                        <input
-                            type="password"
-                            value={vaultCode}
-                            onChange={(e) => {
-                                setVaultCode(e.target.value);
-                            }}
-                            className="w-full p-2 border rounded mb-3 text-gray-600 text-sm bg-gray-50"
-                            placeholder="Vault code"
-                        />
-                    </div>
+                    {/* Private Note Section */}
+                    {isVaulted && (
+                        <>
+                            <div>
+                                <p className="text-sm text-red-400 mb-1">
+                                🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
+                                </p>
+                                <textarea
+                                    value={privateNote}
+                                    onChange={(e) => {
+                                        setPrivateNote(e.target.value);
+                                        setHasUnsavedChanges(true);
+                                    }}
+                                    placeholder="Private notes (For your eyes only)"
+                                    rows={2}
+                                    className="bg-gray-50 w-full border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
+                                />
+                            </div>
+
+                            {/* Vault Code Section */}
+                            <div>
+                                <label className="block text-sm font-medium mb-1 text-gray-500">
+                                    Enter <strong>Private</strong> vault code to encrypt document:
+                                </label>
+                                <input
+                                    type="password"
+                                    value={vaultCode}
+                                    onChange={(e) => {
+                                        setVaultCode(e.target.value);
+                                    }}
+                                    className="w-full p-2 border rounded mb-3 text-gray-600 text-sm bg-gray-50"
+                                    placeholder="Vault code"
+                                />
+                            </div>
+                        </>
+                    )}
 
                     {/* Upload */}
                     <button

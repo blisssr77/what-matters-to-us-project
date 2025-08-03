@@ -6,6 +6,8 @@ import Layout from "../../../components/Layout/Layout";
 import dayjs from "dayjs";
 import { supabase } from "../../../lib/supabaseClient";
 import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
+import { useUserRole } from "../../../hooks/useUserRole";
+import WorkspaceSelector from "../../../components/WorkspaceVault/VaultedDocs/WorkspaceSelector";
 
 
 export default function WorkspaceVaultList() {
@@ -19,8 +21,6 @@ export default function WorkspaceVaultList() {
 
   const tagBoxRef = useRef();
   const { activeWorkspaceId } = useWorkspaceStore();
-
-  
 
   // Close tag filter when clicking outside
   useEffect(() => {
@@ -71,6 +71,12 @@ export default function WorkspaceVaultList() {
       <div className="p-6 max-w-5xl mx-auto text-sm">
         {/* Buttons Row */}
         <div className="flex justify-end gap-2 mb-4">
+          {/* Workspace Selector */}
+          <div className="mb-4">
+            <WorkspaceSelector />
+          </div>
+
+          {/* Upload and Create Buttons */}
           <button
             onClick={() => navigate("/workspace/vaults/file-upload")}
             className="btn-main"
@@ -87,7 +93,7 @@ export default function WorkspaceVaultList() {
         </div>
 
         {/* Title */}
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">🔐 Your Vaulted Documents</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">🔐 My Vaulted Documents</h2>
 
         {/* Search and Tag Filters */}
         <div className="flex flex-wrap md:flex-nowrap justify-between items-start gap-4 mb-6">

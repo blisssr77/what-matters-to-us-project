@@ -276,7 +276,7 @@ export default function WorkspaceViewDoc() {
           <p className="mt-10 text-gray-900">
             Are you sure you want to delete <strong>{doc?.title || "this document"}</strong>?
             <br />
-              This action cannot be undone.
+            This action cannot be undone.
           </p>
           <div className="flex gap-3 justify-end mt-4">
             <button
@@ -317,6 +317,7 @@ export default function WorkspaceViewDoc() {
             {decryptedNote}
           </div>
         )}
+
         {doc?.file_metas?.length > 0 && (
           <ul className="text-sm text-blue-500 space-y-1 mb-3">
             {doc.file_metas.map((file, index) => (
@@ -325,81 +326,102 @@ export default function WorkspaceViewDoc() {
           </ul>
         )}
 
-        {/* Vault code entry */}
-        {!entered ? (
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Enter <strong>Vault Code</strong> to Decrypt Document:
-            </label>
-            <input
-              type="password"
-              value={vaultCode}
-              onChange={(e) => setVaultCode(e.target.value)}
-              className="border border-gray-300 rounded px-3 py-2 w-full text-gray-600 mb-4 text-sm"
-              placeholder="Vault Code"
-            />
-            <button
-              onClick={handleDecrypt}
-              className="btn-secondary"
-            >
-              {loading ? "Decrypting..." : "Decrypt"}
-          </button>
-            {errorMsg && (
-              <p className="text-sm text-red-600 mt-2">{errorMsg}</p>
-            )}
-          </div>
-        ) : loading ? (
-          <p className="text-sm text-gray-500">🔐 Decrypting document...</p>
+        {/* 🔐 Vaulted logic */}
+        {doc?.is_vaulted ? (
+          !entered ? (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Enter <strong>Vault Code</strong> to Decrypt Document:
+              </label>
+              <input
+                type="password"
+                value={vaultCode}
+                onChange={(e) => setVaultCode(e.target.value)}
+                className="border border-gray-300 rounded px-3 py-2 w-full text-gray-600 mb-4 text-sm"
+                placeholder="Vault Code"
+              />
+              <button onClick={handleDecrypt} className="btn-secondary">
+                {loading ? "Decrypting..." : "Decrypt"}
+              </button>
+              {errorMsg && <p className="text-sm text-red-600 mt-2">{errorMsg}</p>}
+            </div>
+          ) : loading ? (
+            <p className="text-sm text-gray-500">🔐 Decrypting document...</p>
+          ) : (
+            <>
+              {/* Tags */}
+              {doc?.tags?.length > 0 && (
+                <div className="mb-4 text-sm text-gray-700">
+                  <strong>Tags:</strong>{" "}
+                  {doc.tags.map((tag, index) => (
+                    <React.Fragment key={tag}>
+                      <span className="bg-yellow-50 px-1 rounded">{tag}</span>
+                      {index < doc.tags.length - 1 && ", "}
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="flex gap-4 text-sm mb-4">
+                <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
+                  <Copy size={16} /> Copy
+                </button>
+                <button onClick={() => navigate(`/workspace/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
+                  <Edit2 size={16} /> Edit
+                </button>
+                <button onClick={() => setShowConfirmPopup(true)} className="flex items-center gap-1 text-red-600 hover:underline">
+                  <Trash2 size={16} /> Delete
+                </button>
+              </div>
+
+              {/* File viewer + Download */}
+              {renderFileViewer()}
+              {decryptedBlob && (
+                <button
+                  onClick={() => {
+                    const extension = mimeToExtension[decryptedFileType] || "";
+                    const fallbackName = doc?.title?.replace(/\s+/g, "_").toLowerCase() || "document";
+                    const filename = fallbackName + extension;
+                    saveAs(decryptedBlob, filename);
+                  }}
+                  className="mt-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  ⬇️ Download File
+                </button>
+              )}
+
+              <div className="mt-4 text-xs text-gray-400">
+                Last viewed just now · Private log only. Team audit history coming soon.
+              </div>
+            </>
+          )
         ) : (
+          // 🌐 Public document
           <>
-            {/* Display tags if available */}
+            {renderFileViewer()}
+
+            {/* Tags */}
             {doc?.tags?.length > 0 && (
               <div className="mb-4 text-sm text-gray-700">
-                  <strong>Tags:</strong>{" "}
-                  {/* Map over each tag to apply individual styling */}
-                  {doc.tags.map((tag, index) => (
-                  <React.Fragment key={tag}> {/* Use React.Fragment for grouping without extra DOM node */}
-                      <span className="bg-yellow-50 px-1 rounded"> {/* Apply highlight classes to each tag */}
-                      {tag}
-                      </span>
-                      {/* Add a comma and space after each tag, except the last one */}
-                      {index < doc.tags.length - 1 && ", "}
+                <strong>Tags:</strong>{" "}
+                {doc.tags.map((tag, index) => (
+                  <React.Fragment key={tag}>
+                    <span className="bg-yellow-50 px-1 rounded">{tag}</span>
+                    {index < doc.tags.length - 1 && ", "}
                   </React.Fragment>
-                  ))}
+                ))}
               </div>
             )}
 
-            {/* Action buttons */}
+            {/* Public controls */}
             <div className="flex gap-4 text-sm mb-4">
-            <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
-                <Copy size={16} /> Copy
-            </button>
-            <button onClick={() => navigate(`/workspace/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
+              <button onClick={() => navigate(`/workspace/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
                 <Edit2 size={16} /> Edit
-            </button>
-            <button onClick={() => setShowConfirmPopup(true)} className="flex items-center gap-1 text-red-600 hover:underline">
-                <Trash2 size={16} /> Delete
-            </button>
-            </div>
-
-            {/* File viewer */}
-            {renderFileViewer()}
-            {decryptedBlob && (
-              <button
-                onClick={() => {
-                  const extension = mimeToExtension[decryptedFileType] || "";
-                  const fallbackName = doc?.title?.replace(/\s+/g, "_").toLowerCase() || "document";
-                  const filename = fallbackName + extension;
-                  saveAs(decryptedBlob, filename);
-                }}
-                className="mt-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-              >
-                ⬇️ Download File
               </button>
-            )}
-
-            <div className="mt-4 text-xs text-gray-400">
-              Last viewed just now · Private log only. Team audit history coming soon.
+              <button onClick={() => setShowConfirmPopup(true)} className="flex items-center gap-1 text-red-600 hover:underline">
+                <Trash2 size={16} /> Delete
+              </button>
             </div>
           </>
         )}

@@ -29,6 +29,7 @@ export default function WorkspaceEditDoc() {
     const [filesToRemove, setFilesToRemove] = useState([]);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
+    const [isVaulted, setIsVaulted] = useState(false);
 
     const { activeWorkspaceId } = useWorkspaceStore();
 
@@ -56,6 +57,7 @@ export default function WorkspaceEditDoc() {
             const { data, error } = await supabase
             .from("workspace_vault_items")
             .select("*")
+            .eq("id", id)
             .eq("workspace_id", activeWorkspaceId)
             .single();
 
@@ -64,6 +66,8 @@ export default function WorkspaceEditDoc() {
             setTags(data.tags || []);
             setNotes(data.notes || []);
             setExistingFiles(data.file_metas || []);
+            setIsVaulted(data.is_vaulted || false);
+
 
             const storedVaultCode = sessionStorage.getItem("vaultCode");
 
@@ -175,31 +179,32 @@ export default function WorkspaceEditDoc() {
             setErrorMsg("User not authenticated.");
             return;
         }
+        if (isVaulted) {
+            if (!vaultCode) {
+                setUploading(false);
+                setErrorMsg("Please enter your Vault Code to encrypt.");
+                return;
+            }
 
-        if (!vaultCode) {
-            setUploading(false);
-            setErrorMsg("Please enter your Vault Code to encrypt.");
-            return;
-        }
+            // Validate vault code
+            const { data: vaultRow, error: vaultError } = await supabase
+                .from("vault_codes")
+                .select("private_code")
+                .eq("id", user.id)
+                .single();
 
-        // Validate vault code
-        const { data: vaultRow, error: vaultError } = await supabase
-            .from("vault_codes")
-            .select("private_code")
-            .eq("id", user.id)
-            .single();
+            if (vaultError || !vaultRow?.private_code) {
+                setUploading(false);
+                setErrorMsg("Vault code not found or not set.");
+                return;
+            }
 
-        if (vaultError || !vaultRow?.private_code) {
-            setUploading(false);
-            setErrorMsg("Vault code not found or not set.");
-            return;
-        }
-
-        const isMatch = await bcrypt.compare(vaultCode, vaultRow.private_code);
-        if (!isMatch) {
-            setUploading(false);
-            setErrorMsg("Incorrect Vault Code.");
-            return;
+            const isMatch = await bcrypt.compare(vaultCode, vaultRow.private_code);
+            if (!isMatch) {
+                setUploading(false);
+                setErrorMsg("Incorrect Vault Code.");
+                return;
+            }
         }
 
         // Delete marked files from Supabase Storage
@@ -242,15 +247,23 @@ export default function WorkspaceEditDoc() {
 
             const sanitizedName = file.name.replace(/[^\w.-]/g, "_");
             const filePath = `${activeWorkspaceId}/${Date.now()}-${sanitizedName}`;
+            const bucket = isVaulted ? "workspace.vaulted" : "workspace.documents";
 
+            // Upload file
             const { error: uploadError } = await supabase.storage
-            .from("workspace.vaulted")
-            .upload(filePath, encryptedBlob, { contentType: file.type });
+            .from(bucket)
+            .upload(filePath, isVaulted ? encryptedBlob : file, {
+                contentType: file.type,
+                metadata: {
+                user_id: user.id,
+                workspace_id: activeWorkspaceId,
+                },
+            });
 
             if (!uploadError) {
-                const { data: urlData } = await supabase.storage.from("workspace.vaulted").getPublicUrl(filePath);
+                const { data: urlData } = await supabase.storage.from(bucket).getPublicUrl(filePath);
             if (urlData?.publicUrl) {
-                updatedFileMetas.push({ name: file.name, url: urlData.publicUrl, iv: ivHex, type: file.type });
+                updatedFileMetas.push({ name: file.name, url: urlData.publicUrl, iv: isVaulted ? ivHex : "", type: file.type });
             }
             }
         }
@@ -568,41 +581,44 @@ export default function WorkspaceEditDoc() {
                     />
                 </div>
 
+                {isVaulted && (
+                    <>            
+                        {/* Private Note Section */}
+                        <div>
+                            <p className="text-sm text-red-400 mb-1">
+                                🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
+                            </p>
 
-                {/* Private Note Section */}
-                <div>
-                    <p className="text-sm text-red-400 mb-1">
-                        🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
-                    </p>
+                            {/* Private Notes */}
+                            <textarea
+                                value={privateNote}
+                                onChange={(e) => {
+                                    setPrivateNote(e.target.value);
+                                    setHasUnsavedChanges(true);
+                                }}
+                                placeholder="Private notes (For your eyes only)"
+                                rows={2}
+                                className="bg-gray-50 w-full border border-gray-300 p-2 rounded text-gray-800 font-medium placeholder-gray-400 text-sm"
+                            />
+                        </div>
 
-                    {/* Private Notes */}
-                    <textarea
-                        value={privateNote}
-                        onChange={(e) => {
-                            setPrivateNote(e.target.value);
-                            setHasUnsavedChanges(true);
-                        }}
-                        placeholder="Private notes (For your eyes only)"
-                        rows={2}
-                        className="bg-gray-50 w-full border border-gray-300 p-2 rounded text-gray-800 font-medium placeholder-gray-400 text-sm"
-                    />
-                </div>
-
-                {/* Vault Code */}
-                <div>
-                    <label className="block text-sm font-medium mb-1 text-gray-800">
-                         Re-enter <strong>Private</strong> vault code to encrypt:
-                    </label>
-                    <input
-                        type="password"
-                        value={vaultCode}
-                        onChange={(e) => {
-                            setVaultCode(e.target.value);
-                        }}
-                        className="w-full p-2 border font-medium rounded mb-3 text-gray-600 text-sm bg-gray-50"
-                        placeholder="Vault code"
-                    />
-                </div>
+                        {/* Vault Code */}
+                        <div>
+                            <label className="block text-sm font-medium mb-1 text-gray-800">
+                                Re-enter <strong>Private</strong> vault code to encrypt:
+                            </label>
+                            <input
+                                type="password"
+                                value={vaultCode}
+                                onChange={(e) => {
+                                    setVaultCode(e.target.value);
+                                }}
+                                className="w-full p-2 border font-medium rounded mb-3 text-gray-600 text-sm bg-gray-50"
+                                placeholder="Vault code"
+                            />
+                        </div>
+                    </>
+                )}
 
                 {/* Upload Button */}
                 <button
