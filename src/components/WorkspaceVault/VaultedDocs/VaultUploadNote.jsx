@@ -55,6 +55,17 @@ const WorkspaceUploadNote = () => {
         fetchWorkspace();
     }, [setActiveWorkspaceId]);
 
+     // Message timeout for success/error
+    useEffect(() => {
+        if (successMsg || errorMsg) {
+            const timer = setTimeout(() => {
+                setSuccessMsg("");
+                setErrorMsg("");
+            }, 4000);
+            return () => clearTimeout(timer);
+        }
+    }, [successMsg, errorMsg]);
+
     // ✅ Fetch tags for this workspace
     useEffect(() => {
         if (!activeWorkspaceId) return;
@@ -98,47 +109,61 @@ const WorkspaceUploadNote = () => {
         setSuccessMsg("");
         setErrorMsg("");
 
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user || !vaultCode.trim()) {
-        setErrorMsg("Missing user or vault code.");
-        setLoading(false);
-        return;
+        // Authenticate user
+        const { data: userData } = await supabase.auth.getUser();
+        const user = userData?.user;
+
+        // Check if user is authenticated
+        if (!user?.id) {
+            setLoading(false);
+            setErrorMsg("User not authenticated.");
+            return;
         }
 
-        // Validate vault code
-        const { data: vaultCodeRow, error: codeError } = await supabase
-        .from("vault_codes")
-        .select("private_code")
-        .eq("id", user.id)
-        .single();
+        // Check Vault Code if needed
+        if (isVaulted) {
+            if (!vaultCode) {
+                setLoading(false);
+                setErrorMsg("Please enter your Vault Code.");
+                return;
+            }
 
-        if (codeError || !vaultCodeRow?.private_code) {
-        setErrorMsg("Vault code not found.");
-        setLoading(false);
-        return;
-        }
+            const { data: vaultCodeRow, error: vaultError } = await supabase
+                .from("vault_codes")
+                .select("private_code")
+                .eq("id", user.id)
+                .single();
 
-        const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
-        if (!isMatch) {
-        setErrorMsg("Incorrect Vault Code.");
-        setLoading(false);
-        return;
+            if (vaultError || !vaultCodeRow?.private_code) {
+                setLoading(false);
+                setErrorMsg(
+                    'Please set your Vault Code in <a href="/account/manage" class="text-blue-600 underline">Account Settings</a> before uploading.'
+                );
+                return;
+            }
+
+            const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
+            if (!isMatch) {
+                setLoading(false);
+                setErrorMsg("Incorrect Vault Code.");
+                return;
+            }
         }
 
         // Encrypt note and insert to DB
         try {
-        const { encryptedData, iv } = await encryptText(privateNote, vaultCode);
-        const { error } = await supabase.from("workspace_vault_items").insert({
-            user_id: user.id,
-            file_name: title || "Untitled Note",
-            title,
-            notes,
-            encrypted_note: encryptedData,
-            note_iv: iv,
-            tags,
-            workspace_id: activeWorkspaceId,
-            created_by: user.id,
-            is_vaulted: true,
+            const { encryptedData, iv } = await encryptText(privateNote, vaultCode);
+            const { error } = await supabase.from("workspace_vault_items").insert({
+                user_id: user.id,
+                file_name: title || "Untitled Note",
+                title,
+                notes,
+                encrypted_note: encryptedData,
+                note_iv: iv,
+                tags,
+                workspace_id: activeWorkspaceId,
+                created_by: user.id,
+                is_vaulted: isVaulted,
         });
 
         if (error) {
@@ -149,11 +174,11 @@ const WorkspaceUploadNote = () => {
             setTimeout(() => navigate("/workspace/vaults"), 1300);
         }
         } catch (err) {
-        console.error("Encryption failed:", err);
-        setErrorMsg("Encryption error.");
+            console.error("Encryption failed:", err);
+            setErrorMsg("Encryption error.");
         } finally {
-        setLoading(false);
-        setHasUnsavedChanges(false);
+            setLoading(false);
+            setHasUnsavedChanges(false);
         }
     };
 

@@ -37,10 +37,26 @@ export default function WorkspaceEditNote() {
     // Load vault code from session storage on mount
     useEffect(() => {
         const storedCode = sessionStorage.getItem("vaultCode");
-        if (storedCode && noteData) {
+        if (
+            storedCode &&
+            noteData?.is_vaulted &&
+            noteData?.encrypted_note &&
+            noteData?.note_iv
+        ) {
             handleDecrypt(storedCode);
         }
     }, [noteData]);
+
+     // Message timeout for success/error
+    useEffect(() => {
+        if (successMsg || errorMsg) {
+            const timer = setTimeout(() => {
+                setSuccessMsg("");
+                setErrorMsg("");
+            }, 4000);
+            return () => clearTimeout(timer);
+        }
+    }, [successMsg, errorMsg]);
 
     // Fetch note data and available tags on mount
     useEffect(() => {
@@ -73,16 +89,13 @@ export default function WorkspaceEditNote() {
         fetchTags();
     }, [id]);
 
-    // Decrypt note when vault code and note data are available
-    useEffect(() => {
-        if (vaultCode && noteData) {
-            handleDecrypt();
-            console.log("🔍 noteData updated:", noteData);
-        }
-    }, [vaultCode, noteData]);
-
     // Handle vault code change
-    const handleDecrypt = async (code) => {
+    const handleDecrypt = async (code = vaultCode) => {
+        if (!noteData?.is_vaulted) {
+            console.warn("Note is not vaulted. Skipping decryption.");
+            return;
+        }
+
         setLoading(true);
         setErrorMsg("");
 
@@ -102,7 +115,7 @@ export default function WorkspaceEditNote() {
             return;
         }
 
-        const isMatch = await bcrypt.compare(code, vaultCodeRow.private_code);
+        const isMatch = await bcrypt.compare(code.trim(), vaultCodeRow.private_code);
         if (!isMatch) {
             setErrorMsg("Incorrect Vault Code.");
             setLoading(false);
@@ -113,7 +126,6 @@ export default function WorkspaceEditNote() {
             const ivToUse = noteData.note_iv || noteData.iv;
             const decrypted = await decryptText(noteData.encrypted_note, ivToUse, code);
 
-            console.log("Decrypted note:", decrypted);
             setEditedNote(decrypted);
             setEditedTitle(noteData.title || "");
         } catch (err) {
@@ -124,43 +136,53 @@ export default function WorkspaceEditNote() {
         setLoading(false);
     };
 
+
     // Handle saving the edited note
     const handleSave = async () => {
         setSaving(true);
         setErrorMsg("");
 
-        if (!vaultCode.trim()) {
-            setErrorMsg("Vault Code is required to save the note.");
-            setSaving(false);
-            return;
-        }
-
         const {
             data: { user },
         } = await supabase.auth.getUser();
 
-        // Step 1: Fetch hashed vault code
-        const { data: vaultCodeRow, error: codeError } = await supabase
-            .from("vault_codes")
-            .select("private_code")
-            .eq("id", user.id)
-            .single();
-
-        if (codeError || !vaultCodeRow?.private_code) {
-            setErrorMsg("Vault Code not set or fetch failed.");
+        if (!user?.id) {
+            setErrorMsg("User not authenticated.");
             setSaving(false);
             return;
         }
 
-        // Step 2: Compare input vaultCode with hashed version
-        const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
-        if (!isMatch) {
-            setErrorMsg("Incorrect Vault Code.");
-            setSaving(false);
-            return;
+        // Vaulted note requires Vault Code
+        if (isVaulted) {
+            if (!vaultCode.trim()) {
+                setErrorMsg("Vault Code is required to save the note.");
+                setSaving(false);
+                return;
+            }
+
+            // Step 1: Fetch hashed vault code
+            const { data: vaultCodeRow, error: codeError } = await supabase
+                .from("vault_codes")
+                .select("private_code")
+                .eq("id", user.id)
+                .single();
+
+            if (codeError || !vaultCodeRow?.private_code) {
+                setErrorMsg("Vault Code not set or fetch failed.");
+                setSaving(false);
+                return;
+            }
+
+            // Step 2: Compare input vaultCode with hashed version
+            const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
+            if (!isMatch) {
+                setErrorMsg("Incorrect Vault Code.");
+                setSaving(false);
+                return;
+            }
         }
 
-        // Step 3: Encrypt and save
+        // Step 3: Encrypt if needed
         let encryptedData = "";
         let iv = "";
 
@@ -171,39 +193,39 @@ export default function WorkspaceEditNote() {
         }
 
         try {
-            // Step 4: Encrypt and save
-            const { encryptedData, iv } = await encryptText(editedNote, vaultCode);
-
             const updatedTags = tags
                 .map((tag) => tag.trim())
                 .filter((tag) => tag.length > 0);
 
+            // Step 4: Save to DB
             const { error: updateError } = await supabase
                 .from("workspace_vault_items")
                 .update({
                     title: editedTitle,
                     tags: updatedTags,
-                    notes,
-                    encrypted_note: encryptedData,
-                    note_iv: iv,
+                    notes, // public note
+                    encrypted_note: encryptedData, // only if vaulted
+                    note_iv: iv,                   // only if vaulted
                     updated_at: new Date().toISOString(),
+                    is_vaulted: isVaulted,
                 })
                 .eq("id", id)
                 .eq("workspace_id", activeWorkspaceId);
 
             if (updateError) {
                 console.error("Update error:", updateError);
-                setErrorMsg("Failed to update note.");
+                if (isVaulted) {
+                    setErrorMsg("Failed to update note.");
+                }
             } else {
                 setSuccessMsg("Note updated successfully!");
                 setTimeout(() => {
-                    navigate(`/private/vaults/`);
+                    navigate(`/workspace/vaults/`);
                 }, 1300);
             }
         } catch (err) {
             console.error("Encryption error:", err);
             setErrorMsg("Encryption failed.");
-            
         } finally {
             setSaving(false);
             setHasUnsavedChanges(false);
@@ -246,7 +268,7 @@ export default function WorkspaceEditNote() {
                     </p>
                     <div className="flex gap-3 justify-end mt-4">
                     <button
-                        onClick={() => navigate("/private/vaults")}
+                        onClick={() => navigate("/workspace/vaults")}
                         className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
                     >
                         Leave Anyway
@@ -272,7 +294,7 @@ export default function WorkspaceEditNote() {
                         if (hasUnsavedChanges) {
                         setShowUnsavedPopup(true);
                         } else {
-                        navigate("/private/vaults");
+                        navigate("/workspace/vaults");
                         }
                     }}
                     className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
@@ -379,38 +401,43 @@ export default function WorkspaceEditNote() {
                     )}
                 </div>
 
-                {/* Private Note Input */}
-                <p className="text-sm text-red-400 mb-1">
-                    🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
-                </p>
-                <textarea
-                    value={editedNote}
-                    onChange={(e) => {
-                        setEditedNote(e.target.value);
-                        setHasUnsavedChanges(true);
-                    }}
-                    rows="8"
-                    className="w-full p-3 border rounded bg-gray-50 text-sm font-medium text-gray-800 leading-relaxed mb-3"
-                    placeholder="Edit your note..."
-                />
-
-                {/* Vault Code */}
-                <div>
-                    <label className="block text-sm font-medium mb-1 text-gray-800">
-                        Re-enter <strong>Private</strong> vault code to encrypt:
-                    </label>
-                    <input
-                        type="password"
-                        value={vaultCode}
-                        onChange={(e) => setVaultCode(e.target.value)}
-                        className="w-full p-2 border font-medium rounded mb-3 text-gray-600 text-sm bg-gray-50"
-                        placeholder="Vault code"
-                        autoComplete="off"
+                {/* Vaulted Note Section */}
+                {isVaulted && (
+                    <>
+                    {/* Private Note Input */}
+                    <p className="text-sm text-red-400 mb-1">
+                        🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
+                    </p>
+                    <textarea
+                        value={editedNote}
+                        onChange={(e) => {
+                            setEditedNote(e.target.value);
+                            setHasUnsavedChanges(true);
+                        }}
+                        rows="8"
+                        className="w-full p-3 border rounded bg-gray-50 text-sm font-medium text-gray-800 leading-relaxed mb-3"
+                        placeholder="Edit your note..."
                     />
-                </div>
+
+                    {/* Vault Code */}
+                    <div>
+                        <label className="block text-sm font-medium mb-1 text-gray-800">
+                            Re-enter <strong>Private</strong> vault code to encrypt:
+                        </label>
+                        <input
+                            type="password"
+                            value={vaultCode}
+                            onChange={(e) => setVaultCode(e.target.value)}
+                            className="w-full p-2 border font-medium rounded mb-3 text-gray-600 text-sm bg-gray-50"
+                            placeholder="Vault code"
+                            autoComplete="off"
+                        />
+                    </div>
+                    </>
+                )}
 
                 <div className="flex gap-4 mt-4">
-                    <button onClick={handleSave} className="btn-secondary w-full mt-3" disabled={saving}>
+                    <button onClick={handleSave} className="btn-secondary w-full mt-3" disabled={loading}>
                         Save Note
                     </button>
                 </div>

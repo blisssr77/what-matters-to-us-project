@@ -339,27 +339,6 @@ export default function WorkspaceUploadDoc() {
                 redirectPath="/workspace/vaults"
                 message="You have unsaved changes. Are you sure you want to leave?"
             />
-            {/* {showUnsavedPopup && (
-                <div className="fixed top-6 right-6 bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
-                    <p className="mt-10 text-gray-800">
-                    You have unsaved changes. Are you sure you want to leave?
-                    </p>
-                    <div className="flex gap-3 justify-end mt-4">
-                    <button
-                        onClick={() => navigate("/workspace/vaults")}
-                        className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
-                    >
-                        Leave Anyway
-                    </button>
-                    <button
-                        onClick={() => setShowUnsavedPopup(false)}
-                        className="px-3 py-1 bg-gray-300 text-gray-800 rounded hover:bg-gray-400"
-                    >
-                        Cancel
-                    </button>
-                    </div>
-                </div>
-            )} */}
 
             <div className="relative max-w-xl mx-auto mt-10 p-6 bg-white rounded shadow border border-gray-200">
                 <button

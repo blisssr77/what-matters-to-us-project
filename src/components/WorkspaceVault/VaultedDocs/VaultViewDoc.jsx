@@ -324,11 +324,13 @@ export default function WorkspaceViewDoc() {
         )}
 
         {/* Display decrypted note if available */}
-        <div className="text-gray-700 mb-1 font-bold text-sm">Private note:</div>
         {entered && decryptedNote && (
-          <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
-            {decryptedNote}
-          </div>
+          <>
+            <div className="text-gray-700 mb-1 font-bold text-sm">Private note:</div>
+            <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
+              {decryptedNote}
+            </div>
+          </>
         )}
 
         {doc?.file_metas?.length > 0 && (

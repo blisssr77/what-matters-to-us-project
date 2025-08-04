@@ -183,6 +183,7 @@ export default function WorkspaceViewNote() {
                     </div>
                 )}
 
+                <div>
                 {noteData?.is_vaulted && !codeEntered ? (
                     <>
                         <label className="block text-sm font-medium mb-1 text-gray-600">
@@ -261,6 +262,7 @@ export default function WorkspaceViewNote() {
                     </div>
                     </>
                 )}
+                </div>
 
             </div>
         </Layout>
