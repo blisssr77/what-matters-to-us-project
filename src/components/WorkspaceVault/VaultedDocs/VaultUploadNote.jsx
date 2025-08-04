@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { X, Search } from "lucide-react";
 import { encryptText } from "../../../lib/encryption";
 import Layout from "../../Layout/Layout";
-import { file } from "jszip";
 import bcrypt from "bcryptjs"; 
 import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";

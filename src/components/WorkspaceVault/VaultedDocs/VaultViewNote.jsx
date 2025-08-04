@@ -21,28 +21,30 @@ export default function WorkspaceViewNote() {
     const [loading, setLoading] = useState(false);
     const [codeEntered, setCodeEntered] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [isVaulted, setIsVaulted] = useState(false);
 
     // Fetch note data on mount
     useEffect(() => {
         const fetchNote = async () => {
-        if (!id || !activeWorkspaceId) return;
+            if (!id || !activeWorkspaceId) return;
 
-        const { data, error } = await supabase
-            .from("workspace_vault_items")
-            .select("*")
-            .eq("id", id)
-            .eq("workspace_id", activeWorkspaceId)
-            .single();
+            const { data, error } = await supabase
+                .from("workspace_vault_items")
+                .select("*")
+                .eq("id", id)
+                .eq("workspace_id", activeWorkspaceId)
+                .single();
 
-        if (error) {
-            console.error("Error fetching note:", error);
-            setErrorMsg("Note not found or access denied.");
-        } else {
-            setNoteData(data);
-            if (!data.is_vaulted) {
-            setCodeEntered(true); // Auto-show content if not vaulted
+            if (error) {
+                console.error("Error fetching note:", error);
+                setErrorMsg("Note not found or access denied.");
+            } else {
+                setNoteData(data);
+                setIsVaulted(!!data.is_vaulted);
+                if (!data.is_vaulted) {
+                    setCodeEntered(true); // Auto-show content if not vaulted
+                }
             }
-        }
         };
 
         fetchNote();
@@ -222,13 +224,17 @@ export default function WorkspaceViewNote() {
                         </div>
                     )}
 
-                    {/* Display decrypted note content */}
-                    {codeEntered && noteData && (
+                    {isVaulted && (
                         <>
-                            <div className="text-gray-700 font-bold mb-1 text-sm">Private note:</div>
-                            <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
-                                {noteData.is_vaulted ? decryptedNote : "⚠️ Decryption returned nothing."}
-                            </div>
+                        {/* Display decrypted note content */}
+                        {codeEntered && noteData && (
+                            <>
+                                <div className="text-gray-700 font-bold mb-1 text-sm">Private note:</div>
+                                <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
+                                    {noteData.is_vaulted ? decryptedNote : "⚠️ Decryption returned nothing."}
+                                </div>
+                            </>
+                        )}
                         </>
                     )}
 
