@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 import { Loader2, X, Search } from "lucide-react";
@@ -6,6 +6,7 @@ import Layout from "../../Layout/Layout";
 import { encryptText, encryptFile } from "../../../lib/encryption"; 
 import bcrypt from "bcryptjs";
 import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
+import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 
 export default function WorkspaceUploadDoc() {
     const [files, setFiles] = useState([]);
@@ -118,6 +119,17 @@ export default function WorkspaceUploadDoc() {
         if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
         setNewTag("");
     };
+
+    // Message timeout for success/error
+    useEffect(() => {
+        if (successMsg || errorMsg) {
+            const timer = setTimeout(() => {
+                setSuccessMsg("");
+                setErrorMsg("");
+            }, 4000);
+            return () => clearTimeout(timer);
+        }
+    }, [successMsg, errorMsg]);
 
     // Handle file upload
     const handleUpload = async (e) => {
@@ -321,7 +333,13 @@ export default function WorkspaceUploadDoc() {
     return (
         <Layout>
             {/* Unsaved changes confirmation popup */}
-            {showUnsavedPopup && (
+            <UnsavedChangesModal
+                show={showUnsavedPopup}
+                onCancel={() => setShowUnsavedPopup(false)}
+                redirectPath="/workspace/vaults"
+                message="You have unsaved changes. Are you sure you want to leave?"
+            />
+            {/* {showUnsavedPopup && (
                 <div className="fixed top-6 right-6 bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
                     <p className="mt-10 text-gray-800">
                     You have unsaved changes. Are you sure you want to leave?
@@ -341,7 +359,7 @@ export default function WorkspaceUploadDoc() {
                     </button>
                     </div>
                 </div>
-            )}
+            )} */}
 
             <div className="relative max-w-xl mx-auto mt-10 p-6 bg-white rounded shadow border border-gray-200">
                 <button

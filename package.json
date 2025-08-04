@@ -16,7 +16,7 @@
     "crypto-js": "^4.2.0",
     "dayjs": "^1.11.13",
     "file-saver": "^2.0.5",
-    "framer-motion": "^12.22.0",
+    "framer-motion": "^12.23.12",
     "jszip": "^3.10.1",
     "lucide-react": "^0.525.0",
     "react": "^19.1.0",

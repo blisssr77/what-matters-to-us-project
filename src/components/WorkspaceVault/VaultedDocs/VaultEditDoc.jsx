@@ -50,6 +50,17 @@ export default function WorkspaceEditDoc() {
         "application/zip",
         "application/json",
     ];
+
+    // Message timeout for success/error
+    useEffect(() => {
+        if (successMsg || errorMsg) {
+            const timer = setTimeout(() => {
+                setSuccessMsg("");
+                setErrorMsg("");
+            }, 4000);
+            return () => clearTimeout(timer);
+        }
+    }, [successMsg, errorMsg]);
     
     // Fetch document data and tags on mount
     useEffect(() => {
@@ -182,7 +193,7 @@ export default function WorkspaceEditDoc() {
         if (isVaulted) {
             if (!vaultCode) {
                 setUploading(false);
-                setErrorMsg("Please enter your Vault Code to encrypt.");
+                setErrorMsg("Please enter your Vault Code to encrypt the document.");
                 return;
             }
 

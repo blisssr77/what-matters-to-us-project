@@ -5,13 +5,15 @@ import { decryptText, encryptText } from "../../../lib/encryption";
 import Layout from "../../Layout/Layout";
 import { X, Search } from "lucide-react";
 import bcrypt from "bcryptjs";
+import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 
 export default function WorkspaceEditNote() {
     const { id } = useParams();
     const navigate = useNavigate();
 
     const [vaultCode, setVaultCode] = useState("");
-    const [noteData, setNoteData] = useState(null);
+    const [noteData, setNoteData] = useState(null); // Note data fetched from Supabase
+    const [notes, setNotes] = useState(""); // Public notes
     const [loading, setLoading] = useState(false);
     const [editedTitle, setEditedTitle] = useState("");
     const [editedNote, setEditedNote] = useState("");
@@ -21,6 +23,9 @@ export default function WorkspaceEditNote() {
     const [errorMsg, setErrorMsg] = useState("");
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
+    const [isVaulted, setIsVaulted] = useState(false);
+
+    const { activeWorkspaceId } = useWorkspaceStore();
 
     // Tag-related
     const [availableTags, setAvailableTags] = useState([]);
@@ -54,6 +59,8 @@ export default function WorkspaceEditNote() {
                 setNoteData(note);
                 setTags(note.tags || []);
                 setEditedTitle(note.title || "");
+                setIsVaulted(note.is_vaulted || false);
+                setNotes(note.notes || "");
             }
         };
 
@@ -153,8 +160,18 @@ export default function WorkspaceEditNote() {
             return;
         }
 
+        // Step 3: Encrypt and save
+        let encryptedData = "";
+        let iv = "";
+
+        if (isVaulted) {
+            const encrypted = await encryptText(editedNote, vaultCode);
+            encryptedData = encrypted.encryptedData;
+            iv = encrypted.iv;
+        }
+
         try {
-            // Step 3: Encrypt and save
+            // Step 4: Encrypt and save
             const { encryptedData, iv } = await encryptText(editedNote, vaultCode);
 
             const updatedTags = tags
@@ -166,11 +183,13 @@ export default function WorkspaceEditNote() {
                 .update({
                     title: editedTitle,
                     tags: updatedTags,
+                    notes,
                     encrypted_note: encryptedData,
                     note_iv: iv,
                     updated_at: new Date().toISOString(),
                 })
-                .eq("id", id);
+                .eq("id", id)
+                .eq("workspace_id", activeWorkspaceId);
 
             if (updateError) {
                 console.error("Update error:", updateError);
@@ -263,6 +282,7 @@ export default function WorkspaceEditNote() {
 
                 <h2 className="text-xl font-bold mb-5 text-gray-900">✏️ Edit Note</h2>
 
+                {/* Title Input Section */}
                 <label className="text-sm font-medium text-gray-800 mb-1 block">Note title:</label>
                 <input
                     value={editedTitle}
@@ -273,20 +293,20 @@ export default function WorkspaceEditNote() {
                     className="w-full p-2 border rounded mb-3 text-gray-800 font-semibold text-sm bg-gray-50"
                     placeholder="Title"
                 />
-
-                <p className="text-sm text-red-400 mb-1">
-                    🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
-                </p>
-                <textarea
-                    value={editedNote}
-                    onChange={(e) => {
-                        setEditedNote(e.target.value);
-                        setHasUnsavedChanges(true);
-                    }}
-                    rows="8"
-                    className="w-full p-3 border rounded bg-gray-50 text-sm font-medium text-gray-800 leading-relaxed mb-3"
-                    placeholder="Edit your note..."
-                />
+                {/* Public Notes */}
+                <div>
+                    <label className="text-sm font-medium text-gray-800 mb-1 block">Edit public note:</label>
+                    <textarea
+                        value={notes}
+                        onChange={(e) => {
+                            setNotes(e.target.value);
+                            setHasUnsavedChanges(true);
+                        }}
+                        placeholder="Public notes (Visible to shared contacts)"
+                        rows={2}
+                        className="w-full border bg-gray-50 border-gray-300 p-2 rounded font-medium text-gray-800 placeholder-gray-400 text-sm"
+                    />
+                </div>
 
                 {/* Tag Input Section */}
                 <div className="mb-4">
@@ -358,6 +378,21 @@ export default function WorkspaceEditNote() {
                         </div>
                     )}
                 </div>
+
+                {/* Private Note Input */}
+                <p className="text-sm text-red-400 mb-1">
+                    🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
+                </p>
+                <textarea
+                    value={editedNote}
+                    onChange={(e) => {
+                        setEditedNote(e.target.value);
+                        setHasUnsavedChanges(true);
+                    }}
+                    rows="8"
+                    className="w-full p-3 border rounded bg-gray-50 text-sm font-medium text-gray-800 leading-relaxed mb-3"
+                    placeholder="Edit your note..."
+                />
 
                 {/* Vault Code */}
                 <div>

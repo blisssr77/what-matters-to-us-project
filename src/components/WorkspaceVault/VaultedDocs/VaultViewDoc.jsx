@@ -310,8 +310,21 @@ export default function WorkspaceViewDoc() {
         <h2 className="text-xl font-bold text-gray-800 mb-5">📂 View Document</h2>
         {doc?.title && <h3 className="text-lg text-gray-800 font-semibold mb-2">{doc.title}</h3>}
         {doc?.notes && <p className="text-sm text-gray-700 mb-3">{doc.notes}</p>}
+        {/* Tags */}
+        {doc?.tags?.length > 0 && (
+          <div className="mb-4 text-sm text-gray-700">
+            <strong>Tags:</strong>{" "}
+            {doc.tags.map((tag, index) => (
+              <React.Fragment key={tag}>
+                <span className="bg-yellow-50 px-1 rounded">{tag}</span>
+                {index < doc.tags.length - 1 && ", "}
+              </React.Fragment>
+            ))}
+          </div>
+        )}
 
         {/* Display decrypted note if available */}
+        <div className="text-gray-700 mb-1 font-bold text-sm">Private note:</div>
         {entered && decryptedNote && (
           <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
             {decryptedNote}
@@ -349,19 +362,6 @@ export default function WorkspaceViewDoc() {
             <p className="text-sm text-gray-500">🔐 Decrypting document...</p>
           ) : (
             <>
-              {/* Tags */}
-              {doc?.tags?.length > 0 && (
-                <div className="mb-4 text-sm text-gray-700">
-                  <strong>Tags:</strong>{" "}
-                  {doc.tags.map((tag, index) => (
-                    <React.Fragment key={tag}>
-                      <span className="bg-yellow-50 px-1 rounded">{tag}</span>
-                      {index < doc.tags.length - 1 && ", "}
-                    </React.Fragment>
-                  ))}
-                </div>
-              )}
-
               {/* Action buttons */}
               <div className="flex gap-4 text-sm mb-4">
                 <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
