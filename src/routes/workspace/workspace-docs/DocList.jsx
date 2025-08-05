@@ -1,5 +1,5 @@
 import React from "react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Select } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText, Search, ChevronDown, XCircle, Lock } from "lucide-react";
 import Layout from "../../../components/Layout/Layout";
@@ -8,6 +8,7 @@ import { supabase } from "../../../lib/supabaseClient";
 import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import { useUserRole } from "../../../hooks/useUserRole";
 import WorkspaceSelector from "../../../components/WorkspaceVault/VaultedDocs/WorkspaceSelector";
+import InviteModal from "../../../components/common/InviteModal";
 
 
 export default function WorkspaceVaultList() {
@@ -18,9 +19,45 @@ export default function WorkspaceVaultList() {
   const [allTags, setAllTags] = useState([]);
   const [showTagFilter, setShowTagFilter] = useState(false);
   const [tagSearchTerm, setTagSearchTerm] = useState("");
+  const [workspaceList, setWorkspaceList] = useState([]);
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
   const tagBoxRef = useRef();
-  const { activeWorkspaceId } = useWorkspaceStore();
+  const { activeWorkspaceId, setActiveWorkspaceId } = useWorkspaceStore();
+  const userRole = useUserRole(activeWorkspaceId);
+
+
+  if (!activeWorkspaceId && clean.length > 0) {
+    setActiveWorkspaceId(clean[0].id); // Will persist automatically
+  }
+
+  // Fetch workspaces for the user
+  useEffect(() => {
+    const fetchWorkspaces = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("workspace_members")
+        .select("workspace_id, workspaces(id, name)")
+        .eq("user_id", user.id);
+
+      if (!error) {
+        const clean = data.map((row) => row.workspaces);
+        setWorkspaceList(clean);
+
+        // ✅ Set default active workspace if none selected
+        if (!activeWorkspaceId && clean.length > 0) {
+          setActiveWorkspaceId(clean[0].id);
+        }
+      }
+    };
+
+    fetchWorkspaces();
+  }, []);
 
   // Close tag filter when clicking outside
   useEffect(() => {
@@ -72,9 +109,18 @@ export default function WorkspaceVaultList() {
         {/* Buttons Row */}
         <div className="flex justify-end gap-2 mb-4">
           {/* Workspace Selector */}
-          <div className="mb-4">
-            <WorkspaceSelector />
-          </div>
+          <select
+            className="bg-white border border-gray-300 rounded px-3 py-2 text-sm"
+            value={activeWorkspaceId}
+            onChange={(e) => setActiveWorkspaceId(e.target.value)}
+          >
+            {workspaceList.map((ws) => (
+              <option key={ws.id} value={ws.id}>
+                {ws.name}
+              </option>
+            ))}
+          </select>
+
 
           {/* Upload and Create Buttons */}
           <button
@@ -254,6 +300,25 @@ export default function WorkspaceVaultList() {
           })}
         </div>
       </div>
+      
+      {/* Invite Button for Admins/Owner */}
+      {(userRole === "admin" || userRole === "owner") && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <button
+            onClick={() => setShowInviteModal(true)}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-full shadow-md text-sm font-semibold"
+          >
+            + Invite Member
+          </button>
+        </div>
+      )}
+      {/* Invite Modal */}
+      {showInviteModal && (
+        <InviteModal
+          onClose={() => setShowInviteModal(false)}
+          workspaceId={activeWorkspaceId}
+        />
+      )}
     </Layout>
   );
 }
