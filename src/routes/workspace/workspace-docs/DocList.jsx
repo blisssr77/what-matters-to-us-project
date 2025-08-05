@@ -9,7 +9,7 @@ import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import { useUserRole } from "../../../hooks/useUserRole";
 import WorkspaceSelector from "../../../components/WorkspaceVault/VaultedDocs/WorkspaceSelector";
 import InviteModal from "../../../components/common/InviteModal";
-
+import WorkspaceSettingsModal from "../../../components/common/WorkspaceSettingsModal";
 
 export default function WorkspaceVaultList() {
   const navigate = useNavigate();

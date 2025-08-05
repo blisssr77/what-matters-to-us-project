@@ -406,7 +406,7 @@ export default function ManageAccount() {
                         const val = e.target.value;
                         setCurrentPw(val);
 
-                        clearTimeout(currPwTimer);
+                        clearTimeout(currPwTimer.current);
 
                         if (val.length < 6) {
                         setCurrPwStatus("");          // reset if too short
@@ -416,7 +416,7 @@ export default function ManageAccount() {
                         setCurrPwStatus("checking");    // show gray “Checking…”
 
                         // ⏳ wait 3 seconds, then check
-                        currPwTimer = setTimeout(async () => {
+                        currPwTimer.current = setTimeout(async () => {
                         const {
                             data: { session },
                         } = await supabase.auth.getSession();
