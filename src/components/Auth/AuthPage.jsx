@@ -35,29 +35,12 @@ export default function AuthPage() {
     }
 
     try {
+      // Sign In or Sign Up
       const authResult = isLogin
         ? await supabase.auth.signInWithPassword({ email, password })
         : await supabase.auth.signUp({ email, password });
 
       if (authResult.error) throw authResult.error;
-
-      if (!isLogin) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
-        if (user) {
-          await supabase.from("profiles").insert({
-            id: user.id,
-            email: email,
-          });
-        }
-
-        // Continue with email confirmation...
-        setConfirmationEmailSent(true);
-        setIsLogin(true);
-        return;
-      }
 
       const {
         data: { user },
@@ -70,36 +53,93 @@ export default function AuthPage() {
 
       const userId = user.id;
 
-      // Create Workspace
-      const { data: workspaceData, error: workspaceError } = await supabase
+      if (!isLogin) {
+        // Create profile only during sign-up
+        await supabase.from("profiles").insert({
+          id: userId,
+          email,
+          username: email.split("@")[0],
+        });
+
+        // Show confirmation message
+        setConfirmationEmailSent(true);
+        setIsLogin(true);
+        return;
+      }
+
+      // === Workspace creation happens only if none exist ===
+
+      // 1. Check if user already has any workspaces
+      const { data: workspaces, error: workspaceFetchError } = await supabase
         .from("workspaces")
-        .insert({
-          name: "My First Workspace",
-          created_by: userId
-        })
+        .select("*")
+        .eq("created_by", userId)
+        .limit(1); // Only check for existence
+
+      if (workspaceFetchError) {
+        console.error("❌ Error fetching workspaces:", workspaceFetchError);
+        setError("Failed to fetch workspace.");
+        return;
+      }
+
+      let workspaceData;
+
+      // 2. If none found, create a new one
+      if (!workspaces || workspaces.length === 0) {
+        const { data: workspaceArr, error: workspaceError } = await supabase
+          .from("workspaces")
+          .insert({ name: "My First Workspace", created_by: userId, role: "owner" })
+          .select();
+
+        if (workspaceError || !workspaceArr?.[0]) {
+          console.error("❌ Workspace creation failed:", workspaceError);
+          setError("Failed to create workspace.");
+          return;
+        }
+
+        workspaceData = workspaceArr[0];
+      } else {
+        workspaceData = workspaces[0];
+      }
+
+      // 3. Check if the user is already a member of any workspace
+      const { data: memberships, error: memberFetchError } = await supabase
+        .from("workspace_members")
         .select("id")
-        .single();
+        .eq("user_id", userId)
+        .limit(1);
 
-      if (workspaceError || !workspaceData?.id) {
-        setError("Failed to create workspace.");
-        return;
+      if (memberFetchError) {
+        console.error("❌ Error checking membership:", memberFetchError);
       }
 
-      // Add Membership Row
-      const { data: memberData, error: memberError } = await supabase.from("workspace_members").insert({
-        user_id: userId,
-        workspace_id: workspaceData.id,
-        role: "owner"
-      }).select();
+      // 4. Insert membership only if none exist
+      if (!memberships || memberships.length === 0) {
+        const { error: insertError } = await supabase
+          .from("workspace_members")
+          .insert({
+            user_id: userId,
+            workspace_id: workspaceData.id,
+            role: "owner", // Default role for the first member
+            is_admin: true, 
+          });
 
-      if (memberError) {
-        setError("Failed to create workspace membership.");
-        return;
+        if (insertError) {
+          console.error("❌ Insert error:", insertError);
+          setError("Failed to create workspace membership.");
+          return;
+        }
+
+        console.log("✅ Workspace member inserted successfully.");
+      } else {
+        console.log("⚠️ User already a member of a workspace, skipping insert.");
       }
-      console.log("Workspace member inserted successfully. Data:", memberData);
 
+
+      // Navigate to dashboard
       navigate("/dashboard");
     } catch (err) {
+      console.error("❌ Auth error:", err);
       setError(err.message);
     } finally {
       setLoading(false);

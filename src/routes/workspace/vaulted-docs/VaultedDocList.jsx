@@ -1,14 +1,13 @@
 import React from "react";
-import { useState, useEffect, useRef, Select } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, Search, ChevronDown, XCircle, Lock } from "lucide-react";
+import { FileText, Search, ChevronDown, XCircle } from "lucide-react";
 import Layout from "../../../components/Layout/Layout";
 import dayjs from "dayjs";
 import { supabase } from "../../../lib/supabaseClient";
 import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import { useUserRole } from "../../../hooks/useUserRole";
 import WorkspaceSelector from "../../../components/WorkspaceVault/VaultedDocs/WorkspaceSelector";
-import InviteModal from "../../../components/common/InviteModal";
 
 
 export default function WorkspaceVaultList() {
@@ -19,113 +18,9 @@ export default function WorkspaceVaultList() {
   const [allTags, setAllTags] = useState([]);
   const [showTagFilter, setShowTagFilter] = useState(false);
   const [tagSearchTerm, setTagSearchTerm] = useState("");
-  const [workspaceList, setWorkspaceList] = useState([]);
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [members, setMembers] = useState([]);
-  const [workspaceName, setWorkspaceName] = useState("");
 
   const tagBoxRef = useRef();
-  const { activeWorkspaceId, setActiveWorkspaceId } = useWorkspaceStore();
-  const userRole = useUserRole(activeWorkspaceId);
-
-
-  if (!activeWorkspaceId && clean.length > 0) {
-    setActiveWorkspaceId(clean[0].id); // Will persist automatically
-  }
-
-  // Fetch workspaces.name for the user
-  useEffect(() => {
-    const fetchWorkspaces = async () => {
-      if (!activeWorkspaceId) return;
-
-      const { data, error } = await supabase
-        .from("workspaces")
-        .select("name")
-        .eq("id", activeWorkspaceId)
-        .single();
-        
-        if (error) {
-          console.error("❌ Failed to fetch workspace name:", error);
-        } else {
-          setWorkspaceName(data.name);
-        }
-      };
-    fetchWorkspaces();
-  }, [activeWorkspaceId]);
-
-  // Insert profile if it doesn't exist, from AuthPage.jsx and Google signup
-  useEffect(() => {
-    const insertProfileIfNeeded = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) return;
-
-      const { data: existingProfile, error } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("id", user.id)
-        .single();
-
-      if (!existingProfile && !error) {
-        await supabase.from("profiles").insert({
-          id: user.id,
-          email: user.email,
-        });
-      }
-    };
-
-    insertProfileIfNeeded();
-  }, []);
-
-  // Fetch workspaces for the user
-  useEffect(() => {
-    const fetchWorkspaces = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from("workspace_members")
-        .select("workspace_id, workspaces(id, name)")
-        .eq("user_id", user.id);
-
-      if (!error) {
-        const clean = data.map((row) => row.workspaces);
-        setWorkspaceList(clean);
-
-        // ✅ Set default active workspace if none selected
-        if (!activeWorkspaceId && clean.length > 0) {
-          setActiveWorkspaceId(clean[0].id);
-        }
-      }
-    };
-
-    fetchWorkspaces();
-  }, []);
-
-  // Fetch members of the active workspace
-  useEffect(() => {
-    const fetchMembers = async () => {
-      if (!activeWorkspaceId) return;
-
-      const { data, error } = await supabase
-        .from("workspace_members")
-        .select("id, role, invited_by_name, profiles!workspace_members_user_id_fkey(username)")
-        .eq("workspace_id", activeWorkspaceId);
-
-      if (error) {
-        console.error("❌ Failed to fetch members:", error);
-      } else {
-        setMembers(data); 
-      }
-    };
-
-    fetchMembers();
-  }, [activeWorkspaceId]);
+  const { activeWorkspaceId } = useWorkspaceStore();
 
   // Close tag filter when clicking outside
   useEffect(() => {
@@ -177,18 +72,9 @@ export default function WorkspaceVaultList() {
         {/* Buttons Row */}
         <div className="flex justify-end gap-2 mb-4">
           {/* Workspace Selector */}
-          <select
-            className="bg-white border border-gray-300 rounded px-3 py-2 text-sm"
-            value={activeWorkspaceId}
-            onChange={(e) => setActiveWorkspaceId(e.target.value)}
-          >
-            {workspaceList.map((ws) => (
-              <option key={ws.id} value={ws.id}>
-                {ws.name}
-              </option>
-            ))}
-          </select>
-
+          <div className="mb-4">
+            <WorkspaceSelector />
+          </div>
 
           {/* Upload and Create Buttons */}
           <button
@@ -207,7 +93,7 @@ export default function WorkspaceVaultList() {
         </div>
 
         {/* Title */}
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">{workspaceName}</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">🔐 My Vaulted Documents</h2>
 
         {/* Search and Tag Filters */}
         <div className="flex flex-wrap md:flex-nowrap justify-between items-start gap-4 mb-6">
@@ -294,7 +180,6 @@ export default function WorkspaceVaultList() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {filteredDocs.map((doc) => {
             const hasFiles = Array.isArray(doc.file_metas) && doc.file_metas.length > 0;
-            const isVaulted = !!doc.is_vaulted;
 
             return (
               <div
@@ -302,65 +187,54 @@ export default function WorkspaceVaultList() {
                 onClick={() =>
                   navigate(
                     hasFiles
-                      ? `/workspace/vaults/doc-view/${doc.id}`
+                      ? `/workspace/vaults/doc-view/${doc.id}` // 🔐 Encrypted document
                       : `/workspace/vaults/note-view/${doc.id}`
                   )
                 }
-                className={`relative cursor-pointer rounded-xl shadow-md p-4 hover:shadow-lg transition border hover:border-purple-700 ${
-                  isVaulted ? "bg-gray-200 border-gray-300" : "bg-white border-purple-200"
-                }`}
+                className="cursor-pointer bg-white border border-gray-200 rounded-xl shadow-md p-4 hover:shadow-lg transition"
               >
-                {/* Title + Icon */}
                 <div className="flex items-center gap-3 mb-3">
-                  {isVaulted ? (
-                    <Lock className="text-purple-600" size={22} />
-                  ) : (
-                    <FileText className="text-purple-500" size={22} />
-                  )}
+                  <FileText className="text-purple-500" size={22} />
                   <div className="text-lg text-gray-800 font-semibold truncate">
                     {doc.title || doc.name || "Untitled"}
                   </div>
                 </div>
 
-                {/* Tags */}
                 {doc.tags?.length > 0 && (
                   <div className="mb-2 text-xs text-gray-700">
                     <strong>Tags:</strong>{" "}
+                    {/* Map over each tag to apply individual styling */}
                     {doc.tags.map((tag, index) => (
-                      <React.Fragment key={tag}>
-                        <span className="bg-yellow-50 px-1 rounded">{tag}</span>
+                      <React.Fragment key={tag}> 
+                        <span className="bg-yellow-50 px-1 rounded">
+                          {tag}
+                        </span>
+                        {/* Add a comma and space after each tag, except the last one */}
                         {index < doc.tags.length - 1 && ", "}
                       </React.Fragment>
                     ))}
                   </div>
                 )}
 
-                {/* Public Note */}
-                {doc.notes && <p className="text-sm text-gray-800 mb-2">{doc.notes}</p>}
+                {doc.notes && (
+                  <p className="text-sm text-gray-800 mb-2">{doc.notes}</p>
+                )}
 
-                {/* Timestamps */}
                 {doc.updated_at && doc.updated_at !== doc.created_at && (
                   <div className="text-xs text-gray-400 mb-1">
                     <strong>Last Modified:</strong>{" "}
                     {dayjs(doc.updated_at).format("MMM D, YYYY h:mm A")}
                   </div>
                 )}
+
                 <div className="text-xs text-gray-400">
                   <strong>Uploaded:</strong>{" "}
                   {dayjs(doc.created_at).format("MMM D, YYYY h:mm A")}
                 </div>
 
-                {/* File Flag */}
                 {hasFiles && (
                   <div className="text-xs text-red-500 font-semibold mt-2">
                     - Contains file -
-                  </div>
-                )}
-
-                {/* Vaulted Label */}
-                {isVaulted && (
-                  <div className="absolute top-2 right-2 text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full shadow-sm">
-                    Vaulted
                   </div>
                 )}
               </div>
@@ -368,38 +242,6 @@ export default function WorkspaceVaultList() {
           })}
         </div>
       </div>
-
-      {/* Workspace Members Section */}
-      {members.length === 0 ? (
-        <div className="text-sm text-gray-400">No members found in this workspace.</div>
-      ) : (
-        members.map((m) => (
-          <div key={m.id} className="flex justify-between border p-3 rounded-lg shadow-sm bg-white">
-            <div className="font-medium text-gray-800">{m.profiles?.username || "Unknown User"}</div>
-            <div className="text-sm text-gray-500">{m.role}</div>
-            <div className="text-xs text-gray-400">Invited by {m.invited_by_name}</div>
-          </div>
-        ))
-      )}
-
-      {/* Invite Button for Admins/Owner */}
-      {(userRole === "admin" || userRole === "owner") && (
-        <div className="fixed bottom-6 right-6 z-50">
-          <button
-            onClick={() => setShowInviteModal(true)}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-full shadow-md text-sm font-semibold"
-          >
-            + Invite Member
-          </button>
-        </div>
-      )}
-      {/* Invite Modal */}
-      {showInviteModal && (
-        <InviteModal
-          onClose={() => setShowInviteModal(false)}
-          workspaceId={activeWorkspaceId}
-        />
-      )}
     </Layout>
   );
 }
