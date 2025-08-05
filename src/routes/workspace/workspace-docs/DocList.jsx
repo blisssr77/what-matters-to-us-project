@@ -1,7 +1,7 @@
 import React from "react";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, Search, ChevronDown, XCircle } from "lucide-react";
+import { FileText, Search, ChevronDown, XCircle, Lock } from "lucide-react";
 import Layout from "../../../components/Layout/Layout";
 import dayjs from "dayjs";
 import { supabase } from "../../../lib/supabaseClient";
@@ -180,6 +180,7 @@ export default function WorkspaceVaultList() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {filteredDocs.map((doc) => {
             const hasFiles = Array.isArray(doc.file_metas) && doc.file_metas.length > 0;
+            const isVaulted = !!doc.is_vaulted;
 
             return (
               <div
@@ -187,54 +188,65 @@ export default function WorkspaceVaultList() {
                 onClick={() =>
                   navigate(
                     hasFiles
-                      ? `/workspace/vaults/doc-view/${doc.id}` // 🔐 Encrypted document
+                      ? `/workspace/vaults/doc-view/${doc.id}`
                       : `/workspace/vaults/note-view/${doc.id}`
                   )
                 }
-                className="cursor-pointer bg-white border border-gray-200 rounded-xl shadow-md p-4 hover:shadow-lg transition"
+                className={`relative cursor-pointer rounded-xl shadow-md p-4 hover:shadow-lg transition border hover:border-purple-700 ${
+                  isVaulted ? "bg-gray-200 border-gray-300" : "bg-white border-purple-200"
+                }`}
               >
+                {/* Title + Icon */}
                 <div className="flex items-center gap-3 mb-3">
-                  <FileText className="text-purple-500" size={22} />
+                  {isVaulted ? (
+                    <Lock className="text-purple-600" size={22} />
+                  ) : (
+                    <FileText className="text-purple-500" size={22} />
+                  )}
                   <div className="text-lg text-gray-800 font-semibold truncate">
                     {doc.title || doc.name || "Untitled"}
                   </div>
                 </div>
 
+                {/* Tags */}
                 {doc.tags?.length > 0 && (
                   <div className="mb-2 text-xs text-gray-700">
                     <strong>Tags:</strong>{" "}
-                    {/* Map over each tag to apply individual styling */}
                     {doc.tags.map((tag, index) => (
-                      <React.Fragment key={tag}> 
-                        <span className="bg-yellow-50 px-1 rounded">
-                          {tag}
-                        </span>
-                        {/* Add a comma and space after each tag, except the last one */}
+                      <React.Fragment key={tag}>
+                        <span className="bg-yellow-50 px-1 rounded">{tag}</span>
                         {index < doc.tags.length - 1 && ", "}
                       </React.Fragment>
                     ))}
                   </div>
                 )}
 
-                {doc.notes && (
-                  <p className="text-sm text-gray-800 mb-2">{doc.notes}</p>
-                )}
+                {/* Public Note */}
+                {doc.notes && <p className="text-sm text-gray-800 mb-2">{doc.notes}</p>}
 
+                {/* Timestamps */}
                 {doc.updated_at && doc.updated_at !== doc.created_at && (
                   <div className="text-xs text-gray-400 mb-1">
                     <strong>Last Modified:</strong>{" "}
                     {dayjs(doc.updated_at).format("MMM D, YYYY h:mm A")}
                   </div>
                 )}
-
                 <div className="text-xs text-gray-400">
                   <strong>Uploaded:</strong>{" "}
                   {dayjs(doc.created_at).format("MMM D, YYYY h:mm A")}
                 </div>
 
+                {/* File Flag */}
                 {hasFiles && (
                   <div className="text-xs text-red-500 font-semibold mt-2">
                     - Contains file -
+                  </div>
+                )}
+
+                {/* Vaulted Label */}
+                {isVaulted && (
+                  <div className="absolute top-2 right-2 text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full shadow-sm">
+                    Vaulted
                   </div>
                 )}
               </div>
