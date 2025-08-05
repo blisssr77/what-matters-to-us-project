@@ -10,20 +10,24 @@ export default function InviteModal({ onClose, workspaceId }) {
   const [loading, setLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
+  // Handle changes in the invitation rows
   const handleChange = (index, field, value) => {
     const updated = [...invitations];
     updated[index][field] = value;
     setInvitations(updated);
   };
 
+  // Add a new row for invitation
   const addRow = () => {
     setInvitations([...invitations, { identifier: "", role: "viewer" }]);
   };
 
+  // Remove a row from the invitation list
   const removeRow = (index) => {
     setInvitations(invitations.filter((_, i) => i !== index));
   };
 
+  // Handle the invitation logic
   const handleInvite = async () => {
     setLoading(true);
     setErrorMsg("");
@@ -76,11 +80,19 @@ export default function InviteModal({ onClose, workspaceId }) {
         continue;
       }
 
+      // Check if the user is already a member of the workspace
       const { error: inviteError } = await supabase.from("workspace_members").insert({
-        user_id: profile.id,
+        user_id: invitedUser.id, // 
         workspace_id: workspaceId,
         role,
-        invited_by: user.id,
+        invited_by: user.id, 
+        invited_by_name: profile?.username || profile?.email || "Unknown",
+      });
+
+      // 🔔 Send in-app notification
+      await supabase.from("notifications").insert({
+        user_id: invitedUser.id,
+        message: `${profile?.username || profile?.email || "Someone"} invited you to a workspace.`,
       });
 
       if (inviteError) {
@@ -106,25 +118,25 @@ export default function InviteModal({ onClose, workspaceId }) {
       <div className="fixed inset-0 z-50 bg-black bg-opacity-40 flex items-center justify-center">
         <div className="bg-white p-6 rounded-xl w-full max-w-md shadow-lg relative">
           <button className="absolute top-3 right-3 text-gray-400" onClick={onClose}>✕</button>
-          <h2 className="text-lg font-semibold mb-4">Invite Members</h2>
+          <h2 className="text-lg text-gray-800 font-semibold mb-4">Invite Members</h2>
 
           {invitations.map((invite, index) => (
             <div key={index} className="mb-3">
               <input
-                className="w-full p-2 border rounded mb-1 text-sm"
+                className="w-full p-2 border rounded mb-1 text-sm text-gray-800"
                 placeholder="User Email or Username"
                 value={invite.identifier}
                 onChange={(e) => handleChange(index, "identifier", e.target.value)}
               />
-              <div className="flex gap-2">
+              <div className="flex gap-2 text-gray-400">
                 <select
                   className="w-full p-2 border rounded text-sm"
                   value={invite.role}
                   onChange={(e) => handleChange(index, "role", e.target.value)}
                 >
-                  <option value="viewer">Viewer</option>
-                  <option value="member">Member</option>
-                  <option value="admin">Admin</option>
+                  <option value="viewer">Viewer - Can view documents</option>
+                  <option value="member">Member - Can view/edit documents</option>
+                  <option value="admin">Admin - Full access, including inviting members</option>
                 </select>
                 {invitations.length > 1 && (
                   <button
@@ -144,8 +156,8 @@ export default function InviteModal({ onClose, workspaceId }) {
 
           <input
             type="password"
-            className="w-full p-2 border rounded mb-3 text-sm"
-            placeholder="Vault Code"
+            className="w-full p-2 border rounded mb-3 text-sm text-gray-800"
+            placeholder="Workspace Vault Code"
             value={vaultCode}
             onChange={(e) => setVaultCode(e.target.value)}
           />

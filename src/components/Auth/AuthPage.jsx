@@ -42,7 +42,18 @@ export default function AuthPage() {
       if (authResult.error) throw authResult.error;
 
       if (!isLogin) {
-        // Signup success (no auto-login yet), show confirmation message
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (user) {
+          await supabase.from("profiles").insert({
+            id: user.id,
+            email: email,
+          });
+        }
+
+        // Continue with email confirmation...
         setConfirmationEmailSent(true);
         setIsLogin(true);
         return;
@@ -78,8 +89,7 @@ export default function AuthPage() {
       const { data: memberData, error: memberError } = await supabase.from("workspace_members").insert({
         user_id: userId,
         workspace_id: workspaceData.id,
-        role: "owner",
-        is_admin: true
+        role: "owner"
       }).select();
 
       if (memberError) {

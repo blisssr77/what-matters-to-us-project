@@ -21,6 +21,7 @@ export default function WorkspaceVaultList() {
   const [tagSearchTerm, setTagSearchTerm] = useState("");
   const [workspaceList, setWorkspaceList] = useState([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [members, setMembers] = useState([]);
 
   const tagBoxRef = useRef();
   const { activeWorkspaceId, setActiveWorkspaceId } = useWorkspaceStore();
@@ -30,6 +31,32 @@ export default function WorkspaceVaultList() {
   if (!activeWorkspaceId && clean.length > 0) {
     setActiveWorkspaceId(clean[0].id); // Will persist automatically
   }
+
+  // Insert profile if it doesn't exist, from AuthPage.jsx and Google signup
+  useEffect(() => {
+    const insertProfileIfNeeded = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { data: existingProfile, error } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", user.id)
+        .single();
+
+      if (!existingProfile && !error) {
+        await supabase.from("profiles").insert({
+          id: user.id,
+          email: user.email,
+        });
+      }
+    };
+
+    insertProfileIfNeeded();
+  }, []);
 
   // Fetch workspaces for the user
   useEffect(() => {
@@ -58,6 +85,26 @@ export default function WorkspaceVaultList() {
 
     fetchWorkspaces();
   }, []);
+
+  // Fetch members of the active workspace
+  useEffect(() => {
+    const fetchMembers = async () => {
+      if (!activeWorkspaceId) return;
+
+      const { data, error } = await supabase
+        .from("workspace_members")
+        .select("id, role, invited_by_name, profiles(username)")
+        .eq("workspace_id", activeWorkspaceId);
+
+      if (error) {
+        console.error("❌ Failed to fetch members:", error);
+      } else {
+        setMembers(data); 
+      }
+    };
+
+    fetchMembers();
+  }, [activeWorkspaceId]);
 
   // Close tag filter when clicking outside
   useEffect(() => {
@@ -300,7 +347,20 @@ export default function WorkspaceVaultList() {
           })}
         </div>
       </div>
-      
+
+      {/* Workspace Members Section */}
+      {members.length === 0 ? (
+        <div className="text-sm text-gray-400">No members found in this workspace.</div>
+      ) : (
+        members.map((m) => (
+          <div key={m.id} className="flex justify-between border p-3 rounded-lg shadow-sm bg-white">
+            <div className="font-medium text-gray-800">{m.profiles?.username || "Unknown User"}</div>
+            <div className="text-sm text-gray-500">{m.role}</div>
+            <div className="text-xs text-gray-400">Invited by {m.invited_by_name}</div>
+          </div>
+        ))
+      )}
+
       {/* Invite Button for Admins/Owner */}
       {(userRole === "admin" || userRole === "owner") && (
         <div className="fixed bottom-6 right-6 z-50">
