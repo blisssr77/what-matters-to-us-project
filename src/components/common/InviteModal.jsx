@@ -82,7 +82,7 @@ export default function InviteModal({ onClose, workspaceId }) {
 
       // Check if the user is already a member of the workspace
       const { error: inviteError } = await supabase.from("workspace_members").insert({
-        user_id: invitedUser.id, // 
+        user_id: profile.id, // 
         workspace_id: workspaceId,
         role,
         invited_by: user.id, 
@@ -91,7 +91,7 @@ export default function InviteModal({ onClose, workspaceId }) {
 
       // 🔔 Send in-app notification
       await supabase.from("notifications").insert({
-        user_id: invitedUser.id,
+        user_id: profile.id,
         message: `${profile?.username || profile?.email || "Someone"} invited you to a workspace.`,
       });
 
@@ -179,7 +179,7 @@ export default function InviteModal({ onClose, workspaceId }) {
       {showSuccessModal && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm">
-            <h3 className="text-lg font-semibold mb-4">🎉 Invitation Sent!</h3>
+            <h3 className="text-lg font-semibold mb-4 text-gray-800">🎉 Invitation Sent!</h3>
             <p className="text-sm text-gray-700 mb-4">{successMsg}</p>
             <button
               onClick={() => {

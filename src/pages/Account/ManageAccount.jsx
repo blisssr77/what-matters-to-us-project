@@ -117,6 +117,7 @@ export default function ManageAccount() {
         // Upsert first
         const { error: upsertErr } = await supabase.from("profiles").upsert(
             {
+            updated_at: new Date().toISOString(),
             id: user.id,
             first_name: firstName,
             last_name: lastName,

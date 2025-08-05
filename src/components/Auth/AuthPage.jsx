@@ -56,6 +56,7 @@ export default function AuthPage() {
       if (!isLogin) {
         // Create profile only during sign-up
         await supabase.from("profiles").insert({
+          created_at: new Date().toISOString(),
           id: userId,
           email,
           username: email.split("@")[0],
