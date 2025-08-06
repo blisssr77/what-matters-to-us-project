@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, Settings, LogOut, Shield } from "lucide-react";
-import { supabase } from "../../lib/supabaseClient";    // adjust path
+import { supabase } from "../../lib/supabaseClient"; 
 
 /* --- Topbar component --- */
 export default function Topbar({ userName = "Robin" }) {
@@ -26,7 +26,7 @@ export default function Topbar({ userName = "Robin" }) {
       transition={{ type: "spring", stiffness: 70, delay: 0.2 }}
       className="w-full h-16 px-6 flex items-center justify-between bg-gray-950/80 backdrop-blur-md border-b border-gray-800 text-white shadow-lg z-[100]"
     >
-      <h2 className="text-xl font-semibold bg-gradient-to-r from-purple-400 via-indigo-400 to-blue-400 bg-clip-text text-transparent animate-pulse-slow">
+      <h2 className="text-xl font-bold bg-gradient-to-r from-purple-400 via-indigo-400 to-blue-400 bg-clip-text text-transparent animate-pulse-slow">
         {location.pathname.includes("/workspace")
           ? "Workspace Vaults"
           : location.pathname.includes("/private")
@@ -37,7 +37,7 @@ export default function Topbar({ userName = "Robin" }) {
       {/* Profile button */}
       <div className="relative" ref={menuRef}>
         <motion.div
-          whileHover={{ scale: 1.08, boxShadow: "0 0 14px rgba(168,85,247,0.8)" }}
+          whileHover={{ scale: 1.08, boxShadow: "0 0 12px rgba(168,85,247,0.8)" }}
           className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center cursor-pointer ring-1 ring-purple-500/30"
           onClick={() => setOpen((p) => !p)}
         >

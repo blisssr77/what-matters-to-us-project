@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
+  Users,
   FolderKanban,
   MessageCircle,
   CalendarDays,
@@ -43,8 +44,8 @@ export default function Sidebar() {
       <div>
         <div className="flex items-center justify-between p-4">
           {!collapsed && (
-            <h1 className="text-xl font-bold text-purple-500 tracking-wide whitespace-nowrap">
-              🔐 WhatMatters
+            <h1 className="text-2xl font-extrabold bg-gradient-to-r from-purple-500 via-indigo-200 to-blue-500 bg-clip-text text-transparent animate-pulse-slow">
+              WhatMatters
             </h1>
           )}
           <button onClick={() => setCollapsed(!collapsed)}>
@@ -53,7 +54,7 @@ export default function Sidebar() {
         </div>
 
         <ul className="space-y-1">
-          {navLink("Dashboard", <LayoutDashboard size={18} />, "/dashboard")}
+          {navLink("Dashboard", <LayoutDashboard size={18} />, "/dashboard", "text-sm")}
 
           <hr className="my-6 border-gray-800" />
 
@@ -62,9 +63,13 @@ export default function Sidebar() {
             onClick={() => setWorkspaceOpen(!workspaceOpen)}
             className="flex items-center justify-between px-4 py-2 rounded hover:bg-gray-800 cursor-pointer"
           >
-            <div className="flex items-center gap-3 text-purple-400">
-              <FolderKanban size={18} />
-              {!collapsed && <span>Workspace Vault</span>}
+            <div className="flex items-center gap-3">
+              <Users size={18} className="text-purple-400" />
+              {!collapsed && (
+                <span className="bg-gradient-to-r from-purple-400 via-indigo-400 to-blue-400 bg-clip-text text-transparent animate-pulse-slow">
+                  Workspace Vault
+                </span>
+              )}
             </div>
             {!collapsed &&
               (workspaceOpen ? (
@@ -80,13 +85,13 @@ export default function Sidebar() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                className="ml-5 border-l border-gray-800 pl-3 space-y-1"
+                className="ml-5 border-l border-gray-800 pl-3 space-y-1 text-xs"
               >
-                {navLink("Projects Planner", <FolderKanban size={16} />, "/workspace/projects", "text-sm")}
-                {navLink("Messenger", <MessageCircle size={16} />, "/workspace/messenger", "text-sm")}
-                {navLink("Calendar", <CalendarDays size={16} />, "/workspace/calendar", "text-sm")}
-                {navLink("Documents", <FileText size={16} />, "/workspace/documents", "text-sm")}
-                {navLink("Vaulted Documents", <Lock size={16} />, "/workspace/vaults", "text-sm")}
+                {navLink("Projects Planner", <FolderKanban size={16} />, "/workspace/projects", "text-xs")}
+                {navLink("Messenger", <MessageCircle size={16} />, "/workspace/messenger", "text-xs")}
+                {navLink("Calendar", <CalendarDays size={16} />, "/workspace/calendar", "text-xs")}
+                {navLink("Documents", <FileText size={16} />, "/workspace/documents", "text-xs")}
+                {navLink("Vaulted Documents", <Lock size={16} />, "/workspace/vaults", "text-xs")}
               </motion.ul>
             )}
           </AnimatePresence>
@@ -98,9 +103,13 @@ export default function Sidebar() {
             onClick={() => setPrivateOpen(!privateOpen)}
             className="flex items-center justify-between px-4 py-2 rounded hover:bg-gray-800 cursor-pointer"
           >
-            <div className="flex items-center gap-3 text-purple-400">
-              <Lock size={18} />
-              {!collapsed && <span>My Private Vault</span>}
+            <div className="flex items-center gap-3">
+              <Lock size={18} className="text-purple-400" />
+              {!collapsed && (
+                <span className="bg-gradient-to-r from-purple-400 via-indigo-400 to-blue-400 bg-clip-text text-transparent animate-pulse-slow">
+                  My Private Vault
+                </span>
+              )}
             </div>
             {!collapsed &&
               (privateOpen ? (
@@ -116,13 +125,13 @@ export default function Sidebar() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                className="ml-5 border-l border-gray-800 pl-3 space-y-1"
+                className="ml-5 border-l border-gray-800 pl-3 space-y-1 text-xs"
               >
-                {navLink("Projects Planner", <FolderKanban size={16} />, "/private/projects", "text-sm")}
-                {navLink("Messenger", <MessageCircle size={16} />, "/private/messenger", "text-sm")}
-                {navLink("Calendar", <CalendarDays size={16} />, "/private/calendar", "text-sm")}
-                {navLink("Documents", <FileText size={16} />, "/private/documents", "text-sm")}
-                {navLink("Vaulted Documents", <Lock size={16} />, "/private/vaults", "text-sm")}
+                {navLink("Projects Planner", <FolderKanban size={16} />, "/private/projects", "text-xs")}
+                {navLink("Messenger", <MessageCircle size={16} />, "/private/messenger", "text-xs")}
+                {navLink("Calendar", <CalendarDays size={16} />, "/private/calendar", "text-xs")}
+                {navLink("Documents", <FileText size={16} />, "/private/documents", "text-xs")}
+                {navLink("Vaulted Documents", <Lock size={16} />, "/private/vaults", "text-xs")}
               </motion.ul>
             )}
           </AnimatePresence>
@@ -139,7 +148,7 @@ export default function Sidebar() {
           await supabase.auth.signOut();
           navigate("/");
         }}
-        className="flex items-center gap-2 text-base hover:text-red-400 transition p-4"
+        className="flex items-center gap-2 hover:text-red-400 transition p-4 text-sm"
       >
         <LogOut size={18} />
         {!collapsed && "Log Out"}

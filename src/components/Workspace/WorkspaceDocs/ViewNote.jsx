@@ -169,16 +169,16 @@ export default function WorkspaceViewNote() {
                     <X size={20} />
                 </button>
 
-                <h2 className="text-xl font-bold mb-5 text-gray-900">🔓 View Note</h2>
-                {noteData?.title && <h3 className="text-lg text-gray-800 font-semibold mb-3">{noteData.title}</h3>}
-                {noteData?.notes && <p className="text-s text-gray-700 mb-4">{noteData.notes}</p>}
+                <h2 className="text-lg font-bold mb-4 text-gray-900">🔓 View Note</h2>
+                {noteData?.title && <h3 className="text-md text-gray-800 font-semibold mb-2">{noteData.title}</h3>}
+                {noteData?.notes && <p className="text-sm text-gray-700 mb-4">{noteData.notes}</p>}
                 {/* Display tags content */}
                 {Array.isArray(noteData?.tags) && noteData.tags.length > 0 && (
-                    <div className="mb-3 text-sm text-gray-700">
-                        <strong>Tags:</strong>{" "}
+                    <div className="mb-3 text-sm text-gray-900 font-medium">
+                        Tags:{" "}
                         {noteData.tags.map((tag, index) => (
                         <React.Fragment key={tag}>
-                            <span className="bg-yellow-50 px-1 rounded">{tag}</span>
+                            <span className="bg-yellow-50 px-1 rounded font-extralight">{tag}</span>
                             {index < noteData.tags.length - 1 && ", "}
                         </React.Fragment>
                         ))}
@@ -188,7 +188,7 @@ export default function WorkspaceViewNote() {
                 <div>
                 {noteData?.is_vaulted && !codeEntered ? (
                     <>
-                        <label className="block text-sm font-medium mb-1 text-gray-600">
+                        <label className="block text-sm mt-6 font-medium mb-1 text-gray-900">
                             Enter <strong>Private</strong> Vault Code to Decrypt Note:
                         </label>
                         <input
@@ -229,7 +229,7 @@ export default function WorkspaceViewNote() {
                         {/* Display decrypted note content */}
                         {codeEntered && noteData && (
                             <>
-                                <div className="text-gray-700 font-bold mb-1 text-sm">Private note:</div>
+                                <div className="text-gray-900 mb-1 text-sm font-medium">Private note:</div>
                                 <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
                                     {noteData.is_vaulted ? decryptedNote : "⚠️ Decryption returned nothing."}
                                 </div>

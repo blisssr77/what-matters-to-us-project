@@ -147,13 +147,13 @@ export default function VaultViewNote() {
                     <X size={20} />
                 </button>
 
-                <h2 className="text-xl font-bold mb-5 text-gray-900">🔓 View Note</h2>
-                {noteData?.title && <h3 className="text-lg text-gray-800 font-semibold mb-3">{noteData.title}</h3>}
-                {noteData?.notes && <p className="text-s text-gray-700 mb-4">{noteData.notes}</p>}
+                <h2 className="text-lg font-bold mb-5 text-gray-900">🔓 View Note</h2>
+                {noteData?.title && <h3 className="text-md text-gray-800 font-semibold mb-3">{noteData.title}</h3>}
+                {noteData?.notes && <p className="text-sm text-gray-700 mb-4">{noteData.notes}</p>}
 
                 {!codeEntered ? (
                     <>
-                        <label className="block text-sm font-medium mb-1 text-gray-600">
+                        <label className="block text-sm font-medium mb-1 mt-6 text-gray-600">
                             Enter <strong>Private</strong> Vault Code to Decrypt Note:
                         </label>
                         <input
@@ -179,12 +179,12 @@ export default function VaultViewNote() {
                 ) : (
                     <>
                         {noteData.tags?.length > 0 && (
-                            <div className="mb-3 text-sm text-gray-700">
-                                <strong>Tags:</strong>{" "}
+                            <div className="mb-3 text-sm text-gray-900 font-medium">
+                                Tags:{" "}
                                 {/* Map over each tag to apply individual styling */}
                                 {noteData.tags.map((tag, index) => (
                                 <React.Fragment key={tag}> {/* Use React.Fragment for grouping without extra DOM node */}
-                                    <span className="bg-yellow-50 px-1 rounded"> {/* Apply highlight classes to each tag */}
+                                    <span className="bg-yellow-50 px-1 rounded font-extralight"> {/* Apply highlight classes to each tag */}
                                     {tag}
                                     </span>
                                     {/* Add a comma and space after each tag, except the last one */}
@@ -201,7 +201,7 @@ export default function VaultViewNote() {
                             Updated: {dayjs(noteData.updated_at).format("MMM D, YYYY h:mm A")}
                         </div>
 
-                        <div className="text-gray-900 mb-1 text-sm">Private note:</div>
+                        <div className="text-gray-900 mb-1 text-sm font-medium">Private note:</div>
                         <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
                             {decryptedNote ? decryptedNote : "⚠️ Decryption returned nothing."}
                         </div>

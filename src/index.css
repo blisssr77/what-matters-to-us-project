@@ -10,6 +10,10 @@ body {
   color: #e0e0f0;
 }
 
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 .btn-main {
   @apply px-3 py-1.5 bg-gradient-to-r from-indigo-800 via-purple-800 to-violet-900 
           text-white rounded-xl shadow-lg 

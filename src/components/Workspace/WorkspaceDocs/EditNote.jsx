@@ -291,19 +291,19 @@ export default function WorkspaceEditNote() {
                 <h2 className="text-xl font-bold mb-5 text-gray-900">✏️ Edit Note</h2>
 
                 {/* Title Input Section */}
-                <label className="text-sm font-medium text-gray-800 mb-1 block">Note title:</label>
+                <label className="text-sm font-extrabold text-gray-800 mb-1 block">Note title:</label>
                 <input
                     value={editedTitle}
                     onChange={(e) => {
                         setEditedTitle(e.target.value);
                         setHasUnsavedChanges(true);
                     }}
-                    className="w-full p-2 border rounded mb-3 text-gray-800 font-semibold text-sm bg-gray-50"
+                    className="w-full p-2 border rounded mb-3 text-gray-800 font-extrabold text-sm bg-gray-50"
                     placeholder="Title"
                 />
                 {/* Public Notes */}
                 <div>
-                    <label className="text-sm font-medium text-gray-800 mb-1 block">Edit public note:</label>
+                    <label className="text-sm font-extrabold text-gray-800 mb-1 block">Edit public note:</label>
                     <textarea
                         value={notes}
                         onChange={(e) => {
@@ -318,7 +318,7 @@ export default function WorkspaceEditNote() {
 
                 {/* Tag Input Section */}
                 <div className="mb-4">
-                    <label className="text-sm font-medium text-gray-800 mb-1 block">Edit tags:</label>
+                    <label className="text-sm font-extrabold text-gray-800 mt-1 mb-1 block">Edit tags:</label>
                     <div className="relative flex items-center gap-2 mb-1 text-sm">
                         <Search className="absolute left-3 text-gray-400" size={16} />
                         <input
@@ -391,7 +391,7 @@ export default function WorkspaceEditNote() {
                 {isVaulted && (
                     <>
                     {/* Private Note Input */}
-                    <p className="text-sm text-red-400 mb-1">
+                    <p className="text-sm text-red-400 mb-1 font-extrabold">
                         🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
                     </p>
                     <textarea

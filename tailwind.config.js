@@ -7,6 +7,11 @@ export default {
   ],
   theme: {
   	extend: {
+		  variants: {
+			extend: {
+				scrollbar: ['rounded'],
+			},
+		},
   		borderRadius: {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',

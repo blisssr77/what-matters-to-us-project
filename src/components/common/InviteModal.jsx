@@ -63,6 +63,15 @@ export default function InviteModal({ onClose, workspaceId }) {
       return;
     }
 
+    // ✅ Fetch current user’s profile (for invited_by_name)
+    const { data: currentProfile } = await supabase
+      .from("profiles")
+      .select("username, email")
+      .eq("id", user.id)
+      .single();
+
+    const invitedByName = currentProfile?.username || currentProfile?.email || "Unknown";
+
     const successList = [];
     for (let invite of invitations) {
       const { identifier, role } = invite;
@@ -82,17 +91,17 @@ export default function InviteModal({ onClose, workspaceId }) {
 
       // Check if the user is already a member of the workspace
       const { error: inviteError } = await supabase.from("workspace_members").insert({
-        user_id: profile.id, // 
+        user_id: profile.id,
         workspace_id: workspaceId,
         role,
-        invited_by: user.id, 
-        invited_by_name: profile?.username || profile?.email || "Unknown",
+        invited_by: user.id,
+        invited_by_name: invitedByName, // ✅ Current user's name/email
       });
 
       // 🔔 Send in-app notification
       await supabase.from("notifications").insert({
         user_id: profile.id,
-        message: `${profile?.username || profile?.email || "Someone"} invited you to a workspace.`,
+        message: `${invitedByName} invited you to a workspace.`,
       });
 
       if (inviteError) {

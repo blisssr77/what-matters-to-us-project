@@ -3,7 +3,9 @@ import { supabase } from "../../lib/supabaseClient";
 import Layout from "../../components/Layout/Layout";
 import { UploadCloud, Camera } from "lucide-react";
 import bcrypt from "bcryptjs";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
 
 export default function ManageAccount() {
     /* ────────────────── Profile / Basic Info state ────────────────── */
@@ -36,6 +38,8 @@ export default function ManageAccount() {
     /* feedback messages */
     const [workspaceMsg, setWorkspaceMsg] = useState(null); // { ok, msg }
     const [privateMsg, setPrivateMsg]   = useState(null);
+
+    const navigate = useNavigate();
 
     /* ────────────────── Get Basic User Info ────────────────── */
     useEffect(() => {
@@ -329,6 +333,15 @@ export default function ManageAccount() {
     return (
         <Layout>
         <div className="max-w-4xl mx-auto bg-white/95 backdrop-blur p-8 rounded-xl shadow-lg">
+            {/* Close button to navigate back */}
+            <button
+                onClick={() => {
+                    navigate("/dashboard");
+                }}
+                className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
+                >
+                <X size={20} />
+            </button>
             <h1 className="text-2xl font-bold text-gray-800 mb-8">Manage Account</h1>
 
             {/* ========== Profile Photo ========== */}

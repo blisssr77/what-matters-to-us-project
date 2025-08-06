@@ -1,15 +1,16 @@
 import React from "react";
 import { useState, useEffect, useRef, Select } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, Search, ChevronDown, XCircle, Lock } from "lucide-react";
+import { FileText, Search, ChevronDown, XCircle, Lock, Settings } from "lucide-react";
 import Layout from "../../../components/Layout/Layout";
 import dayjs from "dayjs";
 import { supabase } from "../../../lib/supabaseClient";
 import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import { useUserRole } from "../../../hooks/useUserRole";
-import WorkspaceSelector from "../../../components/WorkspaceVault/VaultedDocs/WorkspaceSelector";
+import WorkspaceSelector from "../../../components/Workspace/WorkspaceDocs/WorkspaceSelector";
 import InviteModal from "../../../components/common/InviteModal";
-import WorkspaceSettingsModal from "../../../components/common/WorkspaceSettingsModal";
+import WorkspaceTabs from "@/components/Layout/WorkspaceTabs";
+import WorkspaceSettingsModal from "@/components/common/WorkspaceSettingsModal";
 
 export default function WorkspaceVaultList() {
   const navigate = useNavigate();
@@ -19,18 +20,23 @@ export default function WorkspaceVaultList() {
   const [allTags, setAllTags] = useState([]);
   const [showTagFilter, setShowTagFilter] = useState(false);
   const [tagSearchTerm, setTagSearchTerm] = useState("");
+
+  // Workspace related state
   const [workspaceList, setWorkspaceList] = useState([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [members, setMembers] = useState([]);
   const [workspaceName, setWorkspaceName] = useState("");
-
-  const tagBoxRef = useRef();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const { activeWorkspaceId, setActiveWorkspaceId } = useWorkspaceStore();
   const userRole = useUserRole(activeWorkspaceId);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
 
+  const tagBoxRef = useRef();
+  
+  // Ensure activeWorkspaceId is set from URL params or default to first workspace
   if (!activeWorkspaceId && clean.length > 0) {
-    setActiveWorkspaceId(clean[0].id); // Will persist automatically
+    setActiveWorkspaceId(clean[0].id);
   }
 
   // Fetch workspaces.name for the user
@@ -173,6 +179,22 @@ export default function WorkspaceVaultList() {
 
   return (
     <Layout>
+      {/* Header with Settings Icon */}
+      <>
+      <WorkspaceTabs
+        workspaces={workspaceList}
+        activeId={activeWorkspaceId}
+        onSelect={(id) => setActiveWorkspaceId(id)}
+        onSettingsClick={() => setSettingsModalOpen(true)} // 👈 added
+      />
+
+      <WorkspaceSettingsModal
+        open={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+      />
+    </>
+      
+      
       <div className="p-6 max-w-5xl mx-auto text-sm">
         {/* Buttons Row */}
         <div className="flex justify-end gap-2 mb-4">
@@ -207,7 +229,7 @@ export default function WorkspaceVaultList() {
         </div>
 
         {/* Title */}
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">{workspaceName}</h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-4">{workspaceName}</h2>
 
         {/* Search and Tag Filters */}
         <div className="flex flex-wrap md:flex-nowrap justify-between items-start gap-4 mb-6">
@@ -257,7 +279,7 @@ export default function WorkspaceVaultList() {
                 />
 
                 {/* Display filtered tags */}
-                <div className="max-h-40 overflow-y-auto">
+                <div className="max-h-40 overflow-y-auto mb-1">
                   {allTags
                     .filter((tag) => tag.toLowerCase().includes(tagSearchTerm.toLowerCase()))
                     .map((tag) => (
@@ -267,7 +289,7 @@ export default function WorkspaceVaultList() {
                           setSelectedTag(tag);
                           setShowTagFilter(false);
                         }}
-                        className={`cursor-pointer px-3 py-1 rounded text-sm mb-1 ${
+                        className={`cursor-pointer px-3 py-1 rounded text-sm ${
                           tag === selectedTag ? "bg-purple-100 text-purple-700 font-semibold" : "hover:bg-gray-100"
                         }`}
                       >
@@ -279,7 +301,7 @@ export default function WorkspaceVaultList() {
                 {/* Clear Filter Button */}
                 {selectedTag && (
                   <button
-                    className="mt-2 text-xs text-red-500 underline"
+                    className="text-xs text-red-500 underline"
                     onClick={() => setSelectedTag("")}
                   >
                     Clear Filter
@@ -317,14 +339,14 @@ export default function WorkspaceVaultList() {
                   ) : (
                     <FileText className="text-purple-500" size={22} />
                   )}
-                  <div className="text-lg text-gray-800 font-semibold truncate">
+                  <div className="text-md text-black font-extrabold truncate">
                     {doc.title || doc.name || "Untitled"}
                   </div>
                 </div>
 
                 {/* Tags */}
                 {doc.tags?.length > 0 && (
-                  <div className="mb-2 text-xs text-gray-700">
+                  <div className="mb-2 text-xs text-gray-800">
                     <strong>Tags:</strong>{" "}
                     {doc.tags.map((tag, index) => (
                       <React.Fragment key={tag}>
@@ -340,19 +362,19 @@ export default function WorkspaceVaultList() {
 
                 {/* Timestamps */}
                 {doc.updated_at && doc.updated_at !== doc.created_at && (
-                  <div className="text-xs text-gray-400 mb-1">
+                  <div className="text-xs text-gray-500 mb-1">
                     <strong>Last Modified:</strong>{" "}
                     {dayjs(doc.updated_at).format("MMM D, YYYY h:mm A")}
                   </div>
                 )}
-                <div className="text-xs text-gray-400">
+                <div className="text-xs text-gray-500">
                   <strong>Uploaded:</strong>{" "}
                   {dayjs(doc.created_at).format("MMM D, YYYY h:mm A")}
                 </div>
 
                 {/* File Flag */}
                 {hasFiles && (
-                  <div className="text-xs text-red-500 font-semibold mt-2">
+                  <div className="text-xs text-red-600 font-semibold mt-2">
                     - Contains file -
                   </div>
                 )}

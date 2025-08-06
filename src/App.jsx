@@ -12,12 +12,12 @@ import VaultViewDoc from "./components/PrivateVault/VaultedDocs/VaultViewDoc";
 import VaultEditDoc from "./components/PrivateVault/VaultedDocs/VaultEditDoc";
 // Importing components for the Workspace Vault
 import WorkspaceVaultList from "./routes/workspace/workspace-docs/DocList";
-import WorkspaceUploadDoc from "./components/WorkspaceVault/VaultedDocs/UploadDoc";
-import WorkspaceUploadNote from "./components/WorkspaceVault/VaultedDocs/UploadNote";
-import WorkspaceViewNote from "./components/WorkspaceVault/VaultedDocs/ViewNote";
-import WorkspaceEditNote from "./components/WorkspaceVault/VaultedDocs/EditNote";
-import WorkspaceViewDoc from "./components/WorkspaceVault/VaultedDocs/ViewDoc";
-import WorkspaceEditDoc from "./components/WorkspaceVault/VaultedDocs/EditDoc";
+import WorkspaceUploadDoc from "./components/Workspace/WorkspaceDocs/UploadDoc";
+import WorkspaceUploadNote from "./components/Workspace/WorkspaceDocs/UploadNote";
+import WorkspaceViewNote from "./components/Workspace/WorkspaceDocs/ViewNote";
+import WorkspaceEditNote from "./components/Workspace/WorkspaceDocs/EditNote";
+import WorkspaceViewDoc from "./components/Workspace/WorkspaceDocs/ViewDoc";
+import WorkspaceEditDoc from "./components/Workspace/WorkspaceDocs/EditDoc";
 
 function App() {
   return (
