@@ -5,6 +5,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Tabs,
@@ -25,11 +26,13 @@ export default function WorkspaceSettingsModal({
   setWorkspaceName,
   handleRename,
   errorMsg,
+  successMsg,
   loading,
   members,
+  setMembers,
   handleRoleChange,
 }) {
-  const { activeWorkspaceId, activeWorkspaceName, setActiveWorkspaceName } = useWorkspaceStore();
+  const { activeWorkspaceId } = useWorkspaceStore();
   const [activeTab, setActiveTab] = useState(userRole === "admin" || userRole === "owner" ? "general" : "members");
 
   // Fetch members if modal is opened
@@ -39,25 +42,37 @@ export default function WorkspaceSettingsModal({
     }
   }, [open, activeWorkspaceId]);
 
+  // Fetch members from the database
   const fetchMembers = async () => {
     const { data, error } = await supabase
       .from("workspace_members")
-      .select("id, role, invited_by_name, profiles!workspace_members_user_id_fkey(username)")
+      .select(`
+        id,
+        role,
+        invited_by_name,
+        profiles!workspace_members_user_id_fkey(username),
+        workspaces!inner(name)
+      `)
       .eq("workspace_id", activeWorkspaceId);
 
     if (error) {
       console.error("❌ Failed to fetch members:", error);
     } else {
-      // if members are only stored in parent component, remove this line
-      // otherwise, you'd need to lift state up and sync
+      if (data.length > 0) {
+        setWorkspaceName(data[0].workspaces.name); // ✅ Set workspace name for modal
+      }
+      setMembers(data);
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl text-gray-800">
         <DialogHeader>
           <DialogTitle>Workspace Settings</DialogTitle>
+          <DialogDescription>
+            Manage members, rename workspace, and adjust settings.
+          </DialogDescription>
         </DialogHeader>
 
         {/* Tabs for different settings */}
@@ -81,10 +96,16 @@ export default function WorkspaceSettingsModal({
                 onChange={(e) => setWorkspaceName(e.target.value)}
                 disabled={loading}
               />
-              <Button onClick={handleRename} disabled={loading}>
-                Rename Workspace
+              <Button className="btn-secondary" onClick={handleRename} disabled={loading}>
+                {loading ? "Renaming..." : "Rename Workspace"}
               </Button>
-              {errorMsg && <p className="text-sm text-red-500">{errorMsg}</p>}
+
+              {successMsg && (
+                <p className="text-sm text-green-600">{successMsg}</p>
+              )}
+              {errorMsg && (
+                <p className="text-sm text-red-500">{errorMsg}</p>
+              )}
             </TabsContent>
           )}
 

@@ -8,11 +8,10 @@ import dayjs from "dayjs";
 import { supabase } from "../../../lib/supabaseClient";
 import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import { useUserRole } from "../../../hooks/useUserRole";
-import WorkspaceSelector from "../../../components/Workspace/WorkspaceDocs/WorkspaceSelector";
 import InviteModal from "../../../components/common/InviteModal";
 import WorkspaceTabs from "@/components/Layout/WorkspaceTabs";
 import WorkspaceSettingsModal from "@/components/common/WorkspaceSettingsModal";
-import { useWorkspaceActions } from "../../../hooks/useWorkspaceActions";
+import { useWorkspaceActions } from "../../../hooks/useWorkspaceActions.js";
 
 export default function WorkspaceVaultList() {
   const navigate = useNavigate();
@@ -32,11 +31,20 @@ export default function WorkspaceVaultList() {
   const userRole = useUserRole(activeWorkspaceId);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  const [expanded, setExpanded] = useState({});
+  const [titleOverflow, setTitleOverflow] = useState({});
+  const [noteOverflow, setNoteOverflow] = useState({});
+
+  const titleRefs = useRef({});
+  const noteRefs = useRef({});
+
   const {
     handleRename,
     handleRoleChange,
     workspaceActionLoading,
     workspaceActionErrorMsg,
+    workspaceActionSuccessMsg,
   } = useWorkspaceActions({
     activeWorkspaceId,
     workspaceName,
@@ -44,8 +52,48 @@ export default function WorkspaceVaultList() {
     setMembers,
   });
 
-
   const tagBoxRef = useRef();
+
+  // Toggle expand/collapse for document cards
+  const toggleExpand = (e, id) => {
+    e.stopPropagation();
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  // Filter documents based on search term and selected tag
+  const filteredDocs = React.useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    return allDocuments.filter((doc) => {
+      const matchesSearch =
+        doc.name?.toLowerCase().includes(term) ||
+        doc.title?.toLowerCase().includes(term) ||
+        doc.tags?.some((tag) => tag.toLowerCase().includes(term));
+      const matchesTag = selectedTag ? doc.tags?.includes(selectedTag) : true;
+      return matchesSearch && matchesTag;
+    });
+  }, [allDocuments, searchTerm, selectedTag]);
+  
+
+  // Measure overflow for title and notes separately
+  useEffect(() => {
+    const newTitleOverflow = {};
+    const newNoteOverflow = {};
+
+    filteredDocs.forEach((doc) => {
+      const titleEl = titleRefs.current[doc.id];
+      const noteEl = noteRefs.current[doc.id];
+
+      if (titleEl && titleEl.scrollHeight > titleEl.clientHeight) {
+        newTitleOverflow[doc.id] = true;
+      }
+      if (noteEl && noteEl.scrollHeight > noteEl.clientHeight) {
+        newNoteOverflow[doc.id] = true;
+      }
+    });
+
+    setTitleOverflow(newTitleOverflow);
+    setNoteOverflow(newNoteOverflow);
+  }, [filteredDocs]);
 
   // Fetch all workspaces on component mount
   useEffect(() => {
@@ -170,15 +218,7 @@ export default function WorkspaceVaultList() {
     };
   }, []);
 
-  // Filter documents based on search term and selected tag
-  const filteredDocs = allDocuments.filter((doc) => {
-    const matchesSearch =
-      doc.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.tags?.some((tag) => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesTag = selectedTag ? doc.tags?.includes(selectedTag) : true;
-    return matchesSearch && matchesTag;
-  });
+  
 
   return (
     <Layout>
@@ -190,18 +230,13 @@ export default function WorkspaceVaultList() {
         onSelect={(id) => setActiveWorkspaceId(id)}
         onSettingsClick={() => setSettingsModalOpen(true)} 
       />
-
-      {/* <Button onClick={() => setSettingsModalOpen(true)}>
-        <Settings className="w-4 h-4 mr-1" /> Settings
-      </Button> */}
     </>
-      
       
       <div className="p-6 max-w-5xl mx-auto text-sm">
         {/* Buttons Row */}
         <div className="flex justify-end gap-2 mb-4">
           {/* Workspace Selector */}
-          <select
+          {/* <select
             className="bg-white border border-gray-300 rounded px-3 py-2 text-sm"
             value={activeWorkspaceId}
             onChange={(e) => setActiveWorkspaceId(e.target.value)}
@@ -211,7 +246,7 @@ export default function WorkspaceVaultList() {
                 {ws.name}
               </option>
             ))}
-          </select>
+          </select> */}
 
 
           {/* Upload and Create Buttons */}
@@ -314,11 +349,12 @@ export default function WorkspaceVaultList() {
           </div>
         </div>
 
-        {/* Vaulted Document Grid */}
+        {/* Document Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {filteredDocs.map((doc) => {
             const hasFiles = Array.isArray(doc.file_metas) && doc.file_metas.length > 0;
             const isVaulted = !!doc.is_vaulted;
+            const isExpanded = !!expanded[doc.id];
 
             return (
               <div
@@ -334,18 +370,23 @@ export default function WorkspaceVaultList() {
                   isVaulted ? "bg-gray-200 border-gray-300" : "bg-white border-purple-200"
                 }`}
               >
-                {/* Title + Icon */}
+                {/* Title */}
                 <div className="flex items-center gap-3 mb-3">
                   {isVaulted ? (
                     <Lock className="text-purple-600" size={22} />
                   ) : (
                     <FileText className="text-purple-500" size={22} />
                   )}
-                  <div className="text-md text-black font-extrabold truncate">
+                  <div
+                    ref={(el) => (titleRefs.current[doc.id] = el)}
+                    className={`text-md text-black font-extrabold ${
+                      isExpanded ? "" : "line-clamp-5"
+                    }`}
+                  >
                     {doc.title || doc.name || "Untitled"}
                   </div>
                 </div>
-
+                
                 {/* Tags */}
                 {doc.tags?.length > 0 && (
                   <div className="mb-2 text-xs text-gray-800">
@@ -360,7 +401,26 @@ export default function WorkspaceVaultList() {
                 )}
 
                 {/* Public Note */}
-                {doc.notes && <p className="text-sm text-gray-800 mb-2">{doc.notes}</p>}
+                {doc.notes && (
+                  <p
+                    ref={(el) => (noteRefs.current[doc.id] = el)}
+                    className={`text-sm text-gray-800 mb-2 ${
+                      isExpanded ? "" : "line-clamp-5"
+                    }`}
+                  >
+                    {doc.notes}
+                  </p>
+                )}
+
+                {/* Show more if either title OR notes overflow */}
+                {(titleOverflow[doc.id] || noteOverflow[doc.id]) && (
+                  <button
+                    onClick={(e) => toggleExpand(e, doc.id)}
+                    className="mt-1 inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border border-gray-300 text-gray-700 hover:border-purple-500 hover:text-purple-600 transition mb-2 font-semibold"
+                  >
+                    {isExpanded ? "Show less" : "Show more"}
+                  </button>
+                )}
 
                 {/* Timestamps */}
                 {doc.updated_at && doc.updated_at !== doc.created_at && (
@@ -393,19 +453,6 @@ export default function WorkspaceVaultList() {
         </div>
       </div>
 
-      {/* Workspace Members Section */}
-      {members.length === 0 ? (
-        <div className="text-sm text-gray-400">No members found in this workspace.</div>
-      ) : (
-        members.map((m) => (
-          <div key={m.id} className="flex justify-between border p-3 rounded-lg shadow-sm bg-white">
-            <div className="font-medium text-gray-800">{m.profiles?.username || "Unknown User"}</div>
-            <div className="text-sm text-gray-500">{m.role}</div>
-            <div className="text-xs text-gray-400">Invited by {m.invited_by_name}</div>
-          </div>
-        ))
-      )}
-
       {/* Invite Button for Admins/Owner */}
       {(userRole === "admin" || userRole === "owner") && (
         <div className="fixed bottom-6 right-6 z-50">
@@ -425,6 +472,7 @@ export default function WorkspaceVaultList() {
         />
       )}
 
+      {/* Workspace Settings Modal */}
       <WorkspaceSettingsModal
         open={settingsModalOpen}
         onClose={() => setSettingsModalOpen(false)}
@@ -434,7 +482,9 @@ export default function WorkspaceVaultList() {
         handleRename={handleRename}
         errorMsg={workspaceActionErrorMsg}
         loading={workspaceActionLoading}
+        successMsg={workspaceActionSuccessMsg}
         members={members}
+        setMembers={setMembers}
         handleRoleChange={handleRoleChange}
       />
     </Layout>
