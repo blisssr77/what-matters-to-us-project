@@ -17,13 +17,22 @@ import { Input } from "@/components/ui/input";
 import { AlertDialog, AlertDialogTrigger, AlertDialogContent } from "@/components/ui/alert-dialog";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 
-export default function WorkspaceSettingsModal({ open, onClose }) {
+export default function WorkspaceSettingsModal({
+  open,
+  onClose,
+  userRole,
+  workspaceName,
+  setWorkspaceName,
+  handleRename,
+  errorMsg,
+  loading,
+  members,
+  handleRoleChange,
+}) {
   const { activeWorkspaceId, activeWorkspaceName, setActiveWorkspaceName } = useWorkspaceStore();
-  const [workspaceName, setWorkspaceName] = useState(activeWorkspaceName);
-  const [members, setMembers] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [activeTab, setActiveTab] = useState(userRole === "admin" || userRole === "owner" ? "general" : "members");
 
+  // Fetch members if modal is opened
   useEffect(() => {
     if (open && activeWorkspaceId) {
       fetchMembers();
@@ -39,35 +48,8 @@ export default function WorkspaceSettingsModal({ open, onClose }) {
     if (error) {
       console.error("❌ Failed to fetch members:", error);
     } else {
-      setMembers(data);
-    }
-  };
-
-  const handleRename = async () => {
-    setLoading(true);
-    const { error } = await supabase
-      .from("workspaces")
-      .update({ name: workspaceName })
-      .eq("id", activeWorkspaceId);
-
-    if (error) {
-      setErrorMsg("❌ Failed to rename workspace");
-    } else {
-      setActiveWorkspaceName(workspaceName);
-    }
-    setLoading(false);
-  };
-
-  const handleRoleChange = async (memberId, newRole) => {
-    const { error } = await supabase
-      .from("workspace_members")
-      .update({ role: newRole })
-      .eq("id", memberId);
-
-    if (error) {
-      console.error("❌ Failed to update role:", error);
-    } else {
-      fetchMembers();
+      // if members are only stored in parent component, remove this line
+      // otherwise, you'd need to lift state up and sync
     }
   };
 
@@ -78,26 +60,33 @@ export default function WorkspaceSettingsModal({ open, onClose }) {
           <DialogTitle>Workspace Settings</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="general" className="mt-4">
-          <TabsList className="grid grid-cols-3">
-            <TabsTrigger value="general">General</TabsTrigger>
+        {/* Tabs for different settings */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
+          <TabsList className="grid grid-cols-2 md:grid-cols-3">
+            {(userRole === "admin" || userRole === "owner") && (
+              <TabsTrigger value="general">General</TabsTrigger>
+            )}
             <TabsTrigger value="members">Members</TabsTrigger>
-            <TabsTrigger value="danger">Danger Zone</TabsTrigger>
+            {(userRole === "admin" || userRole === "owner") && (
+              <TabsTrigger value="danger">Danger Zone</TabsTrigger>
+            )}
           </TabsList>
 
           {/* General Tab */}
-          <TabsContent value="general" className="space-y-4 mt-4">
-            <label className="block text-sm font-medium">Workspace Name</label>
-            <Input
-              value={workspaceName}
-              onChange={(e) => setWorkspaceName(e.target.value)}
-              disabled={loading}
-            />
-            <Button onClick={handleRename} disabled={loading}>
-              Rename Workspace
-            </Button>
-            {errorMsg && <p className="text-sm text-red-500">{errorMsg}</p>}
-          </TabsContent>
+          {(userRole === "admin" || userRole === "owner") && (
+            <TabsContent value="general" className="space-y-4 mt-4">
+              <label className="block text-sm font-medium">Workspace Name</label>
+              <Input
+                value={workspaceName}
+                onChange={(e) => setWorkspaceName(e.target.value)}
+                disabled={loading}
+              />
+              <Button onClick={handleRename} disabled={loading}>
+                Rename Workspace
+              </Button>
+              {errorMsg && <p className="text-sm text-red-500">{errorMsg}</p>}
+            </TabsContent>
+          )}
 
           {/* Members Tab */}
           <TabsContent value="members" className="space-y-3 mt-4">
@@ -110,46 +99,56 @@ export default function WorkspaceSettingsModal({ open, onClose }) {
                   <p className="font-medium text-gray-800">
                     {m.profiles?.username || "Unknown User"}
                   </p>
-                  <p className="text-xs text-gray-500">
-                    Invited by {m.invited_by_name}
-                  </p>
+                  <p className="text-xs text-gray-500">Invited by {m.invited_by_name}</p>
                 </div>
 
+                {/* Role management */}
                 {m.role === "owner" ? (
                   <span className="text-sm font-semibold text-gray-700 px-3 py-1 border border-gray-300 rounded">
                     Owner
                   </span>
                 ) : (
-                  <select
-                    value={m.role || "member"}
-                    onChange={(e) => handleRoleChange(m.id, e.target.value)}
-                    className="text-sm rounded border border-gray-300 px-2 py-1"
-                  >
-                    <option value="admin">Admin</option>
-                    <option value="member">Member</option>
-                    <option value="viewer">Viewer</option>
-                  </select>
+                  (userRole === "admin" || userRole === "owner") ? (
+                    <select
+                      value={m.role || "member"}
+                      onChange={(e) => handleRoleChange(m.id, e.target.value)}
+                      className="text-sm rounded border border-gray-300 px-2 py-1"
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="member">Member</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
+                  ) : (
+                    <span className="text-sm text-gray-700 px-3 py-1 border border-gray-300 rounded">
+                      {m.role}
+                    </span>
+                  )
                 )}
               </div>
             ))}
           </TabsContent>
 
-          {/* Danger Zone Tab */}
-          <TabsContent value="danger" className="space-y-4 mt-4">
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive">Delete This Workspace</Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <p className="text-red-600 font-semibold">⚠️ Are you sure you want to delete this workspace?</p>
-                <Button variant="destructive" className="mt-4">Confirm Delete</Button>
-              </AlertDialogContent>
-            </AlertDialog>
-
-            <p className="text-sm text-gray-500">
-              This action is irreversible and will permanently remove all data associated with this workspace.
-            </p>
-          </TabsContent>
+          {/* Danger Zone tab */}
+          {(userRole === "admin" || userRole === "owner") && (
+            <TabsContent value="danger" className="space-y-4 mt-4">
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive">Delete This Workspace</Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <p className="text-red-600 font-semibold">
+                    ⚠️ Are you sure you want to delete this workspace?
+                  </p>
+                  <Button variant="destructive" className="mt-4">
+                    Confirm Delete
+                  </Button>
+                </AlertDialogContent>
+              </AlertDialog>
+              <p className="text-sm text-gray-500">
+                This action is irreversible and will permanently remove all data associated with this workspace.
+              </p>
+            </TabsContent>
+          )}
         </Tabs>
       </DialogContent>
     </Dialog>

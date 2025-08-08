@@ -1,14 +1,17 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, Settings, LogOut, Shield } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient"; 
 
 /* --- Topbar component --- */
-export default function Topbar({ userName = "Robin" }) {
+export default function Topbar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
+
+  const [profile, setProfile] = useState({ username: "", email: "" });
 
   /* Close on outside click */
   useEffect(() => {
@@ -18,6 +21,35 @@ export default function Topbar({ userName = "Robin" }) {
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
+
+  // Fetch current user profile
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user?.id) {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("username, email")
+          .eq("id", user.id)
+          .single();
+
+        if (!error && data) {
+          setProfile({
+            username: data.username || "",
+            email: data.email || "",
+          });
+        }
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
+  const displayName = profile.username || "User";
+  const displayEmail = profile.email || "No email";
 
   return (
     <motion.header
@@ -41,7 +73,7 @@ export default function Topbar({ userName = "Robin" }) {
           className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center cursor-pointer ring-1 ring-purple-500/30"
           onClick={() => setOpen((p) => !p)}
         >
-          {userName[0]}
+          {displayName.slice(0, 2).toUpperCase()}
         </motion.div>
 
         {/* ---------- Dropdown ---------- */}
@@ -55,7 +87,8 @@ export default function Topbar({ userName = "Robin" }) {
             >
               {/* Top profile preview */}
               <div className="px-4 py-3 border-b border-gray-800">
-                <p className="font-semibold text-sm">{userName}</p>
+                <p className="font-semibold text-sm">{displayName}</p>
+                <p className="text-xs text-gray-400">{displayEmail}</p>
               </div>
 
               {/* Menu items */}

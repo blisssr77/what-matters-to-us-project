@@ -2,6 +2,7 @@ import React from "react";
 import { useState, useEffect, useRef, Select } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText, Search, ChevronDown, XCircle, Lock, Settings } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import Layout from "../../../components/Layout/Layout";
 import dayjs from "dayjs";
 import { supabase } from "../../../lib/supabaseClient";
@@ -11,6 +12,7 @@ import WorkspaceSelector from "../../../components/Workspace/WorkspaceDocs/Works
 import InviteModal from "../../../components/common/InviteModal";
 import WorkspaceTabs from "@/components/Layout/WorkspaceTabs";
 import WorkspaceSettingsModal from "@/components/common/WorkspaceSettingsModal";
+import { useWorkspaceActions } from "../../../hooks/useWorkspaceActions";
 
 export default function WorkspaceVaultList() {
   const navigate = useNavigate();
@@ -26,38 +28,56 @@ export default function WorkspaceVaultList() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [members, setMembers] = useState([]);
   const [workspaceName, setWorkspaceName] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const { activeWorkspaceId, setActiveWorkspaceId } = useWorkspaceStore();
   const userRole = useUserRole(activeWorkspaceId);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const {
+    handleRename,
+    handleRoleChange,
+    workspaceActionLoading,
+    workspaceActionErrorMsg,
+  } = useWorkspaceActions({
+    activeWorkspaceId,
+    workspaceName,
+    setWorkspaceName,
+    setMembers,
+  });
 
 
   const tagBoxRef = useRef();
-  
-  // Ensure activeWorkspaceId is set from URL params or default to first workspace
-  if (!activeWorkspaceId && clean.length > 0) {
-    setActiveWorkspaceId(clean[0].id);
-  }
 
-  // Fetch workspaces.name for the user
+  // Fetch all workspaces on component mount
   useEffect(() => {
-    const fetchWorkspaces = async () => {
-      if (!activeWorkspaceId) return;
+    const fetchAllWorkspaces = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
 
       const { data, error } = await supabase
-        .from("workspaces")
-        .select("name")
-        .eq("id", activeWorkspaceId)
-        .single();
-        
-        if (error) {
-          console.error("❌ Failed to fetch workspace name:", error);
-        } else {
-          setWorkspaceName(data.name);
-        }
-      };
-    fetchWorkspaces();
-  }, [activeWorkspaceId]);
+        .from("workspace_members")
+        .select("workspace_id, workspaces(name, id)")
+        .eq("user_id", user.id);
+        console.log("Fetched workspaces:", data);
+
+      if (error) {
+        console.error("❌ Failed to fetch user workspaces", error);
+        return;
+      }
+
+      // Flatten nested data
+      const workspaceData = data.map((entry) => ({
+        id: entry.workspaces.id,
+        name: entry.workspaces.name,
+      }));
+
+      setWorkspaceList(workspaceData);
+    };
+
+    fetchAllWorkspaces();
+  }, []);
 
   // Insert profile if it doesn't exist, from AuthPage.jsx and Google signup
   useEffect(() => {
@@ -85,66 +105,36 @@ export default function WorkspaceVaultList() {
     insertProfileIfNeeded();
   }, []);
 
-  // Fetch workspaces for the user
+  // Fetch members and their roles in the workspace
   useEffect(() => {
-    const fetchWorkspaces = async () => {
+    const fetchMembersAndRole = async () => {
+      if (!activeWorkspaceId) return;
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
       if (!user) return;
 
-      const { data, error } = await supabase
-        .from("workspace_members")
-        .select("workspace_id, workspaces(id, name)")
-        .eq("user_id", user.id);
+      setLoading(true);
 
-      if (!error) {
-        const clean = data.map((row) => row.workspaces);
-        setWorkspaceList(clean);
-
-        // ✅ Set default active workspace if none selected
-        if (!activeWorkspaceId && clean.length > 0) {
-          setActiveWorkspaceId(clean[0].id);
-        }
-      }
-    };
-
-    fetchWorkspaces();
-  }, []);
-
-  // Fetch members of the active workspace
-  useEffect(() => {
-    const fetchMembers = async () => {
-      if (!activeWorkspaceId) return;
-
-      const { data, error } = await supabase
+      // 1. Get all members in this workspace
+      const { data: membersData, error: membersError } = await supabase
         .from("workspace_members")
         .select("id, role, invited_by_name, profiles!workspace_members_user_id_fkey(username)")
         .eq("workspace_id", activeWorkspaceId);
 
-      if (error) {
-        console.error("❌ Failed to fetch members:", error);
+      if (membersError) {
+        console.error("❌ Failed to fetch members:", membersError);
       } else {
-        setMembers(data); 
+        setMembers(membersData);
       }
+
+      setLoading(false);
     };
 
-    fetchMembers();
+    fetchMembersAndRole();
   }, [activeWorkspaceId]);
-
-  // Close tag filter when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (tagBoxRef.current && !tagBoxRef.current.contains(event.target)) {
-        setShowTagFilter(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
 
   // Fetch all documents and notes on component mount
   useEffect(() => {
@@ -167,6 +157,19 @@ export default function WorkspaceVaultList() {
     fetchDocs();
   }, [activeWorkspaceId]);
 
+  // Close tag filter when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (tagBoxRef.current && !tagBoxRef.current.contains(event.target)) {
+        setShowTagFilter(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   // Filter documents based on search term and selected tag
   const filteredDocs = allDocuments.filter((doc) => {
     const matchesSearch =
@@ -185,13 +188,12 @@ export default function WorkspaceVaultList() {
         workspaces={workspaceList}
         activeId={activeWorkspaceId}
         onSelect={(id) => setActiveWorkspaceId(id)}
-        onSettingsClick={() => setSettingsModalOpen(true)} // 👈 added
+        onSettingsClick={() => setSettingsModalOpen(true)} 
       />
 
-      <WorkspaceSettingsModal
-        open={settingsModalOpen}
-        onClose={() => setSettingsModalOpen(false)}
-      />
+      {/* <Button onClick={() => setSettingsModalOpen(true)}>
+        <Settings className="w-4 h-4 mr-1" /> Settings
+      </Button> */}
     </>
       
       
@@ -422,6 +424,19 @@ export default function WorkspaceVaultList() {
           workspaceId={activeWorkspaceId}
         />
       )}
+
+      <WorkspaceSettingsModal
+        open={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+        userRole={userRole}
+        workspaceName={workspaceName}
+        setWorkspaceName={setWorkspaceName}
+        handleRename={handleRename}
+        errorMsg={workspaceActionErrorMsg}
+        loading={workspaceActionLoading}
+        members={members}
+        handleRoleChange={handleRoleChange}
+      />
     </Layout>
   );
 }

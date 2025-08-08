@@ -14,7 +14,8 @@ export const useUserRole = (workspaceId) => {
         .select("role")
         .eq("workspace_id", workspaceId)
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
+        console.log("User role fetched:", data);
 
       setRole(data?.role || null);
     };
