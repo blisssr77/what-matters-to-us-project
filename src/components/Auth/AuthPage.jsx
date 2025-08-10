@@ -89,7 +89,7 @@ export default function AuthPage() {
       if (!workspaces || workspaces.length === 0) {
         const { data: workspaceArr, error: workspaceError } = await supabase
           .from("workspaces")
-          .insert({ name: "My First Workspace", created_by: userId, role: "owner", owner_id: userId })
+          .insert({ name: "My First Workspace", created_by: userId, role: "owner" })
           .select();
 
         if (workspaceError || !workspaceArr?.[0]) {

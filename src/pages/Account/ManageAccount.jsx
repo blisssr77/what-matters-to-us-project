@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import Layout from "../../components/Layout/Layout";
-import { UploadCloud, Camera } from "lucide-react";
+import { UploadCloud, Camera, Vault } from "lucide-react";
 import bcrypt from "bcryptjs";
 import { ShieldCheck, X, Check, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { createClient } from "@supabase/supabase-js";
 import PasswordChecklist from "./PasswordCheckList";
 import PasswordField from "./PasswordField";
 import { supabaseNoPersist } from "./supabaseNoPersist";
+import VaultCodeField from "./VaultCodeField";
+import VaultCodeChecklist, { buildCodeRules } from "./VaultCodeChecklist";
 
 export default function ManageAccount() {
     /* ────────────────── Profile / Basic Info state ────────────────── */
@@ -134,7 +135,7 @@ export default function ManageAccount() {
         number: /[0-9]/.test(pwd),
         special: /[^A-Za-z0-9]/.test(pwd),
         length: pwd.length >= 8,
-        notSameAsCurrent: current ? pwd !== current : true,
+        notSameAsCurrent: (!pwd || !current) ? null : pwd !== current,
     });
     const pwRulesOk = (pwd, current) => {
         const r = buildPwRules(pwd, current);
@@ -204,6 +205,19 @@ export default function ManageAccount() {
         setTimeout(() => setPwdSaved(false), 4000);
     };
 
+    // Verify current vault code
+    const verifyWorkspaceCurrent = async (val) => {
+        const { data: ok, error } = await supabase.rpc("verify_user_vault_code", { p_code: val.trim() });
+        if (error) return false;
+        return !!ok;
+    };
+    // Verify private vault code
+    const verifyPrivateCurrent = async (val) => {
+        const { data: ok, error } = await supabase.rpc("verify_user_private_code", { p_code: val.trim() });
+        if (error) return false;
+        return !!ok;
+    };
+
     /* ────────────────── Save Vault Code handlers (wire to Supabase) ────────────────── */
     /* ────────────── CREATE WORKSPACE CODE ────────────── */
     const createWorkspaceCode = async () => {
@@ -239,7 +253,7 @@ export default function ManageAccount() {
             p_code: workspaceCurrent.trim(),
         });
         if (vErr) return { ok: false, msg: vErr.message || "Verify failed" };
-        if (!ok)  return { ok: false, msg: "Current code is incorrect ❌" };
+        if (!ok)  return { ok: false, msg: "Current code is incorrect." };
 
         // 2) set new
         const { error } = await supabase.rpc("set_user_vault_code", {
@@ -284,7 +298,7 @@ export default function ManageAccount() {
             p_code: privateCurrent.trim(),
         });
         if (vErr) return { ok: false, msg: vErr.message || "Verify failed" };
-        if (!ok)  return { ok: false, msg: "Current code is incorrect ❌" };
+        if (!ok)  return { ok: false, msg: "Current code is incorrect." };
 
         const { error } = await supabase.rpc("set_user_private_code", {
             p_code: privateCode.trim(),
@@ -295,13 +309,23 @@ export default function ManageAccount() {
         return { ok: true, msg: "Private code updated successfully ✅" };
     };
 
+    /* ────────────────── Password status & rules ────────────────── */
     const rules  = buildPwRules(newPw, currentPw);
     const newOk  = pwRulesOk(newPw, currentPw);
     const confirmOk = !!confirmPw && confirmPw === newPw && newOk;
+    /* ────────────────── Vault Code status & rules ────────────────── */
+    const wsRules = buildCodeRules(workspaceCode, workspaceCurrent, 6);
+    const wsNewOk = wsRules.length && wsRules.noSpace;
+    const wsConfirmOk = !!workspaceConfirm && workspaceConfirm === workspaceCode && wsNewOk;
+    /* ────────────────── Private Code status & rules ────────────────── */
+    const prRules = buildCodeRules(privateCode, privateCurrent, 6);
+    const prNewOk = prRules.length && prRules.noSpace;
+    const prConfirmOk = !!privateConfirm && privateConfirm === privateCode && prNewOk;
 
 
 
     /* ────────────────── UI ────────────────── */
+    // Workspace Card
     return (
         <Layout>
         <div className="max-w-4xl mx-auto bg-white/95 backdrop-blur p-8 rounded-xl shadow-lg">
@@ -455,7 +479,7 @@ export default function ManageAccount() {
             </div>
         </div>
 
-        {/* ========== Vault Codes ========== */}
+        {/* ==================================================== Vault Codes ============================================= */}
         <h2 className="text-xl font-semibold text-blue-900 flex items-center gap-2">
             <ShieldCheck size={28} className="text-blue-700" />
             Vault codes
@@ -468,176 +492,236 @@ export default function ManageAccount() {
         </span>
         </p>
 
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Workspace Card */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="p-5 bg-gray-50 rounded border">
-
-            {codes.workspace === null ? (
-            /* CREATE form */
             <>
-            <h3 className="font-medium mb-3 text-gray-900">Create a new <strong>Private</strong> vault code</h3>
-                <input
-                type="password"
-                placeholder="Create workspace code"
-                value={workspaceCode}
-                onChange={(e) => setWorkspaceCode(e.target.value)}
-                className="w-full border rounded px-3 py-2 text-sm mb-2 text-gray-800"
+                {codes.workspace === null ? (
+                    /* CREATE form */
+                    <>
+                        <h3 className="font-medium mb-3 text-gray-900">Create a new Workspace vault code</h3>
+
+                        <VaultCodeField
+                            className="text-gray-800"
+                            id="ws-new"
+                            label="Create workspace code"
+                            autoComplete="new-password"
+                            value={workspaceCode}
+                            onChange={(e) => setWorkspaceCode(e.target.value)}
+                            // drive status manually for "new" field
+                            statusProp={!workspaceCode ? "idle" : (wsNewOk ? "good" : "bad")}
+                        />
+
+                        <VaultCodeField
+                            id="ws-confirm"
+                            label="Confirm code"
+                            autoComplete="new-password"
+                            value={workspaceConfirm}
+                            onChange={(e) => setWorkspaceConfirm(e.target.value)}
+                            statusProp={!workspaceConfirm ? "idle" : (wsConfirmOk ? "good" : "bad")}
+                            className="mt-2"
+                        />
+
+                        <VaultCodeChecklist rules={buildCodeRules(workspaceCode, "", 6)} className="mt-2" />
+
+                        <div className="flex justify-end mt-3">
+                            <button
+                                type="button"
+                                className="btn-secondary text-sm"
+                                onClick={async () => {
+                                    const { ok, msg } = await createWorkspaceCode();
+                                    setWorkspaceMsg({ ok, msg });
+                                }}
+                                disabled={!wsNewOk || !wsConfirmOk}
+                            >
+                                Create code
+                            </button>
+                        </div>
+
+                        {workspaceMsg?.ok ? (
+                            <p className="flex justify-center text-xs text-green-600 mt-4">{workspaceMsg.msg}</p>
+                        ) : workspaceMsg?.msg ? (
+                            <p className="flex justify-center text-xs text-red-500 mt-4">{workspaceMsg.msg}</p>
+                        ) : null}
+                    </>
+                ) : (
+                    /* CHANGE form (codes.workspace !== null) */
+                    <>
+                        <h3 className="font-medium mb-4 text-gray-900">Change your Workspace vault code</h3>
+
+                        <VaultCodeField
+                            className="text-gray-800"
+                            id="ws-current"
+                            label="Current workspace code"
+                            autoComplete="current-password"
+                            value={workspaceCurrent}
+                            onChange={(e) => setWorkspaceCurrent(e.target.value)}
+                            verifyAsync={verifyWorkspaceCurrent}  // live RPC verify
+                        />
+
+                        <VaultCodeField
+                            className="text-gray-800 mt-2"
+                            id="ws-new"
+                            label="New code"
+                            autoComplete="new-password"
+                            value={workspaceCode}
+                            onChange={(e) => setWorkspaceCode(e.target.value)}
+                            statusProp={!workspaceCode ? "idle" : (wsNewOk ? "good" : "bad")}
+                        />
+
+                        <VaultCodeField
+                            className="text-gray-800 mt-2"
+                            id="ws-confirm"
+                            label="Confirm new code"
+                            autoComplete="new-password"
+                            value={workspaceConfirm}
+                            onChange={(e) => setWorkspaceConfirm(e.target.value)}
+                            statusProp={!workspaceConfirm ? "idle" : (wsConfirmOk ? "good" : "bad")}
+                        />
+
+                        <VaultCodeChecklist rules={wsRules} className="mt-2" />
+
+                        <div className="flex justify-end mt-3">
+                            <button
+                                type="button"
+                                className="btn-secondary text-sm"
+                                onClick={async () => {
+                                    const { ok, msg } = await changeWorkspaceCode();
+                                    setWorkspaceMsg({ ok, msg });
+                                }}
+                                disabled={!wsNewOk || !wsConfirmOk}
+                            >
+                                Change code
+                            </button>
+                        </div>
+
+                        {workspaceMsg?.ok ? (
+                            <p className="flex justify-center text-xs text-green-600 mt-4">{workspaceMsg.msg}</p>
+                        ) : workspaceMsg?.msg ? (
+                            <p className="flex justify-center text-xs text-red-500 mt-4">{workspaceMsg.msg}</p>
+                        ) : null}
+                    </>
+                )}
+            </>
+        </div>
+
+        {/* Private Card */}
+        <div className="p-5 bg-gray-50 rounded border">
+            {codes.private === null ? (
+                // CREATE
+                <>
+                <h3 className="font-medium mb-4 text-gray-900">
+                    Create a new Private vault code
+                </h3>
+
+                <VaultCodeField
+                    className="text-gray-800"
+                    id="pr-new"
+                    label="Create private code"
+                    autoComplete="new-password"
+                    value={privateCode}
+                    onChange={(e) => setPrivateCode(e.target.value)}
+                    statusProp={!privateCode ? "idle" : prNewOk ? "good" : "bad"}
                 />
-                <input
-                type="password"
-                placeholder="Confirm code"
-                value={workspaceConfirm}
-                onChange={(e) => setWorkspaceConfirm(e.target.value)}
-                className="w-full border rounded px-3 py-2 text-sm mb-3 text-gray-800"
+
+                <VaultCodeField
+                    className="text-gray-800 mt-2"
+                    id="pr-confirm"
+                    label="Confirm code"
+                    autoComplete="new-password"
+                    value={privateConfirm}
+                    onChange={(e) => setPrivateConfirm(e.target.value)}
+                    statusProp={!privateConfirm ? "idle" : prConfirmOk ? "good" : "bad"}
                 />
-                <div className="flex justify-end">
+
+                <VaultCodeChecklist
+                    rules={buildCodeRules(privateCode, "", 6)}  // neutral for "not same" until current is provided
+                    className="mt-2"
+                />
+
+                <div className="flex justify-end mt-3">
                     <button
+                    type="button"
                     className="btn-secondary text-sm"
                     onClick={async () => {
-                        const { ok, msg } = await createWorkspaceCode();
-                        setWorkspaceMsg({ ok, msg });
+                        const { ok, msg } = await createPrivateCode();
+                        setPrivateMsg({ ok, msg });
                     }}
+                    disabled={!prNewOk || !prConfirmOk}
                     >
                     Create code
                     </button>
                 </div>
-                {workspaceMsg?.ok ? (
-                <p className="flex justify-center text-xs text-green-600 mt-2">{workspaceMsg.msg}</p>
-                ) : workspaceMsg?.msg ? (
-                <p className="flex justify-center text-xs text-red-500 mt-2">{workspaceMsg.msg}</p>
+
+                {privateMsg?.ok ? (
+                    <p className="flex justify-center text-xs text-green-600 mt-4">{privateMsg.msg}</p>
+                ) : privateMsg?.msg ? (
+                    <p className="flex justify-center text-xs text-red-500 mt-4">{privateMsg.msg}</p>
                 ) : null}
-            </>
+                </>
             ) : (
-            /* CHANGE form */
-            <>
-            <h3 className="font-medium mb-3 text-gray-900">Change your <strong>Private</strong> vault code</h3>
-                <input
-                type="password"
-                placeholder="Current workspace vault code"
-                value={workspaceCurrent}
-                onChange={(e) => setWorkspaceCurrent(e.target.value)}
-                className="w-full border rounded px-3 py-2 text-sm mb-2 text-gray-800"
-                />
-                <input
-                type="password"
-                placeholder="New code"
-                value={workspaceCode}
-                onChange={(e) => setWorkspaceCode(e.target.value)}
-                className="w-full border rounded px-3 py-2 text-sm mb-2 text-gray-800"
-                />
-                <input
-                type="password"
-                placeholder="Confirm new code"
-                value={workspaceConfirm}
-                onChange={(e) => setWorkspaceConfirm(e.target.value)}
-                className="w-full border rounded px-3 py-2 text-sm mb-3 text-gray-800"
+                // CHANGE
+                <>
+                <h3 className="font-medium mb-4 text-gray-900">
+                    Change your Private vault code
+                </h3>
+
+                <VaultCodeField
+                    className="text-gray-800"
+                    id="pr-current"
+                    label="Current private vault code"
+                    autoComplete="current-password"
+                    value={privateCurrent}
+                    onChange={(e) => setPrivateCurrent(e.target.value)}
+                    verifyAsync={verifyPrivateCurrent}   // debounced RPC verification + ✓/×/spinner
                 />
 
-                <div className="flex justify-end mt-1">
+                <VaultCodeField
+                    className="text-gray-800 mt-2"
+                    id="pr-new"
+                    label="New code"
+                    autoComplete="new-password"
+                    value={privateCode}
+                    onChange={(e) => setPrivateCode(e.target.value)}
+                    statusProp={!privateCode ? "idle" : prNewOk ? "good" : "bad"}
+                />
+
+                <VaultCodeField
+                    className="text-gray-800 mt-2"
+                    id="pr-confirm"
+                    label="Confirm new code"
+                    autoComplete="new-password"
+                    value={privateConfirm}
+                    onChange={(e) => setPrivateConfirm(e.target.value)}
+                    statusProp={!privateConfirm ? "idle" : prConfirmOk ? "good" : "bad"}
+                />
+
+                <VaultCodeChecklist rules={prRules} className="mt-2" />
+
+                <div className="flex justify-end mt-3">
                     <button
+                    type="button"
                     className="btn-secondary text-sm"
                     onClick={async () => {
-                        const { ok, msg } = await changeWorkspaceCode();
-                        setWorkspaceMsg({ ok, msg });
+                        const { ok, msg } = await changePrivateCode();
+                        setPrivateMsg({ ok, msg });
                     }}
+                    disabled={!prNewOk || !prConfirmOk}
                     >
                     Change code
                     </button>
                 </div>
-                {workspaceMsg?.ok ? (
-                <p className="flex justify-center text-xs text-green-600 mt-2">{workspaceMsg.msg}</p>
-                ) : workspaceMsg?.msg ? (
-                <p className="flex justify-center text-xs text-red-500 mt-1">{workspaceMsg.msg}</p>
+
+                {privateMsg?.ok ? (
+                    <p className="flex justify-center text-xs text-green-600 mt-4">{privateMsg.msg}</p>
+                ) : privateMsg?.msg ? (
+                    <p className="flex justify-center text-xs text-red-500 mt-4">{privateMsg.msg}</p>
                 ) : null}
-            </>
+                </>
             )}
         </div>
-
-                    {/* Private Card */}
-                    <div className="p-5 bg-gray-50 rounded border">
-
-                        {codes.private === null ? (
-                        /* CREATE */
-                        <>
-                        <h3 className="font-medium mb-3 text-gray-900">Create a new <strong>Private</strong> vault code</h3>
-                            <input
-                            type="password"
-                            placeholder="Create private code"
-                            value={privateCode}
-                            onChange={(e) => setPrivateCode(e.target.value)}
-                            className="w-full border rounded px-3 py-2 text-sm mb-2 text-gray-800"
-                            />
-                            <input
-                            type="password"
-                            placeholder="Confirm code"
-                            value={privateConfirm}
-                            onChange={(e) => setPrivateConfirm(e.target.value)}
-                            className="w-full border rounded px-3 py-2 text-sm mb-3 text-gray-800"
-                            />
-                            <div className="flex justify-end mt-1">
-                                <button
-                                className="btn-secondary text-sm"
-                                onClick={async () => {
-                                    const { ok, msg } = await createPrivateCode();
-                                    setPrivateMsg({ ok, msg });
-                                }}
-                                >
-                                Create code
-                                </button>
-                            </div>
-                            {privateMsg?.ok ? (
-                            <p className="flex justify-center text-xs text-green-600 mt-2">{privateMsg.msg}</p>
-                            ) : privateMsg?.msg ? (
-                            <p className="flex justify-center text-xs text-red-500 mt-2">{privateMsg.msg}</p>
-                            ) : null}
-                        </>
-                        ) : (
-                        /* CHANGE */
-                        <>
-                        <h3 className="font-medium mb-3 text-gray-900">Change your <strong>Private</strong> vault code</h3>
-                            <input
-                            type="password"
-                            placeholder="Current private vault code"
-                            value={privateCurrent}
-                            onChange={(e) => setPrivateCurrent(e.target.value)}
-                            className="w-full border rounded px-3 py-2 text-sm mb-2 text-gray-800"
-                            />
-                            <input
-                                type="password"
-                                placeholder="New code"
-                                value={privateCode}
-                                onChange={(e) => setPrivateCode(e.target.value)}
-                                className="w-full border rounded px-3 py-2 text-sm mb-2 text-gray-800"
-                            />
-                            <input
-                            type="password"
-                            placeholder="Confirm new code"
-                            value={privateConfirm}
-                            onChange={(e) => setPrivateConfirm(e.target.value)}
-                            className="w-full border rounded px-3 py-2 text-sm mb-3 text-gray-800"
-                            />
-                            <div className="flex justify-end mt-1">
-                            <button
-                                className="btn-secondary text-sm"
-                                onClick={async () => {
-                                    const { ok, msg } = await changePrivateCode();
-                                    setPrivateMsg({ ok, msg });
-                            }}
-                            >
-                            Change code
-                            </button>
-                            </div>
-                            {privateMsg?.ok ? (
-                            <p className="flex justify-center text-xs text-green-600 mt-2">{privateMsg.msg}</p>
-                            ) : privateMsg?.msg ? (
-                            <p className="flex justify-center text-xs text-red-500 mt-2">{privateMsg.msg}</p>
-                            ) : null}
-                        </>
-                        )}
-                    </div>
-                </div>
-            </div>
-        </Layout>
+    </div>
+    </div>
+    </Layout>
     );
 }
