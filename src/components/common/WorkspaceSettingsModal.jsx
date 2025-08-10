@@ -151,7 +151,7 @@ export default function WorkspaceSettingsModal({
 
           {/* Danger Zone tab */}
           {(userRole === "admin" || userRole === "owner") && (
-            <TabsContent value="danger" className="space-y-4 mt-4">
+            <TabsContent value="danger" className="space-y-4 mt-10">
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="destructive">Delete This Workspace</Button>

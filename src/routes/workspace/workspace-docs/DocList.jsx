@@ -11,6 +11,7 @@ import { useUserRole } from "../../../hooks/useUserRole";
 import InviteModal from "../../../components/common/InviteModal";
 import WorkspaceTabs from "@/components/Layout/WorkspaceTabs";
 import WorkspaceSettingsModal from "@/components/common/WorkspaceSettingsModal";
+import CreateWorkspaceModal from "@/components/common/CreateWorkspaceModal";
 import { useWorkspaceActions } from "../../../hooks/useWorkspaceActions.js";
 
 export default function WorkspaceVaultList() {
@@ -32,12 +33,15 @@ export default function WorkspaceVaultList() {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   
+  // State for document card expansion
   const [expanded, setExpanded] = useState({});
   const [titleOverflow, setTitleOverflow] = useState({});
   const [noteOverflow, setNoteOverflow] = useState({});
-
   const titleRefs = useRef({});
   const noteRefs = useRef({});
+
+  // State for workspace creation modal
+  const [showCreateWorkspaceModal, setShowCreateWorkspaceModal] = useState(false);
 
   const {
     handleRename,
@@ -228,9 +232,10 @@ export default function WorkspaceVaultList() {
         workspaces={workspaceList}
         activeId={activeWorkspaceId}
         onSelect={(id) => setActiveWorkspaceId(id)}
-        onSettingsClick={() => setSettingsModalOpen(true)} 
+        onSettingsClick={() => setSettingsModalOpen(true)}
+        onCreateClick={() => setShowCreateWorkspaceModal(true)}
       />
-    </>
+      </>
       
       <div className="p-6 max-w-5xl mx-auto text-sm">
         {/* Buttons Row */}
@@ -486,6 +491,15 @@ export default function WorkspaceVaultList() {
         members={members}
         setMembers={setMembers}
         handleRoleChange={handleRoleChange}
+      />
+      {/* Create Workspace Modal */}
+      <CreateWorkspaceModal
+        open={showCreateWorkspaceModal}
+        onClose={() => setShowCreateWorkspaceModal(false)}
+        onCreated={(newWs) => {
+          setWorkspaceList((prev) => [...prev, { id: newWs.id, name: newWs.name }]);
+          setActiveWorkspaceId(newWs.id);
+        }}
       />
     </Layout>
   );

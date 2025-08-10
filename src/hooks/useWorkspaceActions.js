@@ -59,11 +59,54 @@ export const useWorkspaceActions = ({
     }
   };
 
+  // Function to delete the workspace
+  // This function should handle deleting the workspace and its related data
+  const handleDeleteWorkspace = async () => {
+    if (!activeWorkspaceId) return;
+    setWorkspaceActionLoading(true);
+    setWorkspaceActionErrorMsg("");
+    setWorkspaceActionSuccessMsg("");
+
+    try {
+      // If you have FK CASCADE on child tables, you can just:
+      // const { error: wsErr } = await supabase.from("workspaces").delete().eq("id", activeWorkspaceId);
+      // if (wsErr) throw wsErr;
+
+      // Otherwise, delete child rows first:
+      const { error: itemsErr } = await supabase
+        .from("workspace_vault_items")
+        .delete()
+        .eq("workspace_id", activeWorkspaceId);
+      if (itemsErr) throw itemsErr;
+
+      const { error: membersErr } = await supabase
+        .from("workspace_members")
+        .delete()
+        .eq("workspace_id", activeWorkspaceId);
+      if (membersErr) throw membersErr;
+
+      const { error: wsErr } = await supabase
+        .from("workspaces")
+        .delete()
+        .eq("id", activeWorkspaceId);
+      if (wsErr) throw wsErr;
+
+      setWorkspaceActionSuccessMsg("Workspace deleted.");
+      return true;
+    } catch (err) {
+      setWorkspaceActionErrorMsg(err.message || "Failed to delete workspace.");
+      return false;
+    } finally {
+      setWorkspaceActionLoading(false);
+    }
+  };
+
   return {
     workspaceActionLoading,
     workspaceActionErrorMsg,
     workspaceActionSuccessMsg,
     handleRename,
     handleRoleChange,
+    handleDeleteWorkspace,
   };
 };

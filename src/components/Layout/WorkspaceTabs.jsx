@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Settings } from "lucide-react";
 import clsx from "clsx";
 
-const WorkspaceTabs = ({ workspaces, activeId, onSelect, onSettingsClick }) => {
+const WorkspaceTabs = ({ workspaces, activeId, onSelect, onSettingsClick, onCreateClick }) => {
   const containerRef = useRef(null);
   const navigate = useNavigate();
 
@@ -37,7 +37,7 @@ const WorkspaceTabs = ({ workspaces, activeId, onSelect, onSettingsClick }) => {
 
       {/* Add Workspace Button */}
       <button
-        onClick={() => navigate("/workspace/create")}
+        onClick={onCreateClick}
         className="w-8 h-8 rounded-full bg-gray-700 hover:bg-purple-600 text-white flex items-center justify-center"
         title="Create new workspace"
       >
