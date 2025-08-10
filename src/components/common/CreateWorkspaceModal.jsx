@@ -100,7 +100,6 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
         });
         if (codeErr) {
           console.error("set_workspace_vault_code error:", codeErr);
-          // non-blocking – you can surface a soft warning if desired
         }
 
         setSuccessMsg("✅ Workspace created successfully!");
