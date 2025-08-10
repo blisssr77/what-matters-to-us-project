@@ -8,6 +8,7 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [vaultCode, setVaultCode] = useState("");
 
   // Auto-clear success message after 3 seconds
   useEffect(() => {
@@ -40,8 +41,11 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
     // 1) create workspace
     const { data: ws, error: wsErr } = await supabase
       .from("workspaces")
-      .insert({ name: trimmed, role: "owner", created_by: user.id, created_at: new Date().toISOString() })
-      .select()
+      .insert({ 
+        name: trimmed, role: "owner", 
+        created_by: user.id, 
+        created_at: new Date().toISOString() })
+      .select("id, name")
       .single();
 
     if (wsErr || !ws) {
@@ -62,9 +66,17 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
         created_at: new Date().toISOString(),
       });
 
-    if (memErr) {
+      if (vaultCode.trim()) {
+        await supabase.rpc("set_workspace_vault_code", {
+          p_workspace_id: ws.id,
+          p_code: vaultCode.trim(),
+        });
+      }
+
+
+      if (memErr) {
       // roll forward but inform
-      console.error("Failed to insert workspace_members:", memErr);
+        console.error("Failed to insert workspace_members:", memErr);
     }
 
     // Show success
@@ -104,6 +116,20 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
 
           {errorMsg && <p className="mt-2 text-xs text-red-600">{errorMsg}</p>}
           {successMsg && <p className="mt-2 text-xs text-green-600">{successMsg}</p>}
+        </div>
+
+        {/* Vault Code field */}
+        <div className="px-4 py-3">
+          <label className="block text-sm font-medium text-gray-700 mt-3 mb-1">
+            Enter your Workspace Vault Code to confirm
+          </label>
+          <input
+            type="password"
+            value={vaultCode}
+            onChange={(e) => setVaultCode(e.target.value)}
+            placeholder="Vault Code"
+            className="text-gray-800 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+          />
         </div>
 
         {/* Footer */}

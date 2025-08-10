@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import {
   Dialog,
@@ -15,7 +15,17 @@ import {
 } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AlertDialog, AlertDialogTrigger, AlertDialogContent } from "@/components/ui/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 
 export default function WorkspaceSettingsModal({
@@ -31,9 +41,14 @@ export default function WorkspaceSettingsModal({
   members,
   setMembers,
   handleRoleChange,
+  onDelete,
+  onVerifyVaultCode,
 }) {
   const { activeWorkspaceId } = useWorkspaceStore();
   const [activeTab, setActiveTab] = useState(userRole === "admin" || userRole === "owner" ? "general" : "members");
+  const [vaultCode, setVaultCode] = React.useState("");
+  const [verifyErr, setVerifyErr] = React.useState("");
+  const [verifying, setVerifying] = React.useState(false);
 
   // Fetch members if modal is opened
   useEffect(() => {
@@ -63,6 +78,24 @@ export default function WorkspaceSettingsModal({
       }
       setMembers(data);
     }
+  };
+
+  // Handle workspace deletion confirmation
+  const handleConfirmDelete = async () => {
+    setVerifyErr("");
+    if (!onVerifyVaultCode) {
+      // Fail-safe: if no verifier provided, block
+      setVerifyErr("Vault Code verification is unavailable.");
+      return;
+    }
+    setVerifying(true);
+    const ok = await onVerifyVaultCode(vaultCode);
+    setVerifying(false);
+    if (!ok) {
+      setVerifyErr("Incorrect Vault Code.");
+      return;
+    }
+    await onDelete?.();
   };
 
   return (
@@ -152,19 +185,57 @@ export default function WorkspaceSettingsModal({
           {/* Danger Zone tab */}
           {(userRole === "admin" || userRole === "owner") && (
             <TabsContent value="danger" className="space-y-4 mt-10">
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive">Delete This Workspace</Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <p className="text-red-600 font-semibold">
-                    ⚠️ Are you sure you want to delete this workspace?
-                  </p>
-                  <Button variant="destructive" className="mt-4">
-                    Confirm Delete
-                  </Button>
-                </AlertDialogContent>
-              </AlertDialog>
+              {/* Right-align the trigger */}
+              <div className="flex">
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" className="ml-auto">
+                      Delete This Workspace
+                    </Button>
+                  </AlertDialogTrigger>
+
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="text-red-600">
+                        Delete workspace “{workspaceName || "Untitled"}”?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action is irreversible and will permanently remove all data associated with this workspace.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+
+                    {/* Vault Code field */}
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Enter Workspace Vault Code to confirm
+                      </label>
+                      <input
+                        type="password"
+                        value={vaultCode}
+                        onChange={(e) => setVaultCode(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && vaultCode && !verifying) handleConfirmDelete();
+                        }}
+                        placeholder="Vault Code"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-500 text-gray-800"
+                      />
+                      {verifyErr && <p className="mt-2 text-xs text-red-600">{verifyErr}</p>}
+                    </div>
+
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={loading || verifying}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-red-600 hover:bg-red-700 disabled:opacity-60"
+                        onClick={handleConfirmDelete}
+                        disabled={!vaultCode || loading || verifying}
+                      >
+                        {verifying ? "Verifying..." : "Confirm Delete"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+
               <p className="text-sm text-gray-500">
                 This action is irreversible and will permanently remove all data associated with this workspace.
               </p>

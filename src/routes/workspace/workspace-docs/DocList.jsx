@@ -46,6 +46,7 @@ export default function WorkspaceVaultList() {
   const {
     handleRename,
     handleRoleChange,
+    handleDeleteWorkspace,
     workspaceActionLoading,
     workspaceActionErrorMsg,
     workspaceActionSuccessMsg,
@@ -110,20 +111,25 @@ export default function WorkspaceVaultList() {
 
       const { data, error } = await supabase
         .from("workspace_members")
-        .select("workspace_id, workspaces(name, id)")
+        .select(`
+          workspace_id,
+          workspaces:workspaces!workspace_members_workspace_id_fkey (id, name)
+        `) // explicit relation name
         .eq("user_id", user.id);
-        console.log("Fetched workspaces:", data);
+
+      console.log("Fetched workspaces:", data, error);
 
       if (error) {
         console.error("❌ Failed to fetch user workspaces", error);
         return;
       }
 
-      // Flatten nested data
-      const workspaceData = data.map((entry) => ({
-        id: entry.workspaces.id,
-        name: entry.workspaces.name,
-      }));
+      const workspaceData = (data || [])
+        .filter((entry) => entry.workspaces) // drops null relations
+        .map((entry) => ({
+          id: entry.workspaces.id,
+          name: entry.workspaces.name,
+        }));
 
       setWorkspaceList(workspaceData);
     };
@@ -222,6 +228,39 @@ export default function WorkspaceVaultList() {
     };
   }, []);
 
+  // helper to run after delete
+  const handleConfirmDelete = async (code) => {
+    const wsId = activeWorkspaceId;              // snapshot before mutations
+
+    // run your delete (RPC or client-side sequence)
+    const ok = await handleDeleteWorkspace?.(code); // or serverDeleteWorkspace(code)
+    if (!ok) return;
+
+    // compute nextId using current state
+    const remaining = workspaceList.filter(w => w.id !== wsId);
+    const nextId = remaining[0]?.id ?? null;
+
+    // now update states separately (event handler = safe)
+    setWorkspaceList(remaining);
+    setActiveWorkspaceId(nextId);
+    setAllDocuments([]);
+    setMembers([]);
+    setSettingsModalOpen(false);
+  };
+
+  // Verify workspace vault code
+  const verifyWorkspaceVaultCode = async (code) => {
+    if (!activeWorkspaceId) return false;
+    const { data, error } = await supabase.rpc("verify_workspace_vault_code", {
+      p_workspace_id: activeWorkspaceId,
+      p_code: code,
+    });
+    if (error) {
+      console.error("verify_workspace_vault_code error:", error);
+      return false;
+    }
+    return !!data; // true if valid
+  };
   
 
   return (
@@ -491,6 +530,8 @@ export default function WorkspaceVaultList() {
         members={members}
         setMembers={setMembers}
         handleRoleChange={handleRoleChange}
+        onDelete={handleConfirmDelete}
+        onVerifyVaultCode={verifyWorkspaceVaultCode}
       />
       {/* Create Workspace Modal */}
       <CreateWorkspaceModal
