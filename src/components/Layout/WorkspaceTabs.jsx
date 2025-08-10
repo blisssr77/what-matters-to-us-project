@@ -38,7 +38,7 @@ const WorkspaceTabs = ({ workspaces, activeId, onSelect, onSettingsClick, onCrea
       {/* Add Workspace Button */}
       <button
         onClick={onCreateClick}
-        className="w-8 h-8 rounded-full bg-gray-700 hover:bg-purple-600 text-white flex items-center justify-center"
+        className="w-6 h-6 rounded-full bg-gray-700 hover:bg-purple-600 text-white flex items-center justify-center"
         title="Create new workspace"
       >
         <Plus size={16} />

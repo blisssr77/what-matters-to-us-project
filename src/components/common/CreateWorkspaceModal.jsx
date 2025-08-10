@@ -12,52 +12,81 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
 
   // Auto-clear success message after 3 seconds
   useEffect(() => {
-    if (successMsg) {
-      const timer = setTimeout(() => setSuccessMsg(""), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [successMsg]);
+      if (successMsg) {
+        const t = setTimeout(() => setSuccessMsg(""), 3000);
+        return () => clearTimeout(t);
+      }
+    }, [successMsg]);
 
-  if (!open) return null;
+    if (!open) return null;
 
-  const handleCreate = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      setErrorMsg("Workspace name is required.");
-      return;
-    }
+    const handleCreate = async () => {
+      const trimmedName = name.trim();
+      const trimmedCode = vaultCode.trim();
 
-    setLoading(true);
-    setErrorMsg("");
-    setSuccessMsg("");
+      if (!trimmedName) {
+        setErrorMsg("Workspace name is required.");
+        return;
+      }
+      if (!trimmedCode) {
+        setErrorMsg("Vault Code is required for creation.");
+        return;
+      }
 
-    const { data: { user }, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !user) {
-      setErrorMsg("You must be logged in.");
-      setLoading(false);
-      return;
-    }
+      setLoading(true);
+      setErrorMsg("");
+      setSuccessMsg("");
+      
+      // 0) Verify user is logged in
+      const { data: { user }, error: userErr } = await supabase.auth.getUser();
+        if (userErr || !user) {
+          setErrorMsg("You must be logged in.");
+          setLoading(false);
+          return;
+        }
 
-    // 1) create workspace
-    const { data: ws, error: wsErr } = await supabase
-      .from("workspaces")
-      .insert({ 
-        name: trimmed, role: "owner", 
-        created_by: user.id, 
-        created_at: new Date().toISOString() })
-      .select("id, name")
-      .single();
+      // verify the user's account vault code (server-side RPC)
+      const { data: ok, error: vErr } = await supabase.rpc("verify_user_vault_code", {
+        p_code: trimmedCode,
+      });
 
-    if (wsErr || !ws) {
-      setErrorMsg(wsErr?.message || "Failed to create workspace.");
-      setLoading(false);
-      return;
-    }
+      // 0) Verify user's Vault Code against vault_codes (server-side)
+      const { data: verified, error: verifyErr } = await supabase.rpc(
+        "verify_user_vault_code",
+        { p_user_id: user.id, p_code: trimmedCode }
+      );
 
-    // 2) add creator as owner member so it shows up in the tabs query
-    const { error: memErr } = await supabase
-      .from("workspace_members")
-      .insert({
+      if (verifyErr) {
+        console.error("verify_user_vault_code error:", verifyErr);
+        setErrorMsg("Failed to verify Vault Code. Please try again.");
+        setLoading(false);
+        return;
+      }
+      if (!verified) {
+        setErrorMsg("Vault Code does not match your account.");
+        setLoading(false);
+        return;
+      }
+
+      // 1) Create workspace
+      const { data: ws, error: wsErr } = await supabase
+        .from("workspaces")
+        .insert({
+          name: trimmedName,
+          created_by: user.id,
+          created_at: new Date().toISOString(),
+        })
+        .select("id, name")
+        .single();
+
+      if (wsErr || !ws) {
+        setErrorMsg(wsErr?.message || "Failed to create workspace.");
+        setLoading(false);
+        return;
+      }
+
+      // 2) Add creator as owner so it shows up in your tabs query
+      const { error: memErr } = await supabase.from("workspace_members").insert({
         workspace_id: ws.id,
         user_id: user.id,
         role: "owner",
@@ -66,27 +95,28 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
         created_at: new Date().toISOString(),
       });
 
-      if (vaultCode.trim()) {
-        await supabase.rpc("set_workspace_vault_code", {
-          p_workspace_id: ws.id,
-          p_code: vaultCode.trim(),
-        });
+      if (memErr) {
+        console.error("Failed to insert workspace_members:", memErr);
+        // continue; membership policies might still allow reading via created_by
       }
 
+      // 3) Set the workspace vault code hash (server handles hashing)
+      const { error: codeErr } = await supabase.rpc("set_workspace_vault_code", {
+        p_workspace_id: ws.id,
+        p_code: trimmedCode,
+      });
+      if (codeErr) {
+        console.error("set_workspace_vault_code error:", codeErr);
+        // non-blocking: you could surface a soft warning if you want
+      }
 
-      if (memErr) {
-      // roll forward but inform
-        console.error("Failed to insert workspace_members:", memErr);
-    }
-
-    // Show success
-    setSuccessMsg("✅ Workspace created successfully!");
-
-    onCreated?.(ws);
-    setLoading(false);
-    setName("");
-    onClose();
-  };
+      setSuccessMsg("✅ Workspace created successfully!");
+      onCreated?.(ws);
+      setLoading(false);
+      setName("");
+      setVaultCode("");
+      onClose();
+    };
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40">
