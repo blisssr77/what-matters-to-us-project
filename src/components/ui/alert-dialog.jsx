@@ -10,20 +10,21 @@ const AlertDialogTrigger = AlertDialogPrimitive.Trigger
 
 const AlertDialogPortal = AlertDialogPrimitive.Portal
 
-const AlertDialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
+const AlertDialogOverlay = React.forwardRef(({ className, overlayClassName, ...props }, ref) => (
   <AlertDialogPrimitive.Overlay
     className={cn(
       "fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-      className
+      className,
+      overlayClassName
     )}
     {...props}
     ref={ref} />
 ))
 AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName
 
-const AlertDialogContent = React.forwardRef(({ className, ...props }, ref) => (
+const AlertDialogContent = React.forwardRef(({ className, overlayClassName, disableOverlay = false, ...props }, ref) => (
   <AlertDialogPortal>
-    <AlertDialogOverlay />
+    {!disableOverlay && <AlertDialogOverlay overlayClassName={overlayClassName} />}
     <AlertDialogPrimitive.Content
       ref={ref}
       className={cn(

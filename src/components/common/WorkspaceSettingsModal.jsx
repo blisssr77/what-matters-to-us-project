@@ -194,7 +194,10 @@ export default function WorkspaceSettingsModal({
                     </Button>
                   </AlertDialogTrigger>
 
-                  <AlertDialogContent>
+                  {/* Final alert Dialog for deletion confirmation */}
+                  <AlertDialogContent
+                    overlayClassName="bg-transparent data-[state=open]:animate-none data-[state=closed]:animate-none"
+                  >
                     <AlertDialogHeader>
                       <AlertDialogTitle className="text-red-600">
                         Delete workspace “{workspaceName || "Untitled"}”?
