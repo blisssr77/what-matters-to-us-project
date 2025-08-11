@@ -107,7 +107,7 @@ export default function WorkspaceVaultList() {
               placeholder="Search documents..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg shadow-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg shadow-sm text-gray-800 focus:outline-none focus:ring-0 focus:ring-gray-500"
             />
 
             {searchTerm && (
@@ -125,7 +125,7 @@ export default function WorkspaceVaultList() {
           <div className="relative w-full md:w-1/2" ref={tagBoxRef}>
             <button
               onClick={() => setShowTagFilter(!showTagFilter)}
-              className="w-full flex items-center justify-between px-4 py-2 border border-gray-300 rounded-lg text-gray-400 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full flex items-center justify-between px-4 py-2 border border-gray-300 rounded-lg text-gray-400 bg-white shadow-sm focus:outline-none focus:ring-0 focus:ring-gray-500"
             >
               {selectedTag ? `Tag: ${selectedTag}` : "Search by Tag"}
               <ChevronDown className="ml-2 text-gray-400" size={18} />

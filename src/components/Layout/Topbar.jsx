@@ -70,7 +70,7 @@ export default function Topbar() {
       <div className="relative" ref={menuRef}>
         <motion.div
           whileHover={{ scale: 1.08, boxShadow: "0 0 12px rgba(168,85,247,0.8)" }}
-          className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center cursor-pointer ring-1 ring-purple-500/30"
+          className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center cursor-pointer ring-0 ring-gray-500/30"
           onClick={() => setOpen((p) => !p)}
         >
           {displayName.slice(0, 2).toUpperCase()}

@@ -138,7 +138,7 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g., Sales Team, Credential Docs for Client"
-            className="w-full text-gray-800 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+            className="w-full text-gray-800 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-0 focus:ring-gray-500"
           />
 
           {errorMsg && <p className="mt-2 text-xs text-red-600">{errorMsg}</p>}
@@ -155,7 +155,7 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
             value={vaultCode}
             onChange={(e) => setVaultCode(e.target.value)}
             placeholder="Vault Code"
-            className="text-gray-800 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+            className="text-gray-800 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-0 focus:ring-gray-500"
           />
         </div>
 

@@ -14,6 +14,12 @@ body {
   display: none;
 }
 
+@layer base {
+  input, textarea, select {
+    @apply focus:outline-none focus:ring-0 focus:border-gray-500;
+  }
+}
+
 .btn-main {
   @apply px-3 py-1.5 bg-gradient-to-r from-indigo-800 via-purple-800 to-violet-900 
           text-white rounded-xl shadow-lg 

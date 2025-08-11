@@ -7,6 +7,7 @@ import { encryptText, encryptFile } from "../../../lib/encryption";
 import bcrypt from "bcryptjs";
 import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
+import WorkspaceVaultList from "@/routes/workspace/vaulted-docs/VaultedDocList";
 
 export default function WorkspaceUploadDoc() {
     const [files, setFiles] = useState([]);
@@ -23,8 +24,9 @@ export default function WorkspaceUploadDoc() {
     const [vaultCode, setVaultCode] = useState("");
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
-    const { activeWorkspaceId } = useWorkspaceStore();
+    const { activeWorkspaceId, setActiveWorkspaceId } = useWorkspaceStore();
     const [isVaulted, setIsVaulted] = useState(true);
+    const [wsName, setWsName] = useState("");
 
     const navigate = useNavigate();
 
@@ -44,32 +46,44 @@ export default function WorkspaceUploadDoc() {
     ];
 
     // Fetch active workspace ID on mount
+    // 1) On mount, pick an active workspace ID for this user
     useEffect(() => {
-        const fetchWorkspace = async () => {
-            const { data: userData, error: userError } = await supabase.auth.getUser();
-            const authUserId = userData?.user?.id;
+        (async () => {
+        const { data: userData } = await supabase.auth.getUser();
+        const userId = userData?.user?.id;
+        if (!userId) return;
 
-            if (!authUserId) {
-                console.error("No authenticated user found");
-                return;
-            }
+        const { data: membership } = await supabase
+            .from("workspace_members")
+            .select("workspace_id")
+            .eq("user_id", userId)
+            .maybeSingle();
 
-            const { data, error } = await supabase
-                .from("workspace_members")
-                .select("workspace_id")
-                .eq("user_id", authUserId)
-                .maybeSingle();
+        if (membership?.workspace_id) {
+            setActiveWorkspaceId(membership.workspace_id);
+            console.log("Active Workspace ID:", membership.workspace_id);
+        } else {
+            console.warn("⚠️ No workspace found for user.");
+        }
+        })();
+    }, [setActiveWorkspaceId]);
 
-            if (data?.workspace_id) {
-                useWorkspaceStore.getState().setActiveWorkspaceId(data.workspace_id);
-                console.log("Active Workspace ID:", data.workspace_id);
-            } else {
-                console.warn("⚠️ No workspace found for user.");
-            }
-        };
+    // 2) Whenever the active ID changes, fetch its name
+    useEffect(() => {
+        if (!activeWorkspaceId) {
+        setWsName("");
+        return;
+        }
+        (async () => {
+        const { data, error } = await supabase
+            .from("workspaces")
+            .select("name")
+            .eq("id", activeWorkspaceId)
+            .single();
 
-        fetchWorkspace();
-    }, []);
+        setWsName(error ? "" : data?.name ?? "");
+        })();
+    }, [activeWorkspaceId]);
 
     // Fetch available tags on component mount
     useEffect(() => {
@@ -354,7 +368,7 @@ export default function WorkspaceUploadDoc() {
                     <X size={20} />
                 </button>
 
-                <h2 className="text-xl font-semibold text-gray-800 mb-4">📤 Upload to Workspace Vault</h2>
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">📤 Upload to {wsName}</h2>
                 <p className="text-xs text-blue-700 mt-1">
                     Supported: PDF, Word, Excel, PowerPoint, Text, CSV, JPG, PNG, GIF, ZIP, JSON
                 </p>
@@ -399,13 +413,13 @@ export default function WorkspaceUploadDoc() {
                     <div>
                         <label className="block text-sm font-medium mb-1 text-gray-800 mt-4">Document title:</label>
                         <input
-                        value={title}
-                        onChange={(e) => {
-                            setTitle(e.target.value);
-                            setHasUnsavedChanges(true);
-                        }}
-                        className="w-full p-2 border rounded text-gray-700 text-sm bg-gray-50"
-                        placeholder="Enter document title (Public)"
+                            value={title}
+                            onChange={(e) => {
+                                setTitle(e.target.value);
+                                setHasUnsavedChanges(true);
+                            }}
+                            className="w-full p-2 border rounded text-gray-700 text-sm bg-gray-50"
+                            placeholder="Enter document title (Public)"
                         />
                     </div>
 

@@ -217,7 +217,7 @@ export default function WorkspaceSettingsModal({
                           if (e.key === "Enter" && vaultCode && !verifying) handleConfirmDelete();
                         }}
                         placeholder="Vault Code"
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-500 text-gray-800"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-0 focus:ring-gray-500 text-gray-800"
                       />
                       {verifyErr && <p className="mt-2 text-xs text-red-600">{verifyErr}</p>}
                     </div>

@@ -24,35 +24,48 @@ const WorkspaceUploadNote = () => {
     const [isVaulted, setIsVaulted] = useState(true);
 
     const { activeWorkspaceId, setActiveWorkspaceId } = useWorkspaceStore();
+    const [wsName, setWsName] = useState("");
     const navigate = useNavigate();
 
     // ✅ Fetch and set active workspace on mount
+    // 1) On mount, pick an active workspace ID for this user
     useEffect(() => {
-        const fetchWorkspace = async () => {
+        (async () => {
         const { data: userData } = await supabase.auth.getUser();
-        const authUserId = userData?.user?.id;
+        const userId = userData?.user?.id;
+        if (!userId) return;
 
-        if (!authUserId) {
-            console.error("No authenticated user found");
-            return;
-        }
-
-        const { data, error } = await supabase
+        const { data: membership } = await supabase
             .from("workspace_members")
             .select("workspace_id")
-            .eq("user_id", authUserId)
+            .eq("user_id", userId)
             .maybeSingle();
 
-        if (data?.workspace_id) {
-            setActiveWorkspaceId(data.workspace_id);
-            console.log("Active Workspace ID:", data.workspace_id);
+        if (membership?.workspace_id) {
+            setActiveWorkspaceId(membership.workspace_id);
+            console.log("Active Workspace ID:", membership.workspace_id);
         } else {
             console.warn("⚠️ No workspace found for user.");
         }
-        };
-
-        fetchWorkspace();
+        })();
     }, [setActiveWorkspaceId]);
+
+    // 2) Whenever the active ID changes, fetch its name
+    useEffect(() => {
+        if (!activeWorkspaceId) {
+        setWsName("");
+        return;
+        }
+        (async () => {
+        const { data, error } = await supabase
+            .from("workspaces")
+            .select("name")
+            .eq("id", activeWorkspaceId)
+            .single();
+
+        setWsName(error ? "" : data?.name ?? "");
+        })();
+    }, [activeWorkspaceId]);
 
      // Message timeout for success/error
     useEffect(() => {
@@ -205,7 +218,7 @@ const WorkspaceUploadNote = () => {
                     <X size={20} />
                 </button>
 
-                <h2 className="text-xl font-bold mb-4 text-gray-800">📝 Upload to Workspace Vault</h2>
+                <h2 className="text-xl font-bold mb-4 text-gray-800">📝 Upload to {wsName}</h2>
 
                 <label className="block text-sm font-medium mb-1 text-gray-700">Note title:</label>
                 <input

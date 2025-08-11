@@ -32,6 +32,10 @@ export default function WorkspaceVaultList() {
   const userRole = useUserRole(activeWorkspaceId);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // State for workspace on rordering
+  const [workspaces, setWorkspaces] = useState([]);
+  const handleReorder = (newList) => setWorkspaces(newList);
   
   // State for document card expansion
   const [expanded, setExpanded] = useState({});
@@ -264,7 +268,7 @@ export default function WorkspaceVaultList() {
   
 
   return (
-    <Layout>
+    <Layout noGutters>
       {/* Header with Settings Icon */}
       <>
       <WorkspaceTabs
@@ -279,19 +283,6 @@ export default function WorkspaceVaultList() {
       <div className="p-6 max-w-5xl mx-auto text-sm">
         {/* Buttons Row */}
         <div className="flex justify-end gap-2 mb-4">
-          {/* Workspace Selector */}
-          {/* <select
-            className="bg-white border border-gray-300 rounded px-3 py-2 text-sm"
-            value={activeWorkspaceId}
-            onChange={(e) => setActiveWorkspaceId(e.target.value)}
-          >
-            {workspaceList.map((ws) => (
-              <option key={ws.id} value={ws.id}>
-                {ws.name}
-              </option>
-            ))}
-          </select> */}
-
 
           {/* Upload and Create Buttons */}
           <button
@@ -317,14 +308,14 @@ export default function WorkspaceVaultList() {
 
           {/* Search Bar */}
           <div className="relative w-full md:w-1/2"> 
-            <Search className="absolute left-3 top-3 text-purple-600" size={18} />
+            <Search className="absolute left-3 top-3 text-gray-400" size={18} />
 
             <input
               type="text"
               placeholder="Search documents..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg shadow-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg shadow-sm text-gray-800 focus:outline-none focus:ring-0 focus:ring-gray-500"
             />
 
             {searchTerm && (
@@ -342,7 +333,7 @@ export default function WorkspaceVaultList() {
           <div className="relative w-full md:w-1/2" ref={tagBoxRef}>
             <button
               onClick={() => setShowTagFilter(!showTagFilter)}
-              className="w-full flex items-center justify-between px-4 py-2 border border-gray-300 rounded-lg text-gray-400 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full flex items-center justify-between px-4 py-2 border border-gray-300 rounded-lg text-gray-400 bg-white shadow-sm focus:ring-0 focus:ring-gray-500"
             >
               {selectedTag ? `Tag: ${selectedTag}` : "Search by Tag"}
               <ChevronDown className="ml-2 text-gray-400" size={18} />
