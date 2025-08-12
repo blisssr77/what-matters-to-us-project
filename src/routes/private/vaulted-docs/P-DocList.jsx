@@ -2,14 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText, Search, ChevronDown, Lock } from "lucide-react";
 import Layout from "@/components/Layout/Layout";
-import WorkspaceTabs from "@/components/Layout/WorkspaceTabs"; // tabs UI works fine here
+import WorkspaceTabs from "@/components/Layout/WorkspaceTabs"; 
 import dayjs from "dayjs";
 import { supabase } from "@/lib/supabaseClient";
-
-// 🔧 Adjust these to your schema if needed
-const PRIVATE_SPACES_TABLE = "private_spaces";
-const PRIVATE_ITEMS_TABLE  = "private_vault_items";
-const PRIVATE_FK_COL       = "private_space_id";
+import CreatePrivateSpaceModal from "@/components/common/CreatePrivateSpaceModal";
 
 export default function PrivateVaultList() {
   const navigate = useNavigate();
@@ -21,15 +17,28 @@ export default function PrivateVaultList() {
   const [tagSearchTerm, setTagSearchTerm] = useState("");
 
   // ---------- spaces & active selection ----------
-  const [spaceList, setSpaceList] = useState([]);     // [{id, name}]
+  const [spaces, setSpaces] = useState([]);
   const [activeSpaceId, setActiveSpaceId] = useState(null);
   const [spaceName, setSpaceName] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // reorder UI (drag in tabs)
-  const [spacesForUI, setSpacesForUI] = useState([]);
-  const handleReorder = (newOrder) => {
-    setSpacesForUI(newOrder);
-    setSpaceList(newOrder); // TODO: persist if you add a `position` column
+  const spacesForUI = useMemo(
+    () => spaces.map((s) => ({ id: s.id, name: s.name })),
+    [spaces]
+  );
+  // reorder handler from Tabs
+  const handleReorder = async (newList) => {
+    setSpaces(newList); // optimistic
+    // persist sort_order
+    const updates = newList.map((s, idx) => ({ id: s.id, sort_order: idx }));
+    for (const u of updates) {
+      const { error } = await supabase
+        .from("private_spaces")
+        .update({ sort_order: u.sort_order })
+        .eq("id", u.id);
+      if (error) console.error("sort_order update failed:", u.id, error);
+    }
   };
 
   // ---------- docs ----------
@@ -81,27 +90,19 @@ export default function PrivateVaultList() {
   // Fetch all private spaces the user owns
   useEffect(() => {
     (async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.user?.id;
-      if (!userId) return;
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      if (!user) return;
 
       const { data, error } = await supabase
-        .from(PRIVATE_SPACES_TABLE)
-        .select("id, name")
-        .eq("created_by", userId)
-        .order("created_at", { ascending: false });
+        .from("private_spaces")
+        .select("id, name, sort_order")
+        .eq("created_by", user.id)
+        .order("sort_order", { ascending: true });
 
-      if (error) {
-        console.error("❌ Failed to fetch private spaces:", error);
-        return;
+      if (!error) {
+        setSpaces(data ?? []);
+        if (!activeSpaceId && data?.length) setActiveSpaceId(data[0].id);
       }
-
-      setSpaceList(data || []);
-      setSpacesForUI(data || []);
-
-      // pick an active space if none
-      const firstId = data?.[0]?.id ?? null;
-      setActiveSpaceId((prev) => prev ?? firstId);
     })();
   }, []);
 
@@ -113,7 +114,7 @@ export default function PrivateVaultList() {
     }
     (async () => {
       const { data, error } = await supabase
-        .from(PRIVATE_SPACES_TABLE)
+        .from("private_spaces")
         .select("name")
         .eq("id", activeSpaceId)
         .single();
@@ -127,9 +128,9 @@ export default function PrivateVaultList() {
     if (!activeSpaceId) return;
     (async () => {
       const { data, error } = await supabase
-        .from(PRIVATE_ITEMS_TABLE)
+        .from("private_vault_items")
         .select("*")
-        .eq(PRIVATE_FK_COL, activeSpaceId)
+        .eq("private_space_id", activeSpaceId)
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -161,7 +162,7 @@ export default function PrivateVaultList() {
         activeId={activeSpaceId}
         onSelect={(id) => setActiveSpaceId(id)}
         onSettingsClick={() => navigate(`/privatespace/settings/${activeSpaceId}`)}
-        onCreateClick={() => navigate("/privatespace/create")}
+        onCreateClick={() => setShowCreateModal(true)}
         onReorder={handleReorder}
       />
 
@@ -355,6 +356,20 @@ export default function PrivateVaultList() {
           })}
         </div>
       </div>
+
+      {/* Create Private Space Modal */}
+      <CreatePrivateSpaceModal
+        open={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreated={(ps) => {
+          // add new space and activate it
+          setSpaces((prev) => {
+            const next = [...prev, { id: ps.id, name: ps.name, sort_order: prev.length }];
+            return next;
+          });
+          setActiveSpaceId(ps.id);
+        }}
+      />
     </Layout>
   );
 }

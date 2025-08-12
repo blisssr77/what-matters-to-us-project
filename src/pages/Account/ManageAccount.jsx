@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { supabase } from "../../lib/supabaseClient";
+import { supabase, getSupabaseNoPersist } from "../../lib/supabaseClient";
 import Layout from "../../components/Layout/Layout";
 import { UploadCloud, Camera, Vault } from "lucide-react";
 import bcrypt from "bcryptjs";
@@ -7,7 +7,6 @@ import { ShieldCheck, X, Check, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import PasswordChecklist from "./PasswordCheckList";
 import PasswordField from "./PasswordField";
-import { supabaseNoPersist } from "./supabaseNoPersist";
 import VaultCodeField from "./VaultCodeField";
 import VaultCodeChecklist, { buildCodeRules } from "./VaultCodeChecklist";
 

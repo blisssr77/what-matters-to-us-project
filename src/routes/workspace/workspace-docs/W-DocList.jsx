@@ -2,7 +2,6 @@ import React from "react";
 import { useState, useEffect, useRef, Select } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText, Search, ChevronDown, XCircle, Lock, Settings } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import Layout from "../../../components/Layout/Layout";
 import dayjs from "dayjs";
 import { supabase } from "../../../lib/supabaseClient";
@@ -32,10 +31,6 @@ export default function WorkspaceVaultList() {
   const userRole = useUserRole(activeWorkspaceId);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  // State for workspace on rordering
-  const [workspaces, setWorkspaces] = useState([]);
-  const handleReorder = (newList) => setWorkspaces(newList);
   
   // State for document card expansion
   const [expanded, setExpanded] = useState({});
@@ -69,7 +64,7 @@ export default function WorkspaceVaultList() {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Filter documents based on search term and selected tag
+  // 2) Compute filteredDocs BEFORE any effect that uses it
   const filteredDocs = React.useMemo(() => {
     const term = searchTerm.toLowerCase();
     return allDocuments.filter((doc) => {
@@ -81,9 +76,8 @@ export default function WorkspaceVaultList() {
       return matchesSearch && matchesTag;
     });
   }, [allDocuments, searchTerm, selectedTag]);
-  
 
-  // Measure overflow for title and notes separately
+  // 3) Now it's safe to use filteredDocs in effects / deps
   useEffect(() => {
     const newTitleOverflow = {};
     const newNoteOverflow = {};
@@ -91,55 +85,79 @@ export default function WorkspaceVaultList() {
     filteredDocs.forEach((doc) => {
       const titleEl = titleRefs.current[doc.id];
       const noteEl = noteRefs.current[doc.id];
-
-      if (titleEl && titleEl.scrollHeight > titleEl.clientHeight) {
-        newTitleOverflow[doc.id] = true;
-      }
-      if (noteEl && noteEl.scrollHeight > noteEl.clientHeight) {
-        newNoteOverflow[doc.id] = true;
-      }
+      if (titleEl && titleEl.scrollHeight > titleEl.clientHeight) newTitleOverflow[doc.id] = true;
+      if (noteEl && noteEl.scrollHeight > noteEl.clientHeight) newNoteOverflow[doc.id] = true;
     });
 
     setTitleOverflow(newTitleOverflow);
     setNoteOverflow(newNoteOverflow);
-  }, [filteredDocs]);
+  }, [filteredDocs]); 
 
-  // Fetch all workspaces on component mount
+  // Filter documents based on search term and selected tag
   useEffect(() => {
     const fetchAllWorkspaces = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
+      const { data: { user } = {} } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data, error } = await supabase
         .from("workspace_members")
         .select(`
           workspace_id,
+          sort_order,
           workspaces:workspaces!workspace_members_workspace_id_fkey (id, name)
-        `) // explicit relation name
+        `)
         .eq("user_id", user.id);
-
-      console.log("Fetched workspaces:", data, error);
 
       if (error) {
         console.error("❌ Failed to fetch user workspaces", error);
         return;
       }
 
-      const workspaceData = (data || [])
-        .filter((entry) => entry.workspaces) // drops null relations
-        .map((entry) => ({
-          id: entry.workspaces.id,
-          name: entry.workspaces.name,
+      const mapped = (data || [])
+        .filter((row) => row.workspaces)
+        .map((row) => ({
+          id: row.workspaces.id,
+          name: row.workspaces.name,
+          sort_order: row.sort_order ?? null,
         }));
 
-      setWorkspaceList(workspaceData);
+      // sort: by sort_order first (nulls last), then by name
+      const sorted = [...mapped].sort((a, b) => {
+        const ao = a.sort_order ?? Number.POSITIVE_INFINITY;
+        const bo = b.sort_order ?? Number.POSITIVE_INFINITY;
+        if (ao !== bo) return ao - bo;
+        return a.name.localeCompare(b.name);
+      });
+
+      setWorkspaceList(sorted);
+
+      // ensure there's an active workspace
+      if (!activeWorkspaceId && sorted.length) {
+        setActiveWorkspaceId(sorted[0].id);
+      }
     };
 
     fetchAllWorkspaces();
-  }, []);
+  }, [activeWorkspaceId, setActiveWorkspaceId]);
+
+  // Fetch workspace name and documents when activeWorkspaceId changes
+  const handleReorder = async (newList) => {
+    // optimistic UI
+    setWorkspaceList(newList.map((ws, idx) => ({ ...ws, sort_order: idx })));
+
+   const { data: { user } = {} } = await supabase.auth.getUser();
+   if (!user) return;
+
+   // persist per-user sort_order (one row per membership)
+   for (let i = 0; i < newList.length; i++) {
+     const ws = newList[i];
+     const { error } = await supabase
+       .from("workspace_members")
+       .update({ sort_order: i })
+       .match({ user_id: user.id, workspace_id: ws.id });
+     if (error) console.error("Failed to persist sort_order", { wsId: ws.id, i, error });
+   }
+ };
 
   // Insert profile if it doesn't exist, from AuthPage.jsx and Google signup
   useEffect(() => {
@@ -166,7 +184,7 @@ export default function WorkspaceVaultList() {
 
     insertProfileIfNeeded();
   }, []);
-
+  
   // Fetch members and their roles in the workspace
   useEffect(() => {
     const fetchMembersAndRole = async () => {
@@ -277,6 +295,7 @@ export default function WorkspaceVaultList() {
         onSelect={(id) => setActiveWorkspaceId(id)}
         onSettingsClick={() => setSettingsModalOpen(true)}
         onCreateClick={() => setShowCreateWorkspaceModal(true)}
+        onReorder={handleReorder}
       />
       </>
       

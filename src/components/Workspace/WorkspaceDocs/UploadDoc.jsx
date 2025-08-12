@@ -1,4 +1,4 @@
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 import { Loader2, X, Search } from "lucide-react";
@@ -7,7 +7,6 @@ import { encryptText, encryptFile } from "../../../lib/encryption";
 import bcrypt from "bcryptjs";
 import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
-import WorkspaceVaultList from "@/routes/workspace/vaulted-docs/VaultedDocList";
 
 export default function WorkspaceUploadDoc() {
     const [files, setFiles] = useState([]);

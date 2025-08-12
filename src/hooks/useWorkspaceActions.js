@@ -68,7 +68,7 @@ export const useWorkspaceActions = ({
     setWorkspaceActionSuccessMsg("");
 
     try {
-      // If you have FK CASCADE on child tables, you can just:
+      // If you have FK CASCADE on child tables,  just:
       // const { error: wsErr } = await supabase.from("workspaces").delete().eq("id", activeWorkspaceId);
       // if (wsErr) throw wsErr;
 

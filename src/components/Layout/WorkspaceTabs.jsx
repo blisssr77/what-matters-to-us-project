@@ -3,12 +3,12 @@ import { Plus, Settings, ChevronLeft, ChevronRight } from "lucide-react";
 import clsx from "clsx";
 
 export default function WorkspaceTabs({
-  workspaces,
+  workspaces = [],
   activeId,
   onSelect,
   onSettingsClick,
   onCreateClick,
-  onReorder, // (newOrderArray) => void
+  onReorder, // optional: (newOrderArray) => void
 }) {
   const scrollerRef = useRef(null);
   const tabRefs = useRef({});
@@ -17,14 +17,6 @@ export default function WorkspaceTabs({
   const [dragIdx, setDragIdx] = useState(null);
   const [overIdx, setOverIdx] = useState(null);
 
-  // keep a fast lookup for indices
-  const indexById = useMemo(() => {
-    const m = new Map();
-    workspaces.forEach((w, i) => m.set(w.id, i));
-    return m;
-  }, [workspaces]);
-
-  // ensure active tab is visible
   useEffect(() => {
     const el = tabRefs.current[activeId];
     if (el?.scrollIntoView) {
@@ -32,7 +24,6 @@ export default function WorkspaceTabs({
     }
   }, [activeId]);
 
-  // show/hide arrows
   const updateScrollState = () => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -46,7 +37,6 @@ export default function WorkspaceTabs({
     if (!el) return;
     const onScroll = () => updateScrollState();
     el.addEventListener("scroll", onScroll, { passive: true });
-    // horizontal scroll on wheel
     const onWheel = (e) => {
       if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
         el.scrollLeft += e.deltaY;
@@ -60,23 +50,18 @@ export default function WorkspaceTabs({
     };
   }, [workspaces.length]);
 
-  // scroll by fixed amount
-  const scrollBy = (dx) => {
-    scrollerRef.current?.scrollBy({ left: dx, behavior: "smooth" });
-  };
+  const scrollBy = (dx) => scrollerRef.current?.scrollBy({ left: dx, behavior: "smooth" });
 
-  // ---- drag to reorder (HTML5 DnD, no libs)
+  // drag to reorder (optional)
   const handleDragStart = (i) => (e) => {
     setDragIdx(i);
     e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", String(i)); // required for Firefox
+    e.dataTransfer.setData("text/plain", String(i));
   };
-  // handle drag over to show drop indicator
   const handleDragOver = (i) => (e) => {
-    e.preventDefault(); // allow drop
+    e.preventDefault();
     setOverIdx(i);
   };
-  // handle drop to reorder
   const handleDrop = (i) => (e) => {
     e.preventDefault();
     setOverIdx(null);
@@ -88,7 +73,6 @@ export default function WorkspaceTabs({
     setDragIdx(null);
     onReorder?.(copy);
   };
-  // reset drag/over state when drag ends
   const handleDragEnd = () => {
     setDragIdx(null);
     setOverIdx(null);
@@ -96,21 +80,17 @@ export default function WorkspaceTabs({
 
   return (
     <div className="flex items-center gap-2 border-b border-gray-800 bg-[#0f1115] px-2 py-1">
-      {/* Left scroll button */}
       <button
         type="button"
         aria-label="Scroll left"
         onClick={() => scrollBy(-200)}
         disabled={!canScrollL}
-        className={clsx(
-          "p-1 rounded-md text-gray-400 hover:text-gray-200 transition",
-          !canScrollL && "opacity-30 cursor-default"
-        )}
+        className={clsx("p-1 rounded-md text-gray-400 hover:text-gray-200 transition",
+          !canScrollL && "opacity-30 cursor-default")}
       >
         <ChevronLeft size={18} />
       </button>
 
-      {/* Tabs scroller */}
       <div
         ref={scrollerRef}
         className="relative flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent"
@@ -120,25 +100,19 @@ export default function WorkspaceTabs({
           {workspaces.map((ws, i) => {
             const active = activeId === ws.id;
             const showDropLeft = overIdx === i && dragIdx !== null && dragIdx !== i;
-
             return (
               <div key={ws.id} className="relative" onDragOver={handleDragOver(i)} onDrop={handleDrop(i)}>
-                {/* drop indicator */}
-                {showDropLeft && (
-                  <span className="absolute -left-0.5 top-1 bottom-1 w-px bg-purple-500 rounded" />
-                )}
-
+                {showDropLeft && <span className="absolute -left-0.5 top-1 bottom-1 w-px bg-purple-500 rounded" />}
                 <button
                   ref={(el) => (tabRefs.current[ws.id] = el)}
                   role="tab"
                   aria-selected={active}
-                  draggable
-                  onDragStart={handleDragStart(i)}
-                  onDragEnd={handleDragEnd}
-                  onClick={() => onSelect(ws.id)}
+                  draggable={!!onReorder}
+                  onDragStart={onReorder ? handleDragStart(i) : undefined}
+                  onDragEnd={onReorder ? handleDragEnd : undefined}
+                  onClick={() => onSelect?.(ws.id)}
                   className={clsx(
-                    "px-3 py-1.5 text-xs font-medium whitespace-nowrap rounded-t-md border",
-                    "transition-colors select-none",
+                    "px-3 py-1.5 text-xs font-medium whitespace-nowrap rounded-t-md border transition-colors select-none",
                     active
                       ? "bg-[#1b1e24] text-white border-gray-700 border-b-transparent"
                       : "bg-[#15181d] text-gray-300 border-transparent hover:bg-[#1a1d22] hover:text-gray-100"
@@ -150,7 +124,6 @@ export default function WorkspaceTabs({
             );
           })}
 
-          {/* + button sits inside scroller like Supabase */}
           <button
             onClick={onCreateClick}
             className="ml-1 h-6 w-6 rounded-md bg-[#15181d] text-gray-300 hover:bg-[#1a1d22] hover:text-white flex items-center justify-center border border-transparent"
@@ -161,21 +134,17 @@ export default function WorkspaceTabs({
         </div>
       </div>
 
-      {/* Right scroll button */}
       <button
         type="button"
         aria-label="Scroll right"
         onClick={() => scrollBy(200)}
         disabled={!canScrollR}
-        className={clsx(
-          "p-1 rounded-md text-gray-400 hover:text-gray-200 transition",
-          !canScrollR && "opacity-30 cursor-default"
-        )}
+        className={clsx("p-1 rounded-md text-gray-400 hover:text-gray-200 transition",
+          !canScrollR && "opacity-30 cursor-default")}
       >
         <ChevronRight size={18} />
       </button>
 
-      {/* Settings pinned at far right */}
       <button
         onClick={onSettingsClick}
         className="ml-1 p-1 text-gray-400 hover:text-gray-200 rounded-md"

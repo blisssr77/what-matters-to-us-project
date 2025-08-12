@@ -3,15 +3,15 @@ import AuthPage from "./components/Auth/AuthPage";
 import Dashboard from "./pages/Dashboard";
 import ManageAccount from "./pages/Account/ManageAccount";
 // Importing components for the Private Vault
-import VaultedDocuments from "./routes/private/vaulted-docs/VaultedDocList";
-import VaultedFileUpload from "./components/PrivateVault/VaultedDocs/VaultUploadDoc";
-import VaultedNoteUpload from "./components/PrivateVault/VaultedDocs/VaultUploadNote";
-import VaultViewNote from "./components/PrivateVault/VaultedDocs/VaultViewNote";
-import VaultEditNote from "./components/PrivateVault/VaultedDocs/VaultEditNote";
-import VaultViewDoc from "./components/PrivateVault/VaultedDocs/VaultViewDoc";
-import VaultEditDoc from "./components/PrivateVault/VaultedDocs/VaultEditDoc";
+import VaultedDocuments from "./routes/private/vaulted-docs/P-DocList";
+import VaultedFileUpload from "./components/PrivateSpace/PrivateSpaceDocs/VaultUploadDoc";
+import VaultedNoteUpload from "./components/PrivateSpace/PrivateSpaceDocs/VaultUploadNote";
+import VaultViewNote from "./components/PrivateSpace/PrivateSpaceDocs/VaultViewNote";
+import VaultEditNote from "./components/PrivateSpace/PrivateSpaceDocs/VaultEditNote";
+import VaultViewDoc from "./components/PrivateSpace/PrivateSpaceDocs/VaultViewDoc";
+import VaultEditDoc from "./components/PrivateSpace/PrivateSpaceDocs/VaultEditDoc";
 // Importing components for the Workspace Vault
-import WorkspaceVaultList from "./routes/workspace/workspace-docs/DocList";
+import WorkspaceVaultList from "./routes/workspace/workspace-docs/W-DocList";
 import WorkspaceUploadDoc from "./components/Workspace/WorkspaceDocs/UploadDoc";
 import WorkspaceUploadNote from "./components/Workspace/WorkspaceDocs/UploadNote";
 import WorkspaceViewNote from "./components/Workspace/WorkspaceDocs/ViewNote";

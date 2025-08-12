@@ -2,7 +2,7 @@
 export default {
     darkMode: ["class"],
     content: [
-    "./index.html", // Your main HTML file
+    "./index.html", // main HTML file
     "./src/**/*.{js,ts,jsx,tsx}", // All JS, TS, JSX, TSX files in src/ and its subdirectories
   ],
   theme: {
