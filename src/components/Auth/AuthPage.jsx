@@ -2,7 +2,7 @@ import { useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { generateSeedPhrase } from "../../utils/generateSeedPhrase";
 import { useNavigate } from "react-router-dom";
-import { useWorkspaceStore } from "../../store/useWorkspaceStore";
+import { useWorkspaceStore } from "../../hooks/useWorkspaceStore";
 
 export default function AuthPage() {
   const [formData, setFormData] = useState({ email: "", password: "" });

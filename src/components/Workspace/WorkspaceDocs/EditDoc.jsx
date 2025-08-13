@@ -5,7 +5,7 @@ import Layout from "../../Layout/Layout";
 import { X, Search, Loader2 } from "lucide-react";
 import { encryptFile, encryptText, decryptText } from "../../../lib/encryption";
 import bcrypt from "bcryptjs";
-import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
+import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 
 export default function WorkspaceEditDoc() {

@@ -7,7 +7,7 @@ import dayjs from "dayjs";
 import { supabase } from "@/lib/supabaseClient";
 import CreatePrivateSpaceModal from "@/components/common/CreatePrivateSpaceModal";
 
-export default function PrivateVaultList() {
+export default function PrivateDocList() {
   const navigate = useNavigate();
 
   // ---------- filters/search ----------
@@ -170,13 +170,13 @@ export default function PrivateVaultList() {
         {/* Buttons Row */}
         <div className="flex justify-end gap-2 mb-4">
           <button
-            onClick={() => navigate("/privatespace/upload")}
+            onClick={() => navigate("/privatespace/vaults/file-upload")}
             className="btn-main"
           >
             + Upload Document
           </button>
           <button
-            onClick={() => navigate("/privatespace/note/create")}
+            onClick={() => navigate("/privatespace/vaults/note-upload")}
             className="btn-main"
           >
             + Create Note
@@ -190,13 +190,13 @@ export default function PrivateVaultList() {
         <div className="flex flex-wrap md:flex-nowrap justify-between items-start gap-4 mb-6">
           {/* Search */}
           <div className="relative w-full md:w-1/2">
-            <Search className="absolute left-3 top-3 text-purple-600" size={18} />
+            <Search className="absolute left-3 top-3 text-gray-500" size={18} />
             <input
               type="text"
               placeholder="Search documents..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg shadow-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg shadow-sm text-gray-800 hover:border-gray-500 focus:outline-none focus:ring-0 focus:ring-gray-500 focus:ring-offset-1"
             />
             {searchTerm && (
               <button
@@ -213,8 +213,7 @@ export default function PrivateVaultList() {
           <div className="relative w-full md:w-1/2" ref={tagBoxRef}>
             <button
               onClick={() => setShowTagFilter((s) => !s)}
-              className="w-full flex items-center justify-between px-4 py-2 border border-gray-300 rounded-lg text-gray-700 bg-white shadow-sm
-                         focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-1"
+              className="w-full flex items-center justify-between px-4 py-2 border border-gray-300 rounded-lg hover:border-gray-500 text-gray-400 bg-white shadow-sm focus:ring-0 focus:ring-gray-500"
               aria-expanded={showTagFilter}
             >
               {selectedTag ? `Tag: ${selectedTag}` : "Search by Tag"}
@@ -228,7 +227,7 @@ export default function PrivateVaultList() {
                   placeholder="Filter tags..."
                   value={tagSearchTerm}
                   onChange={(e) => setTagSearchTerm(e.target.value)}
-                  className="w-full p-2 mb-2 border border-gray-300 rounded text-sm text-gray-700"
+                  className="w-full p-2 mb-2 border border-gray-300 rounded text-sm text-gray-700 hover:border-gray-500"
                 />
                 <div className="max-h-40 overflow-y-auto mb-1">
                   {allTags
@@ -277,8 +276,8 @@ export default function PrivateVaultList() {
                 onClick={() =>
                   navigate(
                     hasFiles
-                      ? `/privatespace/docs/${doc.id}`     // adjust routes as needed
-                      : `/privatespace/notes/${doc.id}`
+                      ? `/privatespace/vaults/doc-view/${doc.id}`
+                      : `/privatespace/vaults/note-view/${doc.id}`
                   )
                 }
                 className={`relative cursor-pointer rounded-xl shadow-md p-4 hover:shadow-lg transition border hover:border-purple-700 ${
@@ -349,6 +348,12 @@ export default function PrivateVaultList() {
                 {hasFiles && (
                   <div className="text-xs text-red-600 font-semibold mt-2">
                     - Contains file -
+                  </div>
+                )}
+                {/* Vaulted Label */}
+                {isVaulted && (
+                  <div className="absolute top-2 right-2 text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full shadow-sm">
+                    Vaulted
                   </div>
                 )}
               </div>

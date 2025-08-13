@@ -5,7 +5,7 @@ import { Loader2, X, Search } from "lucide-react";
 import Layout from "../../Layout/Layout";
 import { encryptText, encryptFile } from "../../../lib/encryption"; 
 import bcrypt from "bcryptjs";
-import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
+import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 
 export default function WorkspaceUploadDoc() {
@@ -408,6 +408,31 @@ export default function WorkspaceUploadDoc() {
                         className="w-full border border-gray-300 p-2 rounded text-gray-500 text-sm"
                     />
 
+                    {/* Privacy Section */}
+                    <div className="mb-4">
+                        <label className="mr-4 font-semibold text-gray-800 text-sm">Upload Type:</label>
+                        <label className="mr-4 text-gray-800 text-sm">
+                            <input
+                            type="radio"
+                            name="privacy"
+                            value="vaulted"
+                            checked={isVaulted}
+                            onChange={() => setIsVaulted(true)}
+                            />
+                            Vaulted (Encrypted)
+                        </label>
+                        <label className="text-gray-800 text-sm">
+                            <input
+                            type="radio"
+                            name="privacy"
+                            value="public"
+                            checked={!isVaulted}
+                            onChange={() => setIsVaulted(false)}
+                            />
+                            Public
+                        </label>
+                    </div>
+
                     {/* Document title input */}
                     <div>
                         <label className="block text-sm font-medium mb-1 text-gray-800 mt-4">Document title:</label>
@@ -508,37 +533,12 @@ export default function WorkspaceUploadDoc() {
                         />
                     </div>
 
-                    {/* Privacy Section */}
-                    <div className="mb-4">
-                        <label className="mr-4 font-semibold text-gray-800 text-sm">Upload Type:</label>
-                        <label className="mr-4 text-gray-800 text-sm">
-                            <input
-                            type="radio"
-                            name="privacy"
-                            value="vaulted"
-                            checked={isVaulted}
-                            onChange={() => setIsVaulted(true)}
-                            />
-                            Vaulted (Encrypted)
-                        </label>
-                        <label className="text-gray-800 text-sm">
-                            <input
-                            type="radio"
-                            name="privacy"
-                            value="public"
-                            checked={!isVaulted}
-                            onChange={() => setIsVaulted(false)}
-                            />
-                            Public
-                        </label>
-                    </div>
-
                     {/* Private Note Section */}
                     {isVaulted && (
                         <>
                             <div>
                                 <p className="text-sm text-red-400 mb-1">
-                                🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
+                                🔐 Private note will be encrypted using your saved Vault Code:
                                 </p>
                                 <textarea
                                     value={privateNote}
@@ -555,7 +555,7 @@ export default function WorkspaceUploadDoc() {
                             {/* Vault Code Section */}
                             <div>
                                 <label className="block text-sm font-medium mb-1 text-gray-500">
-                                    Enter <strong>Private</strong> vault code to encrypt document:
+                                    Enter Private vault code to encrypt document:
                                 </label>
                                 <input
                                     type="password"

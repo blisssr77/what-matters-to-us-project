@@ -3,15 +3,15 @@ import AuthPage from "./components/Auth/AuthPage";
 import Dashboard from "./pages/Dashboard";
 import ManageAccount from "./pages/Account/ManageAccount";
 // Importing components for the Private Vault
-import VaultedDocuments from "./routes/private/vaulted-docs/P-DocList";
-import VaultedFileUpload from "./components/PrivateSpace/PrivateSpaceDocs/VaultUploadDoc";
-import VaultedNoteUpload from "./components/PrivateSpace/PrivateSpaceDocs/VaultUploadNote";
-import VaultViewNote from "./components/PrivateSpace/PrivateSpaceDocs/VaultViewNote";
-import VaultEditNote from "./components/PrivateSpace/PrivateSpaceDocs/VaultEditNote";
-import VaultViewDoc from "./components/PrivateSpace/PrivateSpaceDocs/VaultViewDoc";
-import VaultEditDoc from "./components/PrivateSpace/PrivateSpaceDocs/VaultEditDoc";
+import PrivateDocList from "./routes/PrivateSpace/privatespace-docs/P-DocList";
+import PrivateUploadDoc from "./components/PrivateSpace/PrivateSpaceDocs/P-UploadDoc";
+import PrivateUploadNote from "./components/PrivateSpace/PrivateSpaceDocs/P-UploadNote";
+import PrivateViewNote from "./components/PrivateSpace/PrivateSpaceDocs/P-ViewNote";
+import PrivateEditNote from "./components/PrivateSpace/PrivateSpaceDocs/P-EditNote";
+import PrivateViewDoc from "./components/PrivateSpace/PrivateSpaceDocs/P-ViewDoc";
+import PrivateEditDoc from "./components/PrivateSpace/PrivateSpaceDocs/P-EditDoc";
 // Importing components for the Workspace Vault
-import WorkspaceVaultList from "./routes/workspace/workspace-docs/W-DocList";
+import WorkspaceVaultList from "./routes/Workspace/workspace-docs/W-DocList";
 import WorkspaceUploadDoc from "./components/Workspace/WorkspaceDocs/UploadDoc";
 import WorkspaceUploadNote from "./components/Workspace/WorkspaceDocs/UploadNote";
 import WorkspaceViewNote from "./components/Workspace/WorkspaceDocs/ViewNote";
@@ -27,13 +27,13 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/account/manage" element={<ManageAccount />} />
         {/* Private Vault Routes */}
-        <Route path="/private/vaults" element={<VaultedDocuments />} />
-        <Route path="/private/vaults/file-upload" element={<VaultedFileUpload />} />
-        <Route path="/private/vaults/note-upload" element={<VaultedNoteUpload />} />
-        <Route path="/private/vaults/note-view/:id" element={<VaultViewNote />} />
-        <Route path="/private/vaults/note-edit/:id" element={<VaultEditNote />} />
-        <Route path="/private/vaults/doc-view/:id" element={<VaultViewDoc />} />
-        <Route path="/private/vaults/doc-edit/:id" element={<VaultEditDoc />} />
+        <Route path="/privatespace/vaults" element={<PrivateDocList />} />
+        <Route path="/privatespace/vaults/file-upload" element={<PrivateUploadDoc />} />
+        <Route path="/privatespace/vaults/note-upload" element={<PrivateUploadNote />} />
+        <Route path="/privatespace/vaults/note-view/:id" element={<PrivateViewNote />} />
+        <Route path="/privatespace/vaults/note-edit/:id" element={<PrivateEditNote />} />
+        <Route path="/privatespace/vaults/doc-view/:id" element={<PrivateViewDoc />} />
+        <Route path="/privatespace/vaults/doc-edit/:id" element={<PrivateEditDoc />} />
         {/* Workspace Vault Routes */}
         <Route path="/workspace/vaults" element={<WorkspaceVaultList />} />
         <Route path="/workspace/vaults/file-upload" element={<WorkspaceUploadDoc />} />

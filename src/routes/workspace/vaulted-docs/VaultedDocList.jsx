@@ -5,7 +5,7 @@ import { FileText, Search, ChevronDown, XCircle } from "lucide-react";
 import Layout from "../../../components/Layout/Layout";
 import dayjs from "dayjs";
 import { supabase } from "../../../lib/supabaseClient";
-import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
+import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import { useUserRole } from "../../../hooks/useUserRole";
 import WorkspaceSelector from "../../../components/Workspace/WorkspaceDocs/WorkspaceSelector";
 

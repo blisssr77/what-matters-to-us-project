@@ -19,46 +19,29 @@ export default function CreatePrivateSpaceModal({ open, onClose, onCreated }) {
 
   if (!open) return null;
 
+  // Create private space
   const handleCreate = async () => {
     const trimmedName = name.trim();
     const trimmedCode = vaultCode.trim();
 
-    if (!trimmedName) {
-      setErrorMsg("Private space name is required.");
-      return;
-    }
-    if (!trimmedCode) {
-      setErrorMsg("Private vault code is required.");
-      return;
-    }
+    if (!trimmedName) return setErrorMsg("Private space name is required.");
+    if (!trimmedCode) return setErrorMsg("Private vault code is required.");
 
     setLoading(true);
-    setErrorMsg("");
-    setSuccessMsg("");
+    setErrorMsg(""); setSuccessMsg("");
 
     try {
-      // 0) must be logged in
       const { data: { user }, error: userErr } = await supabase.auth.getUser();
-      if (userErr || !user) {
-        setErrorMsg("You must be logged in.");
-        return;
-      }
+      if (userErr || !user) return setErrorMsg("You must be logged in.");
 
-      // 1) verify user's *Private* vault code (server-side)
+      // (Optional) confirm the code matches the user’s account-level private code
       const { data: ok, error: vErr } = await supabase.rpc("verify_user_private_code", {
         p_code: trimmedCode,
       });
-      if (vErr) {
-        console.error("verify_user_private_code error:", vErr);
-        setErrorMsg("Failed to verify Private vault code. Please try again.");
-        return;
-      }
-      if (!ok) {
-        setErrorMsg("Private vault code does not match your account.");
-        return;
-      }
+      if (vErr) return setErrorMsg("Failed to verify Private vault code. Please try again.");
+      if (!ok)  return setErrorMsg("Private vault code does not match your account.");
 
-      // 2) create private space
+      // 1) create the private space
       const { data: ps, error: psErr } = await supabase
         .from("private_spaces")
         .insert({
@@ -68,17 +51,19 @@ export default function CreatePrivateSpaceModal({ open, onClose, onCreated }) {
         })
         .select("id, name")
         .single();
+      if (psErr || !ps) return setErrorMsg(psErr?.message || "Failed to create private space.");
 
-      if (psErr || !ps) {
-        setErrorMsg(psErr?.message || "Failed to create private space.");
-        return;
-      }
+      // 2) set its vault code hash
+      const { error: codeErr } = await supabase.rpc("set_private_space_vault_code", {
+        p_private_space_id: ps.id,
+        p_code: trimmedCode,
+      });
+      if (codeErr) return setErrorMsg(codeErr.message || "Failed to set private space vault code.");
 
       setSuccessMsg("✅ Private space created successfully!");
       onCreated?.(ps);
-      setName("");
-      setVaultCode("");
-      onClose(); // if you want to show the success in the modal, delay closing
+      setName(""); setVaultCode("");
+      onClose();
     } catch (e) {
       console.error(e);
       setErrorMsg(e.message || "Something went wrong.");

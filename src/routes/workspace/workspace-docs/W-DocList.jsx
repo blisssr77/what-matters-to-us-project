@@ -5,7 +5,7 @@ import { FileText, Search, ChevronDown, XCircle, Lock, Settings } from "lucide-r
 import Layout from "../../../components/Layout/Layout";
 import dayjs from "dayjs";
 import { supabase } from "../../../lib/supabaseClient";
-import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
+import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import { useUserRole } from "../../../hooks/useUserRole";
 import InviteModal from "../../../components/common/InviteModal";
 import WorkspaceTabs from "@/components/Layout/WorkspaceTabs";
@@ -327,14 +327,14 @@ export default function WorkspaceVaultList() {
 
           {/* Search Bar */}
           <div className="relative w-full md:w-1/2"> 
-            <Search className="absolute left-3 top-3 text-gray-400" size={18} />
+            <Search className="absolute left-3 top-3 text-gray-500" size={18} />
 
             <input
               type="text"
               placeholder="Search documents..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg shadow-sm text-gray-800 focus:outline-none focus:ring-0 focus:ring-gray-500"
+              className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg shadow-sm hover:border-gray-500 text-gray-800 focus:outline-none focus:ring-0 focus:ring-gray-500"
             />
 
             {searchTerm && (
@@ -352,7 +352,7 @@ export default function WorkspaceVaultList() {
           <div className="relative w-full md:w-1/2" ref={tagBoxRef}>
             <button
               onClick={() => setShowTagFilter(!showTagFilter)}
-              className="w-full flex items-center justify-between px-4 py-2 border border-gray-300 rounded-lg text-gray-400 bg-white shadow-sm focus:ring-0 focus:ring-gray-500"
+              className="w-full flex items-center justify-between px-4 py-2 border border-gray-300 rounded-lg hover:border-gray-500 text-gray-400 bg-white shadow-sm focus:ring-0 focus:ring-gray-500"
             >
               {selectedTag ? `Tag: ${selectedTag}` : "Search by Tag"}
               <ChevronDown className="ml-2 text-gray-400" size={18} />
@@ -366,7 +366,7 @@ export default function WorkspaceVaultList() {
                   placeholder="Filter tags..."
                   value={tagSearchTerm}
                   onChange={(e) => setTagSearchTerm(e.target.value)}
-                  className="w-full p-2 mb-2 border border-gray-300 rounded text-sm text-gray-700"
+                  className="w-full p-2 mb-2 border border-gray-300 rounded text-sm text-gray-700 hover:border-gray-500"
                 />
 
                 {/* Display filtered tags */}

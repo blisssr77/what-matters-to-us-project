@@ -1,12 +1,14 @@
+// src/components/PrivateSpace/PrivateSpaceDocs/P-UploadDoc.jsx
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../../../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 import { Loader2, X, Search } from "lucide-react";
-import Layout from "@/components/Layout/Layout";
-import { encryptText, encryptFile } from "@/lib/encryption";
-import { UnsavedChangesModal } from "@/components/common/UnsavedChangesModal";
+import Layout from "../../Layout/Layout";
+import { encryptText, encryptFile } from "../../../lib/encryption";
+import bcrypt from "bcryptjs";
+import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 
-export default function PrivateUploadDoc() {
+export default function PrivateSpaceUploadDoc() {
   const [files, setFiles] = useState([]);
   const [tags, setTags] = useState([]);
   const [availableTags, setAvailableTags] = useState([]);
@@ -22,16 +24,14 @@ export default function PrivateUploadDoc() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
 
-  // Private space selection (local, no store)
-  const [activeSpaceId, setActiveSpaceId] = useState(null);
-  const [spaceName, setSpaceName] = useState("");
-
-  // Default to encrypted uploads
+  // PrivateSpace equivalents
+  const [activePrivateSpaceId, setActivePrivateSpaceId] = useState(null);
+  const [psName, setPsName] = useState("");
   const [isVaulted, setIsVaulted] = useState(true);
 
   const navigate = useNavigate();
 
-  // Allowed MIME types (align with your helper text)
+  // Allowed MIME types (same as workspace version)
   const allowedMimes = [
     "application/pdf",
     "application/msword",
@@ -44,152 +44,135 @@ export default function PrivateUploadDoc() {
     "text/csv",
     "image/jpeg",
     "image/png",
-    "image/gif",
-    "application/zip",
-    "application/json",
   ];
 
-  // 1) Pick an active private space (first one) for this user
+  // 1) Pick an active private space for this user (first one)
   useEffect(() => {
     (async () => {
       const { data: userData } = await supabase.auth.getUser();
+      console.log('user?', userData);
       const userId = userData?.user?.id;
       if (!userId) return;
+      // 2) see what the DB returns (and any error)
+      const { data, error } = await supabase.from('private_spaces').select('id,name,created_by');
+      console.log('spaces', data, error);
 
-      const { data, error } = await supabase
+      const { data: space } = await supabase
         .from("private_spaces")
-        .select("id, name")
+        .select("id")
         .eq("created_by", userId)
         .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(1);
 
-      if (error) {
-        console.error("❌ Failed to fetch private spaces:", error);
+      if (!data.length) {
+        console.warn('⚠️ No private space found for user.');
         return;
       }
 
-      const firstId = data?.[0]?.id ?? null;
-      setActiveSpaceId(firstId);
-      setSpaceName(data?.[0]?.name ?? "");
+      const first = data[0];
+      setActivePrivateSpaceId((prev) =>
+        prev ? prev : first.id
+      );
+      setPsName(first.name);
+
+      if (space.length) {
+        const keep = space.find(s => s.id === activePrivateSpaceId)?.id;
+        setActivePrivateSpaceId(keep ?? space[0].id);
+        setPsName(space.find(s => s.id === (keep ?? space[0].id))?.name ?? '');
+      } else {
+        console.warn('⚠️ No private space found for user.');
+      }
     })();
   }, []);
 
-  // 2) Load active space name and available tags whenever activeSpaceId changes
+  // 2) Fetch the private space name whenever active changes
   useEffect(() => {
-    if (!activeSpaceId) {
-      setSpaceName("");
-      setAvailableTags([]);
+    if (!activePrivateSpaceId) {
+      setPsName("");
       return;
     }
-
     (async () => {
-      // fetch space name
-      const { data: sData, error: sErr } = await supabase
+      const { data, error } = await supabase
         .from("private_spaces")
         .select("name")
-        .eq("id", activeSpaceId)
+        .eq("id", activePrivateSpaceId)
         .single();
-      setSpaceName(sErr ? "" : sData?.name ?? "");
 
-      // fetch tags: try private_space_id (if your table has it), otherwise fallback to user + section
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.user?.id;
-
-      // attempt: scoped tags per space
-      let tagsRes = await supabase
-        .from("vault_tags")
-        .select("name")
-        .eq("section", "Private")
-        .eq("private_space_id", activeSpaceId);
-
-      if (tagsRes.error) {
-        // fallback: user-level private tags
-        tagsRes = await supabase
-          .from("vault_tags")
-          .select("name")
-          .eq("section", "Private")
-          .eq("user_id", userId);
-      }
-
-      if (!tagsRes.error && Array.isArray(tagsRes.data)) {
-        setAvailableTags(tagsRes.data.map((t) => t.name));
-      } else {
-        setAvailableTags([]);
-      }
+      setPsName(error ? "" : data?.name ?? "");
     })();
-  }, [activeSpaceId]);
+  }, [activePrivateSpaceId]);
 
-  // Message timeout
+  // Fetch available tags scoped to this private space (same UX)
   useEffect(() => {
-    if (successMsg || errorMsg) {
-      const t = setTimeout(() => {
-        setSuccessMsg("");
-        setErrorMsg("");
-      }, 4000);
-      return () => clearTimeout(t);
-    }
-  }, [successMsg, errorMsg]);
+    if (!activePrivateSpaceId) return;
+    const fetchTags = async () => {
+      const { data, error } = await supabase
+        .from("vault_tags")
+        .select("*")
+        .eq("private_space_id", activePrivateSpaceId);
+      if (!error) setAvailableTags((data || []).map((t) => t.name));
+    };
+    fetchTags();
+  }, [activePrivateSpaceId]);
 
-  // DnD
+  // File DnD
   const handleFileDrop = (e) => {
     e.preventDefault();
     setDragging(false);
-    const dropped = Array.from(e.dataTransfer.files);
-    setFiles(dropped);
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    setFiles(droppedFiles);
   };
 
-  // Add a tag (space-scoped if column exists; otherwise user-scoped)
+  // Add tag (insert if missing)
   const handleTagAdd = async () => {
-    if (!newTag.trim() || !activeSpaceId) return;
+    if (!newTag.trim()) return;
 
     const {
       data: { user },
+      error: userError,
     } = await supabase.auth.getUser();
-    if (!user?.id) return;
-
-    // avoid dup locally
-    if (availableTags.includes(newTag)) {
-      if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
-      setNewTag("");
+    if (userError || !user?.id) {
+      console.error("Unable to get user.");
       return;
     }
 
-    // Try insert with private_space_id
-    let insertRes = await supabase.from("vault_tags").insert({
-      name: newTag.trim(),
-      section: "Private",
-      user_id: user.id,
-      private_space_id: activeSpaceId, // may not exist in your schema
-    });
+    if (!activePrivateSpaceId) {
+      setErrorMsg("No active private space selected.");
+      return;
+    }
 
-    if (insertRes.error && /column .*private_space_id/i.test(insertRes.error.message)) {
-      // Fallback: no private_space_id column -> user-level
-      insertRes = await supabase.from("vault_tags").insert({
-        name: newTag.trim(),
+    if (!availableTags.includes(newTag)) {
+      await supabase.from("vault_tags").insert({
+        name: newTag,
         section: "Private",
         user_id: user.id,
+        private_space_id: activePrivateSpaceId,
       });
+      setAvailableTags((prev) => [...prev, newTag]);
     }
 
-    if (!insertRes.error) {
-      setAvailableTags((prev) => [...prev, newTag.trim()]);
-      if (!tags.includes(newTag.trim())) setTags((prev) => [...prev, newTag.trim()]);
-      setNewTag("");
-    }
+    if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
+    setNewTag("");
   };
 
-  // Upload
+  // Auto clear messages
+  useEffect(() => {
+    if (successMsg || errorMsg) {
+      const timer = setTimeout(() => {
+        setSuccessMsg("");
+        setErrorMsg("");
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMsg, errorMsg]);
+
+  // Upload handler (same logic, swapped to private)
   const handleUpload = async (e) => {
     e.preventDefault();
     setUploading(true);
     setErrorMsg("");
     setSuccessMsg("");
-
-    if (!activeSpaceId) {
-      setUploading(false);
-      setErrorMsg("No active private space selected.");
-      return;
-    }
 
     if (!files.length) {
       setUploading(false);
@@ -197,8 +180,8 @@ export default function PrivateUploadDoc() {
       return;
     }
 
-    const invalid = files.filter((f) => !allowedMimes.includes(f.type));
-    if (invalid.length) {
+    const invalidFiles = files.filter((f) => !allowedMimes.includes(f.type));
+    if (invalidFiles.length > 0) {
       setUploading(false);
       setErrorMsg("One or more files have unsupported types.");
       return;
@@ -212,104 +195,79 @@ export default function PrivateUploadDoc() {
       return;
     }
 
-    // Verify private code (server-side, hash)
+    // Vault code check (private_code)
     if (isVaulted) {
-      if (!vaultCode.trim()) {
+      if (!vaultCode) {
         setUploading(false);
-        setErrorMsg("Please enter your Private vault code.");
+        setErrorMsg("Please enter your Vault Code.");
         return;
       }
-      const { data: ok, error: vErr } = await supabase.rpc("verify_user_private_code", {
-        p_code: vaultCode.trim(),
-      });
-      if (vErr) {
+
+      const { data: row, error: vErr } = await supabase
+        .from("vault_codes")
+        .select("private_code_hash")
+        .eq("id", userId)
+        .single();
+
+      if (vErr || !row?.private_code_hash) {
         setUploading(false);
-        setErrorMsg(vErr.message || "Failed to verify Private vault code.");
+        setErrorMsg(
+          'Please set your Vault Code in <a href="/account/manage" class="text-blue-600 underline">Account Settings</a> before uploading.'
+        );
         return;
       }
-      if (!ok) {
+
+      const isMatch = await bcrypt.compare(vaultCode, row.private_code_hash);
+      if (!isMatch) {
         setUploading(false);
-        setErrorMsg("Incorrect Private vault code.");
+        setErrorMsg("Incorrect Vault Code.");
         return;
       }
+    }
+
+    if (!activePrivateSpaceId) {
+      setUploading(false);
+      setErrorMsg("Private space not selected. Please refresh or select a private space.");
+      return;
     }
 
     const fileMetas = [];
     let uploadedCount = 0;
     let noteIv = "";
-    let encryptedNote = "";
 
-    // Encrypt note if needed
-    if (isVaulted && privateNote) {
-      try {
-        const res = await encryptText(privateNote, vaultCode.trim());
-        encryptedNote = res.encryptedData;
-        noteIv = res.iv;
-      } catch (err) {
-        console.error("Note encryption failed:", err);
-        setUploading(false);
-        setErrorMsg("Failed to encrypt private note.");
-        return;
-      }
-    }
-
-    // Ensure tags exist (already added individually, but in case user typed then uploaded directly)
-    for (const tag of tags) {
-      if (!availableTags.includes(tag)) {
-        // best-effort insert
-        await supabase.from("vault_tags").insert({
-          name: tag,
-          section: "Private",
-          user_id: userId,
-          private_space_id: activeSpaceId,
-        }).catch(async (e) => {
-          if (/column .*private_space_id/i.test(e?.message || "")) {
-            await supabase.from("vault_tags").insert({
-              name: tag,
-              section: "Private",
-              user_id: userId,
-            });
-          }
-        });
-      }
-    }
-
-    // Upload files
     for (const file of files) {
       try {
         const sanitizedName = file.name.replace(/[^\w.-]/g, "_");
-        const filePath = `${activeSpaceId}/${Date.now()}-${sanitizedName}`;
+        const filePath = `${activePrivateSpaceId}/${Date.now()}-${sanitizedName}`;
+        console.log('upload path:', filePath, 'spaceId:', activePrivateSpaceId);
+
         let ivHex = "";
         let uploadError, urlData;
 
         if (isVaulted) {
-          const ivBytes = crypto.getRandomValues(new Uint8Array(12));
-          const { encryptedBlob, ivHex: hex } = await encryptFile(file, vaultCode.trim(), ivBytes);
+          const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
+          const { encryptedBlob, ivHex: hex } = await encryptFile(file, vaultCode, ivBytes);
           ivHex = hex;
 
           ({ error: uploadError } = await supabase.storage
-            .from("private.vaulted") // ensure bucket exists
+            .from("private.vaulted")
             .upload(filePath, encryptedBlob, {
               contentType: file.type,
               upsert: false,
-              metadata: { user_id: userId, private_space_id: activeSpaceId },
+              metadata: { user_id: userId, private_space_id: activePrivateSpaceId },
             }));
 
-          ({ data: urlData } = supabase.storage
-            .from("private.vaulted")
-            .getPublicUrl(filePath));
+          ({ data: urlData } = supabase.storage.from("private.vaulted").getPublicUrl(filePath));
         } else {
           ({ error: uploadError } = await supabase.storage
             .from("private.public")
             .upload(filePath, file, {
               contentType: file.type,
               upsert: false,
-              metadata: { user_id: userId, private_space_id: activeSpaceId },
+              metadata: { user_id: userId, private_space_id: activePrivateSpaceId },
             }));
 
-          ({ data: urlData } = supabase.storage
-            .from("private.public")
-            .getPublicUrl(filePath));
+          ({ data: urlData } = supabase.storage.from("private.public").getPublicUrl(filePath));
         }
 
         if (uploadError || !urlData?.publicUrl) {
@@ -324,8 +282,9 @@ export default function PrivateUploadDoc() {
           type: file.type,
           path: filePath,
           user_id: userId,
-          private_space_id: activeSpaceId,
+          private_space_id: activePrivateSpaceId,
         });
+
         uploadedCount++;
       } catch (err) {
         console.error("Unexpected upload error:", err);
@@ -340,10 +299,42 @@ export default function PrivateUploadDoc() {
       setErrorMsg(`⚠️ Only ${uploadedCount} of ${files.length} files uploaded successfully.`);
     }
 
-    // Insert DB row
+    // Encrypt private note if provided
+    let encryptedNote = "";
+    if (isVaulted && privateNote) {
+      try {
+        const result = await encryptText(privateNote, vaultCode);
+        encryptedNote = result.encryptedData;
+        noteIv = result.iv;
+      } catch (err) {
+        console.error("Note encryption failed:", err);
+        setUploading(false);
+        setErrorMsg("Failed to encrypt private note.");
+        return;
+      }
+    }
+
+    // Ensure tags exist (Private scope)
+    for (const tag of tags) {
+      if (!availableTags.includes(tag)) {
+        const { error } = await supabase.from("vault_tags").insert({
+          name: tag,
+          section: "Private",
+          user_id: userId,
+          private_space_id: activePrivateSpaceId,
+        });
+
+        if (!error) {
+          setAvailableTags((prev) => [...prev, tag]);
+        } else {
+          console.error("❌ Failed to insert tag:", tag, error.message);
+        }
+      }
+    }
+
+    // Save to private_vault_items
     const { error: insertError } = await supabase.from("private_vault_items").insert({
-      created_by: userId,
-      user_id: userId, // keep if still present for back-compat
+      user_id: userId,
       file_name: files.map((f) => f.name).join(", "),
       file_metas: fileMetas,
       title,
@@ -352,7 +343,8 @@ export default function PrivateUploadDoc() {
       encrypted_note: encryptedNote,
       note_iv: noteIv,
       created_at: new Date().toISOString(),
-      private_space_id: activeSpaceId,
+      private_space_id: activePrivateSpaceId,
+      created_by: userId,
       is_vaulted: isVaulted,
     });
 
@@ -361,7 +353,7 @@ export default function PrivateUploadDoc() {
       setErrorMsg("Failed to save document.");
     } else {
       setSuccessMsg("✅ Files uploaded successfully!");
-      setTimeout(() => navigate("/privatespace"), 1300);
+      setTimeout(() => navigate("/privatespace/vaults"), 1300);
     }
 
     setUploading(false);
@@ -374,7 +366,7 @@ export default function PrivateUploadDoc() {
       <UnsavedChangesModal
         show={showUnsavedPopup}
         onCancel={() => setShowUnsavedPopup(false)}
-        redirectPath="/privatespace"
+        redirectPath="/privatespace/vaults"
         message="You have unsaved changes. Are you sure you want to leave?"
       />
 
@@ -382,23 +374,26 @@ export default function PrivateUploadDoc() {
         <button
           onClick={() => {
             if (hasUnsavedChanges) setShowUnsavedPopup(true);
-            else navigate("/privatespace");
+            else navigate("/privatespace/vaults");
           }}
           className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
         >
           <X size={20} />
         </button>
 
-        <h2 className="text-xl font-semibold text-gray-800 mb-4">📤 Upload to {spaceName}</h2>
+        <h2 className="text-xl font-semibold text-gray-800 mb-4">📤 Upload to {psName}</h2>
         <p className="text-xs text-blue-700 mt-1">
-          Supported: PDF, Word, Excel, PowerPoint, Text, CSV, JPG, PNG, GIF, ZIP, JSON
+          Supported: PDF, Word, Excel, PowerPoint, Text, CSV, JPG, PNG
         </p>
 
         <form onSubmit={handleUpload} className="space-y-5">
           {/* Drag & Drop */}
           <div
             onDrop={handleFileDrop}
-            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
             onDragLeave={() => setDragging(false)}
             className={`w-full h-32 border-2 border-dashed rounded-lg flex items-center justify-center text-gray-500 cursor-pointer ${
               dragging ? "border-purple-500 bg-purple-50" : "border-gray-300"
@@ -406,12 +401,15 @@ export default function PrivateUploadDoc() {
           >
             {files.length > 0 ? (
               <ul className="text-sm space-y-1">
-                {files.map((file, idx) => <li key={idx}>{file.name}</li>)}
+                {files.map((file, idx) => (
+                  <li key={idx}>{file.name}</li>
+                ))}
               </ul>
             ) : (
               <span className="text-sm">
-                Drag & Drop your file(s) here or use browse below
-                <br /><br />Format not exceeding 10 MB each
+                Drag & Drop your file(s) here or use browse below <br />
+                <br />
+                Format not exeeding 10 MB each
               </span>
             )}
           </div>
@@ -420,112 +418,151 @@ export default function PrivateUploadDoc() {
           <input
             type="file"
             multiple
-            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.jpg,.jpeg,.png,.gif,.zip,.json"
-            onChange={(e) => { setFiles(Array.from(e.target.files)); setHasUnsavedChanges(true); }}
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.jpg,.jpeg,.png"
+            onChange={(e) => {
+              setFiles(Array.from(e.target.files));
+              setHasUnsavedChanges(true);
+            }}
             className="w-full border border-gray-300 p-2 rounded text-gray-500 text-sm"
           />
 
-          {/* Title */}
+          {/* Privacy Section */}
+          <div className="mb-4">
+            <label className="mr-4 font-semibold text-gray-800 text-sm">Upload Type:</label>
+            <label className="mr-4 text-gray-800 text-sm">
+              <input
+                type="radio"
+                name="privacy"
+                value="vaulted"
+                checked={isVaulted}
+                onChange={() => setIsVaulted(true)}
+              />
+              Vaulted (Encrypted)
+            </label>
+            <label className="text-gray-800 text-sm">
+              <input
+                type="radio"
+                name="privacy"
+                value="public"
+                checked={!isVaulted}
+                onChange={() => setIsVaulted(false)}
+              />
+              Public
+            </label>
+          </div>
+
+          {/* Document title input */}
           <div>
             <label className="block text-sm font-medium mb-1 text-gray-800 mt-4">Document title:</label>
             <input
               value={title}
-              onChange={(e) => { setTitle(e.target.value); setHasUnsavedChanges(true); }}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setHasUnsavedChanges(true);
+              }}
               className="w-full p-2 border rounded text-gray-700 text-sm bg-gray-50"
               placeholder="Enter document title (Public)"
             />
           </div>
 
-          {/* Tags */}
+          {/* Tag Input Section */}
           <div>
             <label className="text-sm font-medium text-gray-800 mb-1 block">Add tags:</label>
+
+            {/* Search + Create */}
             <div className="relative flex items-center gap-2 mb-2">
               <Search className="absolute left-3 text-gray-400" size={16} />
               <input
                 type="text"
                 value={newTag}
-                onChange={(e) => { setNewTag(e.target.value); setHasUnsavedChanges(true); }}
+                onChange={(e) => {
+                  setNewTag(e.target.value);
+                  setHasUnsavedChanges(true);
+                }}
                 placeholder="Search existing tags or create new"
-                className="w-full pl-8 border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
+                className="w-full pl-8 border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400  text-sm"
               />
               <button type="button" onClick={handleTagAdd} className="btn-secondary text-sm px-3 py-1">
                 Create
               </button>
             </div>
 
+            {/* Filtered Tag Suggestions (scrollable) */}
             <div className="max-h-40 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50">
               {availableTags
-                .filter((t) => t.toLowerCase().includes(newTag.toLowerCase()) && !tags.includes(t))
+                .filter((tag) => tag.toLowerCase().includes(newTag.toLowerCase()) && !tags.includes(tag))
                 .map((tag) => (
-                  <label key={tag} className="flex items-center gap-2 py-1 cursor-pointer">
+                  <div key={tag} className="flex items-center gap-2 py-1">
                     <input
                       type="checkbox"
                       checked={tags.includes(tag)}
                       onChange={() => {
                         setHasUnsavedChanges(true);
                         setTags((prev) =>
-                          prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]
+                          prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
                         );
                       }}
                     />
                     <span className="text-xs text-gray-700">{tag}</span>
-                  </label>
+                  </div>
                 ))}
             </div>
 
+            {/* Selected Tags */}
             {tags.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-3">
                 {tags.map((tag) => (
-                  <span key={tag} className="bg-yellow-50 text-gray-800 text-sm px-3 py-1 rounded-full flex items-center gap-1">
+                  <span
+                    key={tag}
+                    className="bg-yellow-50 text-gray-800 text-sm px-3 py-1 rounded-full flex items-center gap-1"
+                  >
                     {tag}
-                    <X size={12} className="cursor-pointer" onClick={() => setTags(tags.filter((t) => t !== tag))} />
+                    <X
+                      size={12}
+                      className="cursor-pointer"
+                      onClick={() => setTags(tags.filter((t) => t !== tag))}
+                    />
                   </span>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Public Note */}
+          {/* Notes */}
           <div>
-            <label className="text-sm font-medium mb-1 text-gray-800">Public note:</label>
+            <h className="text-sm font-medium mb-1 text-gray-800">Public note:</h>
             <textarea
               value={notes}
-              onChange={(e) => { setNotes(e.target.value); setHasUnsavedChanges(true); }}
+              onChange={(e) => {
+                setNotes(e.target.value);
+                setHasUnsavedChanges(true);
+              }}
               placeholder="Public notes (Visible to shared contacts)"
               rows={2}
               className="w-full border bg-gray-50 border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
             />
           </div>
 
-          {/* Privacy */}
-          <div className="mb-4">
-            <label className="mr-4 font-semibold text-gray-800 text-sm">Upload Type:</label>
-            <label className="mr-4 text-gray-800 text-sm">
-              <input type="radio" name="privacy" value="vaulted" checked={isVaulted} onChange={() => setIsVaulted(true)} />
-              {" "}Vaulted (Encrypted)
-            </label>
-            <label className="text-gray-800 text-sm">
-              <input type="radio" name="privacy" value="public" checked={!isVaulted} onChange={() => setIsVaulted(false)} />
-              {" "}Public
-            </label>
-          </div>
-
-          {/* Private Note + Code */}
+          {/* Private Note Section */}
           {isVaulted && (
             <>
               <div>
                 <p className="text-sm text-red-400 mb-1">
-                  🔐 <strong>Private note</strong> will be encrypted using your Private vault code:
+                  🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
                 </p>
                 <textarea
                   value={privateNote}
-                  onChange={(e) => { setPrivateNote(e.target.value); setHasUnsavedChanges(true); }}
+                  onChange={(e) => {
+                    setPrivateNote(e.target.value);
+                    setHasUnsavedChanges(true);
+                  }}
                   placeholder="Private notes (For your eyes only)"
                   rows={2}
                   className="bg-gray-50 w-full border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
                 />
               </div>
 
+              {/* Vault Code Section */}
               <div>
                 <label className="block text-sm font-medium mb-1 text-gray-500">
                   Enter <strong>Private</strong> vault code to encrypt document:
@@ -533,15 +570,17 @@ export default function PrivateUploadDoc() {
                 <input
                   type="password"
                   value={vaultCode}
-                  onChange={(e) => setVaultCode(e.target.value)}
+                  onChange={(e) => {
+                    setVaultCode(e.target.value);
+                  }}
                   className="w-full p-2 border rounded mb-3 text-gray-600 text-sm bg-gray-50"
                   placeholder="Vault code"
-                  autoComplete="current-password"
                 />
               </div>
             </>
           )}
 
+          {/* Upload */}
           <button type="submit" disabled={uploading} className="btn-secondary w-full mt-4">
             {uploading ? (
               <span className="flex justify-center items-center gap-2">
@@ -552,9 +591,13 @@ export default function PrivateUploadDoc() {
             )}
           </button>
 
-          {successMsg && <p className="text-sm text-green-600 text-center mt-2">{successMsg}</p>}
+          <br />
+          {successMsg && <p className="text-sm text-green-600 text-center">{successMsg}</p>}
           {errorMsg && (
-            <div className="text-sm text-red-500 mt-2 text-center" dangerouslySetInnerHTML={{ __html: errorMsg }} />
+            <div
+              className="text-sm text-red-500 mt-2 text-center"
+              dangerouslySetInnerHTML={{ __html: errorMsg }}
+            />
           )}
         </form>
       </div>

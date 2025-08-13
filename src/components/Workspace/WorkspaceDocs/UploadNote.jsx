@@ -5,7 +5,7 @@ import { X, Search } from "lucide-react";
 import { encryptText } from "../../../lib/encryption";
 import Layout from "../../Layout/Layout";
 import bcrypt from "bcryptjs"; 
-import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
+import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 
 const WorkspaceUploadNote = () => {
@@ -220,6 +220,31 @@ const WorkspaceUploadNote = () => {
 
                 <h2 className="text-xl font-bold mb-4 text-gray-800">📝 Upload to {wsName}</h2>
 
+                {/* Privacy Section */}
+                <div className="mb-4">
+                    <label className="mr-4 font-semibold text-gray-800 text-sm">Upload Type:</label>
+                    <label className="mr-4 text-gray-800 text-sm">
+                        <input
+                        type="radio"
+                        name="privacy"
+                        value="vaulted"
+                        checked={isVaulted}
+                        onChange={() => setIsVaulted(true)}
+                        />
+                        Vaulted (Encrypted)
+                    </label>
+                    <label className="text-gray-800 text-sm">
+                        <input
+                        type="radio"
+                        name="privacy"
+                        value="public"
+                        checked={!isVaulted}
+                        onChange={() => setIsVaulted(false)}
+                        />
+                        Public
+                    </label>
+                </div>
+
                 <label className="block text-sm font-medium mb-1 text-gray-700">Note title:</label>
                 <input
                     value={title}
@@ -312,36 +337,11 @@ const WorkspaceUploadNote = () => {
                     )}
                 </div>
 
-                {/* Privacy Section */}
-                <div className="mb-4">
-                    <label className="mr-4 font-semibold text-gray-800 text-sm">Upload Type:</label>
-                    <label className="mr-4 text-gray-800 text-sm">
-                        <input
-                        type="radio"
-                        name="privacy"
-                        value="vaulted"
-                        checked={isVaulted}
-                        onChange={() => setIsVaulted(true)}
-                        />
-                        Vaulted (Encrypted)
-                    </label>
-                    <label className="text-gray-800 text-sm">
-                        <input
-                        type="radio"
-                        name="privacy"
-                        value="public"
-                        checked={!isVaulted}
-                        onChange={() => setIsVaulted(false)}
-                        />
-                        Public
-                    </label>
-                </div>
-
                 {isVaulted && (
                     <>
                     {/* Private Note Section */}
                     <p className="text-sm text-red-400 mb-1">
-                        🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
+                        🔐 Private note will be encrypted using your saved Vault Code:
                     </p>
                     <textarea
                         value={privateNote}
@@ -355,7 +355,7 @@ const WorkspaceUploadNote = () => {
                     />
                     {/* Vault Code Section */}
                     <label className="block text-sm font-medium mb-1 text-gray-700">
-                        Enter <strong>Private</strong> vault code to encrypt note:
+                        Enter Private vault code to encrypt note:
                     </label>
                     <input
                         type="password"
