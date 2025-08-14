@@ -115,26 +115,26 @@ export default function AuthPage() {
       }
 
       // 4. Insert membership only if none exist
-      if (!memberships || memberships.length === 0) {
-        const { error: insertError } = await supabase
-          .from("workspace_members")
-          .insert({
-            user_id: userId,
-            workspace_id: workspaceData.id,
-            role: "owner",
-            is_admin: true,
-          });
+      // if (!memberships || memberships.length === 0) {
+      //   const { error: insertError } = await supabase
+      //     .from("workspace_members")
+      //     .insert({
+      //       user_id: userId,
+      //       workspace_id: workspaceData.id,
+      //       role: "owner",
+      //       is_admin: true,
+      //     });
 
-        if (insertError) {
-          console.error("❌ Insert error:", insertError);
-          setError("Failed to create workspace membership.");
-          return;
-        }
+      //   if (insertError) {
+      //     console.error("❌ Insert error:", insertError);
+      //     setError("Failed to create workspace membership.");
+      //     return;
+      //   }
 
-        console.log("✅ Workspace member inserted successfully.");
-      } else {
-        console.log("⚠️ User already a member of a workspace, skipping insert.");
-      }
+      //   console.log("✅ Workspace member inserted successfully.");
+      // } else {
+      //   console.log("⚠️ User already a member of a workspace, skipping insert.");
+      // }
 
 
       // Navigate to dashboard

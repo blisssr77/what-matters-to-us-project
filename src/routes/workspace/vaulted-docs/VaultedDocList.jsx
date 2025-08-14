@@ -7,7 +7,7 @@ import dayjs from "dayjs";
 import { supabase } from "../../../lib/supabaseClient";
 import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import { useUserRole } from "../../../hooks/useUserRole";
-import WorkspaceSelector from "../../../components/Workspace/WorkspaceDocs/WorkspaceSelector";
+import WorkspaceSelector from "../../../components/Workspace/WorkspaceDocs/WorkspaceSelectorMaybeNoNeed";
 
 
 export default function WorkspaceVaultList() {
