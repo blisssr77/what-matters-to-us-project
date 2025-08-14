@@ -37,6 +37,67 @@ export default function PrivateViewDoc() {
   const [loading, setLoading] = useState(false);
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
 
+  // remember-opt-in
+  const [codeEntered, setCodeEntered] = useState(false);
+  const [rememberCode, setRememberCode] = useState(false);
+  // per-user namespacing (safer if multiple accounts use same browser)
+  const [storageKey, setStorageKey] = useState("pv_vault_code:anon");
+
+  // 15-minute TTL in ms
+  const FIFTEEN_MIN = 15 * 60 * 1000;
+
+  // per-item cached code helpers
+  const setExpiringItem = (key, value, ttlMs) => {
+    const payload = { v: String(value), e: Date.now() + ttlMs };
+    localStorage.setItem(key, JSON.stringify(payload));
+  };
+  const getExpiringItem = (key) => {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    try {
+      const { v, e } = JSON.parse(raw);
+      if (!e || Date.now() > e) {
+        localStorage.removeItem(key);
+        return null;
+      }
+      return v;
+    } catch {
+      localStorage.removeItem(key);
+      return null;
+    }
+  };
+  const removeExpiringItem = (key) => localStorage.removeItem(key);
+
+  // --- end expiring storage helpers ---
+  useEffect(() => {
+    (async () => {
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      const userId = user?.id ?? "anon";
+      setStorageKey(`pv_vault_code:${userId}:doc:${id}`);
+    })();
+  }, [id]);
+
+  // Auto-fill vault code if previously remembered
+  useEffect(() => {
+      (async () => {
+        if (!doc?.is_vaulted) return;
+
+        const { data: { user } = {} } = await supabase.auth.getUser();
+        const userId = user?.id ?? "anon";
+        const userKey = `pv_vault_code:${userId}:doc:${id}`;
+        const anonKey = `pv_vault_code:anon:doc:${id}`;
+
+        let remembered = getExpiringItem(userKey) || getExpiringItem(anonKey);
+        if (!remembered || codeEntered) return;
+
+        // optional: migrate anon → user key
+        if (!getExpiringItem(userKey)) setExpiringItem(userKey, remembered, FIFTEEN_MIN);
+
+        setVaultCode(remembered);
+        await handleDecrypt(remembered);
+    })();
+  }, [doc, storageKey]); // eslint-disable-line
+
   // Fetch the document
   useEffect(() => {
     (async () => {
@@ -65,20 +126,22 @@ export default function PrivateViewDoc() {
     })();
   }, [id]);
 
-  // Decrypt (vaulted)
-  const handleDecrypt = async () => {
+  // Decrypt (vaulted) — supports optional explicitCode (from auto-fill) and 15-min remember
+  const handleDecrypt = async (explicitCode) => {
     if (!doc || !doc.is_vaulted) return; // non-vaulted doesn't need this
-    const code = vaultCode.trim();
-    if (!code) {
+
+    const candidate = (explicitCode ?? vaultCode);
+    if (typeof candidate !== "string" || !candidate.trim()) {
       setErrorMsg("Please enter your Vault Code.");
       return;
     }
+    const code = candidate.trim();
 
     setLoading(true);
     setErrorMsg("");
 
     try {
-      // Verify user private code (RPC)
+      // 1) Verify user private code (RPC)
       const { data: ok, error: vErr } = await supabase.rpc("verify_user_private_code", {
         p_code: code,
       });
@@ -91,10 +154,25 @@ export default function PrivateViewDoc() {
         return;
       }
 
-      // remember code for this tab/session
+      // 2) Remember or clear per-doc code (15 minutes)
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      const userId = user?.id ?? "anon";
+      const effectiveKey = `pv_vault_code:${userId}:doc:${id}`;
+
+      // if explicitCode is provided, this call came from auto-fill (storage)
+      const cameFromStorage = typeof explicitCode === "string";
+
+      if (rememberCode || cameFromStorage) {
+        // refresh TTL or set fresh
+        setExpiringItem(effectiveKey, code, FIFTEEN_MIN);
+      } else {
+        removeExpiringItem(effectiveKey);
+      }
+
+      // Keep session copy for this tab
       sessionStorage.setItem("vaultCode", code);
 
-      // Decrypt private note (if present)
+      // 3) Decrypt private note (if present)
       if (doc.encrypted_note && doc.note_iv) {
         try {
           const note = await decryptText(doc.encrypted_note, doc.note_iv, code);
@@ -105,7 +183,7 @@ export default function PrivateViewDoc() {
         }
       }
 
-      // Decrypt each file from private.vaulted using stored path
+      // 4) Decrypt each file from private.vaulted using stored path
       const files = [];
       if (Array.isArray(doc.file_metas) && doc.file_metas.length) {
         for (const fm of doc.file_metas) {
@@ -256,8 +334,7 @@ export default function PrivateViewDoc() {
           <X size={20} />
         </button>
 
-        <h2 className="text-xl font-bold text-gray-800 mb-5">📂 View Document</h2>
-        {doc?.title && <h3 className="text-lg text-gray-800 font-semibold mb-2">{doc.title}</h3>}
+        {doc?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{doc.title}</h2>}
         {doc?.notes && <p className="text-sm text-gray-700 mb-3">{doc.notes}</p>}
 
         {/* Decrypted private note */}
@@ -282,17 +359,31 @@ export default function PrivateViewDoc() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Enter <strong>Vault Code</strong> to Decrypt Document:
             </label>
-            <input
-              type="password"
-              value={vaultCode}
-              onChange={(e) => setVaultCode(e.target.value)}
-              className="border border-gray-300 rounded px-3 py-2 w-full text-gray-600 mb-4 text-sm"
-              placeholder="Vault Code"
-              autoComplete="current-password"
-            />
-            <button onClick={handleDecrypt} className="btn-secondary">
-              {loading ? "Decrypting..." : "Decrypt"}
-            </button>
+
+            {/* Vault code input */}
+            <div className="mt-2 flex items-center gap-3">
+                <input
+                    type="password"
+                    value={vaultCode}
+                    onChange={(e) => setVaultCode(e.target.value)}
+                    className="w-full p-2 border rounded text-sm text-gray-700"
+                    placeholder="Vault Code"
+                    autoComplete="current-password"
+                />
+                {/* Remember option for 15 minutes */}
+                <label className="flex items-center gap-2 text-xs text-gray-600">
+                    <input
+                    type="checkbox"
+                    checked={rememberCode}
+                    onChange={(e) => setRememberCode(e.target.checked)}
+                    />
+                    Remember code for 15 min
+                </label>
+
+                <button onClick={() => handleDecrypt()} disabled={loading} className="btn-secondary text-sm">
+                    {loading ? "Decrypting..." : "Decrypt"}
+                </button>
+            </div>
             {errorMsg && <p className="text-sm text-red-600 mt-2">{errorMsg}</p>}
           </div>
         ) : loading ? (
