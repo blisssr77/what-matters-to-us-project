@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText, Search, ChevronDown, Lock } from "lucide-react";
 import Layout from "@/components/Layout/Layout";
-import WorkspaceTabs from "@/components/Layout/WorkspaceTabs"; 
+import WorkspaceTabs from "@/components/Layout/WorkspaceTabs";
+import { useWorkspaceStore } from "@/hooks/useWorkspaceStore";
 import dayjs from "dayjs";
 import { supabase } from "@/lib/supabaseClient";
 import CreatePrivateSpaceModal from "@/components/common/CreatePrivateSpaceModal";
 
-export default function PrivateDocList() {
+export default function PrivateDocList({ workspaces }) {
   const navigate = useNavigate();
 
   // ---------- filters/search ----------
@@ -18,9 +19,19 @@ export default function PrivateDocList() {
 
   // ---------- spaces & active selection ----------
   const [spaces, setSpaces] = useState([]);
-  const [activeSpaceId, setActiveSpaceId] = useState(null);
+  const ensureForUser = useWorkspaceStore((s) => s.ensureForUser);
+  const activeSpaceId = useWorkspaceStore((s) => s.activeSpaceId);
+  const setActiveSpaceId = useWorkspaceStore((s) => s.setActiveSpaceId);
   const [spaceName, setSpaceName] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // ensure store is scoped to the signed-in user
+  useEffect(() => {
+    (async () => {
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      ensureForUser(user?.id ?? null);
+    })();
+  }, [ensureForUser]);
 
   // reorder UI (drag in tabs)
   const spacesForUI = useMemo(
