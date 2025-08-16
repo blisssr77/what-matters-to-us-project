@@ -105,7 +105,7 @@ export default function CreatePrivateSpaceModal({ open, onClose, onCreated }) {
         {/* Private Vault Code */}
         <div className="px-4 pb-2">
           <label className="block text-sm font-medium text-gray-700 mt-3 mb-1">
-            Enter your <strong>Private</strong> vault code to confirm
+            Enter your Private vault code to confirm
           </label>
           <input
             type="password"

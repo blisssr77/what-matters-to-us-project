@@ -1,45 +1,27 @@
-// store/useWorkspaceStore.js
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export const useWorkspaceStore = create(
   persist(
     (set, get) => ({
-      activeSpaceId: null,
-      ownerUserId: null,
+      userId: null,
+      activeWorkspaceId: null,
 
-      setActiveSpaceId: (id) => set({ activeSpaceId: id }),
+      setActiveWorkspaceId: (id) => set({ activeWorkspaceId: id }),
+      clearActiveWorkspace: () => set({ activeWorkspaceId: null }),
 
-      clearActiveSpace: () => set({ activeSpaceId: null }),
-
-      // Call once after you know the logged-in user id.
-      // If a different user signs in, reset the selection.
+      // Call after you know the signed-in user id.
       ensureForUser: (uid) => {
-        const { ownerUserId } = get();
-
-        if (!uid) {
-          // signed out
-          set({ ownerUserId: null, activeSpaceId: null });
-          return;
-        }
-
-        if (ownerUserId === null) {
-          // first time we learn the owner
-          set({ ownerUserId: uid });
-          return;
-        }
-
-        if (ownerUserId !== uid) {
-          // user switched -> clear selection for the new user
-          set({ ownerUserId: uid, activeSpaceId: null });
-        }
+        const { userId } = get();
+        if (!uid) return set({ userId: null, activeWorkspaceId: null });
+        if (userId !== uid) set({ userId: uid, activeWorkspaceId: null });
       },
     }),
     {
       name: "workspace-store",
-      partialize: (state) => ({
-        activeSpaceId: state.activeSpaceId,
-        ownerUserId: state.ownerUserId,
+      partialize: (s) => ({
+        userId: s.userId,
+        activeWorkspaceId: s.activeWorkspaceId,
       }),
     }
   )

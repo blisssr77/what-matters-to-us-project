@@ -44,7 +44,7 @@ export default function Sidebar() {
       <div>
         <div className="flex items-center justify-between p-4">
           {!collapsed && (
-            <h1 className="text-2xl font-extrabold bg-gradient-to-r from-purple-500 via-indigo-200 to-blue-500 bg-clip-text text-transparent animate-pulse-slow">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-500 via-indigo-200 to-blue-500 bg-clip-text text-transparent animate-pulse-slow">
               WhatMatters
             </h1>
           )}

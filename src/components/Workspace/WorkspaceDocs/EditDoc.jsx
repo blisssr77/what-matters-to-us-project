@@ -201,17 +201,17 @@ export default function WorkspaceEditDoc() {
             // Validate vault code
             const { data: vaultRow, error: vaultError } = await supabase
                 .from("vault_codes")
-                .select("private_code")
+                .select("private_code_hash")
                 .eq("id", user.id)
                 .single();
 
-            if (vaultError || !vaultRow?.private_code) {
+            if (vaultError || !vaultRow?.private_code_hash) {
                 setUploading(false);
                 setErrorMsg("Vault code not found or not set.");
                 return;
             }
 
-            const isMatch = await bcrypt.compare(vaultCode, vaultRow.private_code);
+            const isMatch = await bcrypt.compare(vaultCode, vaultRow.private_code_hash);
             if (!isMatch) {
                 setUploading(false);
                 setErrorMsg("Incorrect Vault Code.");
@@ -330,7 +330,7 @@ export default function WorkspaceEditDoc() {
             {showConfirmPopup && fileToDeleteIndex !== null && (
                 <div className="fixed top-6 right-6  bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
                     <p className="mt-10 text-gray-800">
-                    Are you sure you want to delete <strong>{existingFiles[fileToDeleteIndex]?.name}</strong>?
+                    Are you sure you want to delete {existingFiles[fileToDeleteIndex]?.name}?
                     <br />
                     This action cannot be undone.
                     </p>
@@ -379,7 +379,7 @@ export default function WorkspaceEditDoc() {
                 <X size={20} />
             </button>
 
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">✏️ Edit Your workspace.vaulted Document</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">${title || "Untitled Document"}</h2>
             <p className="text-xs text-blue-700 mt-1">
                 Supported: PDF, Word, Excel, PowerPoint, Text, CSV, JPG, PNG, GIF, ZIP, JSON
             </p>
@@ -510,7 +510,7 @@ export default function WorkspaceEditDoc() {
                         <button
                             type="button"
                             onClick={handleTagAdd}
-                            className="btn-secondary"
+                            className="btn-secondary text-sm"
                         >
                             Create
                         </button>
@@ -583,7 +583,7 @@ export default function WorkspaceEditDoc() {
                         {/* Private Note Section */}
                         <div>
                             <p className="text-sm text-red-400 mb-1">
-                                🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
+                                🔐 Private note will be encrypted using your saved Vault Code:
                             </p>
 
                             {/* Private Notes */}
@@ -602,7 +602,7 @@ export default function WorkspaceEditDoc() {
                         {/* Vault Code */}
                         <div>
                             <label className="block text-sm font-medium mb-1 text-gray-800">
-                                Re-enter <strong>Private</strong> vault code to encrypt:
+                                Re-enter Private vault code to encrypt:
                             </label>
                             <input
                                 type="password"
@@ -621,7 +621,7 @@ export default function WorkspaceEditDoc() {
                 <button
                     type="submit"
                     disabled={uploading}
-                    className="btn-secondary w-full"
+                    className="btn-secondary w-full text-sm"
                 >
                 {uploading ? (
                     <span className="flex justify-center items-center gap-2">

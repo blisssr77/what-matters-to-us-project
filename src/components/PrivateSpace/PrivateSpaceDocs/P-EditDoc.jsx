@@ -390,7 +390,7 @@ export default function PrivateEditDoc() {
       {showConfirmPopup && fileToDeleteIndex !== null && (
         <div className="fixed top-6 right-6 bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
           <p className="mt-10 text-gray-800">
-            Are you sure you want to delete <strong>{existingFiles[fileToDeleteIndex]?.name}</strong>?
+            Are you sure you want to delete {existingFiles[fileToDeleteIndex]?.name}?
             <br />
             This action cannot be undone.
           </p>
@@ -438,7 +438,7 @@ export default function PrivateEditDoc() {
         </button>
 
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          ✏️ Edit your private space document
+          ${title || "Untitled Document"}
         </h2>
         <p className="text-xs text-blue-700 mt-1">
           Supported: PDF, Word, Excel, PowerPoint, Text, CSV, JPG, PNG, GIF, ZIP, JSON
@@ -554,7 +554,7 @@ export default function PrivateEditDoc() {
                 placeholder="Search existing tags or create new"
                 className="w-full pl-8 border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
               />
-              <button type="button" onClick={handleTagAdd} className="btn-secondary">
+              <button type="button" onClick={handleTagAdd} className="btn-secondary text-sm">
                 Create
               </button>
             </div>
@@ -615,7 +615,7 @@ export default function PrivateEditDoc() {
             <>
               <div>
                 <p className="text-sm text-red-400 mb-1">
-                  🔐 <strong>Private note</strong> will be encrypted using your Private vault code:
+                  🔐 Private note will be encrypted using your Private vault code:
                 </p>
                 <textarea
                   value={privateNote}
@@ -628,7 +628,7 @@ export default function PrivateEditDoc() {
 
               <div>
                 <label className="block text-sm font-medium mb-1 text-gray-800">
-                  Re-enter <strong>Private</strong> vault code to encrypt:
+                  Re-enter Private vault code to encrypt:
                 </label>
                 <input
                   type="password"

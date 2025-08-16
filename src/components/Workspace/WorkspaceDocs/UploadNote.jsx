@@ -142,11 +142,11 @@ const WorkspaceUploadNote = () => {
 
             const { data: vaultCodeRow, error: vaultError } = await supabase
                 .from("vault_codes")
-                .select("private_code")
+                .select("private_code_hash")
                 .eq("id", user.id)
                 .single();
 
-            if (vaultError || !vaultCodeRow?.private_code) {
+            if (vaultError || !vaultCodeRow?.private_code_hash) {
                 setLoading(false);
                 setErrorMsg(
                     'Please set your Vault Code in <a href="/account/manage" class="text-blue-600 underline">Account Settings</a> before uploading.'
@@ -154,7 +154,7 @@ const WorkspaceUploadNote = () => {
                 return;
             }
 
-            const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
+            const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code_hash);
             if (!isMatch) {
                 setLoading(false);
                 setErrorMsg("Incorrect Vault Code.");

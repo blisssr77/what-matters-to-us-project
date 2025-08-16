@@ -548,7 +548,7 @@ export default function PrivateSpaceUploadDoc() {
             <>
               <div>
                 <p className="text-sm text-red-400 mb-1">
-                  🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
+                  🔐 Private note will be encrypted using your saved Vault Code:
                 </p>
                 <textarea
                   value={privateNote}
@@ -565,7 +565,7 @@ export default function PrivateSpaceUploadDoc() {
               {/* Vault Code Section */}
               <div>
                 <label className="block text-sm font-medium mb-1 text-gray-500">
-                  Enter <strong>Private</strong> vault code to encrypt document:
+                  Enter Private vault code to encrypt document:
                 </label>
                 <input
                   type="password"

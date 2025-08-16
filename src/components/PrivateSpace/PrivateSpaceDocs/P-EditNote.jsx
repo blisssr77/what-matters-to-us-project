@@ -295,17 +295,17 @@ export default function PrivateEditNote() {
           <X size={20} />
         </button>
 
-        <h2 className="text-xl font-extrabold mb-5 text-gray-900">✏️ Edit Note</h2>
+        <h2 className="text-xl font-bold mb-5 text-gray-900">✏️ Edit Note</h2>
 
         {/* Title */}
-        <label className="text-sm font-extrabold text-gray-800 mb-1 block">Note title:</label>
+        <label className="text-sm font-bold text-gray-800 mb-1 block">Note title:</label>
         <input
           value={editedTitle}
           onChange={(e) => {
             setEditedTitle(e.target.value);
             setHasUnsavedChanges(true);
           }}
-          className="w-full p-2 border rounded mb-3 text-gray-800 font-extrabold text-sm bg-gray-50"
+          className="w-full p-2 border rounded mb-3 text-gray-800 font-bold text-sm bg-gray-50"
           placeholder="Title"
         />
 
@@ -358,8 +358,8 @@ export default function PrivateEditNote() {
         {/* Private Note (only when vaulted) */}
         {isVaulted && (
           <>
-            <p className="text-sm text-red-400 mb-1 font-extrabold">
-              🔐 <strong>Private note</strong> will be encrypted using your Vault Code:
+            <p className="text-sm text-red-400 mb-1 font-bold">
+              🔐 Private note will be encrypted using your Vault Code:
             </p>
             <textarea
               value={privateNote}
@@ -374,7 +374,7 @@ export default function PrivateEditNote() {
 
             <div className="mb-3">
               <label className="block text-sm font-medium mb-1 text-gray-800">
-                Re-enter <strong>Private</strong> vault code:
+                Re-enter Private vault code:
               </label>
               <div className="flex gap-2">
                 <input
@@ -400,7 +400,7 @@ export default function PrivateEditNote() {
 
         {/* Tags */}
         <div className="mb-4">
-          <label className="text-sm font-extrabold text-gray-800 mb-1 block">Edit tags:</label>
+          <label className="text-sm font-bold text-gray-800 mb-1 block">Edit tags:</label>
           <div className="relative flex items-center gap-2 mb-1 text-sm">
             <Search className="absolute left-3 text-gray-400" size={16} />
             <input

@@ -90,7 +90,7 @@ export default function WorkspaceEditNote() {
         fetchTags();
     }, [id]);
 
-    // Handle vault code change
+    // Handle decryption
     const handleDecrypt = async (code = vaultCode) => {
         if (!noteData?.is_vaulted) {
             console.warn("Note is not vaulted. Skipping decryption.");
@@ -106,17 +106,17 @@ export default function WorkspaceEditNote() {
 
         const { data: vaultCodeRow, error: codeError } = await supabase
             .from("vault_codes")
-            .select("private_code")
+            .select("private_code_hash")
             .eq("id", user.id)
             .single();
 
-        if (codeError || !vaultCodeRow?.private_code) {
+        if (codeError || !vaultCodeRow?.private_code_hash) {
             setErrorMsg("Vault code not set.");
             setLoading(false);
             return;
         }
 
-        const isMatch = await bcrypt.compare(code.trim(), vaultCodeRow.private_code);
+        const isMatch = await bcrypt.compare(code.trim(), vaultCodeRow.private_code_hash);
         if (!isMatch) {
             setErrorMsg("Incorrect Vault Code.");
             setLoading(false);
@@ -164,18 +164,18 @@ export default function WorkspaceEditNote() {
             // Step 1: Fetch hashed vault code
             const { data: vaultCodeRow, error: codeError } = await supabase
                 .from("vault_codes")
-                .select("private_code")
+                .select("private_code_hash")
                 .eq("id", user.id)
                 .single();
 
-            if (codeError || !vaultCodeRow?.private_code) {
+            if (codeError || !vaultCodeRow?.private_code_hash) {
                 setErrorMsg("Vault Code not set or fetch failed.");
                 setSaving(false);
                 return;
             }
 
             // Step 2: Compare input vaultCode with hashed version
-            const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
+            const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code_hash);
             if (!isMatch) {
                 setErrorMsg("Incorrect Vault Code.");
                 setSaving(false);
@@ -288,22 +288,22 @@ export default function WorkspaceEditNote() {
                     <X size={20} />
                 </button>
 
-                <h2 className="text-xl font-bold mb-5 text-gray-900">✏️ Edit Note</h2>
+                <h2 className="text-xl font-bold mb-5 text-gray-900">${editedTitle}</h2>
 
                 {/* Title Input Section */}
-                <label className="text-sm font-extrabold text-gray-800 mb-1 block">Note title:</label>
+                <label className="text-sm font-bold text-gray-800 mb-1 block">Note title:</label>
                 <input
                     value={editedTitle}
                     onChange={(e) => {
                         setEditedTitle(e.target.value);
                         setHasUnsavedChanges(true);
                     }}
-                    className="w-full p-2 border rounded mb-3 text-gray-800 font-extrabold text-sm bg-gray-50"
+                    className="w-full p-2 border rounded mb-3 text-gray-800 font-bold text-sm bg-gray-50"
                     placeholder="Title"
                 />
                 {/* Public Notes */}
                 <div>
-                    <label className="text-sm font-extrabold text-gray-800 mb-1 block">Edit public note:</label>
+                    <label className="text-sm font-bold text-gray-800 mb-1 block">Edit public note:</label>
                     <textarea
                         value={notes}
                         onChange={(e) => {
@@ -318,7 +318,7 @@ export default function WorkspaceEditNote() {
 
                 {/* Tag Input Section */}
                 <div className="mb-4">
-                    <label className="text-sm font-extrabold text-gray-800 mt-1 mb-1 block">Edit tags:</label>
+                    <label className="text-sm font-bold text-gray-800 mt-1 mb-1 block">Edit tags:</label>
                     <div className="relative flex items-center gap-2 mb-1 text-sm">
                         <Search className="absolute left-3 text-gray-400" size={16} />
                         <input
@@ -391,8 +391,8 @@ export default function WorkspaceEditNote() {
                 {isVaulted && (
                     <>
                     {/* Private Note Input */}
-                    <p className="text-sm text-red-400 mb-1 font-extrabold">
-                        🔐 <strong>Private note</strong> will be encrypted using your saved Vault Code:
+                    <p className="text-sm text-red-400 mb-1 font-bold">
+                        🔐 Private note will be encrypted using your saved Vault Code:
                     </p>
                     <textarea
                         value={editedNote}
@@ -408,7 +408,7 @@ export default function WorkspaceEditNote() {
                     {/* Vault Code */}
                     <div>
                         <label className="block text-sm font-medium mb-1 text-gray-800">
-                            Re-enter <strong>Private</strong> vault code to encrypt:
+                            Re-enter Private vault code to encrypt:
                         </label>
                         <input
                             type="password"

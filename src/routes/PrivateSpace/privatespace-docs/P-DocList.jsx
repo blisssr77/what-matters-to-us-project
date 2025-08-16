@@ -1,14 +1,16 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText, Search, ChevronDown, Lock } from "lucide-react";
 import Layout from "@/components/Layout/Layout";
 import WorkspaceTabs from "@/components/Layout/WorkspaceTabs";
-import { useWorkspaceStore } from "@/hooks/useWorkspaceStore";
+import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
 import dayjs from "dayjs";
 import { supabase } from "@/lib/supabaseClient";
 import CreatePrivateSpaceModal from "@/components/common/CreatePrivateSpaceModal";
+import PrivateSpaceSettingsModal from "@/components/common/PrivatespaceSettingsModal";
+import { usePrivateSpaceActions } from "@/hooks/usePrivateSpaceActions";
 
-export default function PrivateDocList({ workspaces }) {
+export default function PrivateDocList() {
   const navigate = useNavigate();
 
   // ---------- filters/search ----------
@@ -19,29 +21,50 @@ export default function PrivateDocList({ workspaces }) {
 
   // ---------- spaces & active selection ----------
   const [spaces, setSpaces] = useState([]);
-  const ensureForUser = useWorkspaceStore((s) => s.ensureForUser);
-  const activeSpaceId = useWorkspaceStore((s) => s.activeSpaceId);
-  const setActiveSpaceId = useWorkspaceStore((s) => s.setActiveSpaceId);
   const [spaceName, setSpaceName] = useState("");
+  const ensureForUser = usePrivateSpaceStore((s) => s.ensureForUser);
+  const activeSpaceId = usePrivateSpaceStore((s) => s.activeSpaceId);
+  const setActiveSpaceId = usePrivateSpaceStore((s) => s.setActiveSpaceId);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showPrivateSettings, setShowPrivateSettings] = useState(false);
 
-  // ensure store is scoped to the signed-in user
+  // ---------- actions ----------
+  const {
+    loading,
+    errorMsg,
+    successMsg,
+    handleRenameSpace,
+    handleDeleteSpace,
+    verifyUserPrivateVaultCode,
+  } = usePrivateSpaceActions({
+    activeSpaceId,
+    spaceName,
+    setSpaceName,
+  });
+
+  // derived, always correct space name
+  const currentSpaceName = useMemo(() => {
+    const found = spaces.find((s) => s.id === activeSpaceId);
+    return found?.name || "";
+  }, [spaces, activeSpaceId]);
+
+  // ensure store scoped to signed-in user (guard if ensureForUser is not in your store)
   useEffect(() => {
     (async () => {
       const { data: { user } = {} } = await supabase.auth.getUser();
-      ensureForUser(user?.id ?? null);
+      if (ensureForUser) ensureForUser(user?.id ?? null);
     })();
   }, [ensureForUser]);
 
-  // reorder UI (drag in tabs)
+  // tabs data
   const spacesForUI = useMemo(
     () => spaces.map((s) => ({ id: s.id, name: s.name })),
     [spaces]
   );
-  // reorder handler from Tabs
+
+  // ---------- reorder spaces ----------
   const handleReorder = async (newList) => {
     setSpaces(newList); // optimistic
-    // persist sort_order
     const updates = newList.map((s, idx) => ({ id: s.id, sort_order: idx }));
     for (const u of updates) {
       const { error } = await supabase
@@ -62,10 +85,8 @@ export default function PrivateDocList({ workspaces }) {
   const [noteOverflow, setNoteOverflow] = useState({});
   const titleRefs = useRef({});
   const noteRefs = useRef({});
-
   const tagBoxRef = useRef();
 
-  // Toggle expand/collapse for a card
   const toggleExpand = (e, id) => {
     e.stopPropagation();
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -84,7 +105,7 @@ export default function PrivateDocList({ workspaces }) {
     });
   }, [allDocuments, searchTerm, selectedTag]);
 
-  // Measure overflow for title and notes separately
+  // measure overflow
   useEffect(() => {
     const t = {};
     const n = {};
@@ -98,63 +119,51 @@ export default function PrivateDocList({ workspaces }) {
     setNoteOverflow(n);
   }, [filteredDocs]);
 
-  // Fetch all private spaces the user owns
-  useEffect(() => {
-    (async () => {
-      const { data: { user } = {} } = await supabase.auth.getUser();
-      if (!user) return;
+  // ---------- data fetching ----------
+  const fetchSpaces = useCallback(async () => {
+    const { data: { user } = {} } = await supabase.auth.getUser();
+    if (!user) return;
 
-      const { data, error } = await supabase
-        .from("private_spaces")
-        .select("id, name, sort_order")
-        .eq("created_by", user.id)
-        .order("sort_order", { ascending: true });
+    const { data, error } = await supabase
+      .from("private_spaces")
+      .select("id, name, sort_order")
+      .eq("created_by", user.id)
+      .order("sort_order", { ascending: true });
 
-      if (!error) {
-        setSpaces(data ?? []);
-        if (!activeSpaceId && data?.length) setActiveSpaceId(data[0].id);
-      }
-    })();
-  }, []);
-
-  // Fetch active space name when activeSpaceId changes
-  useEffect(() => {
-    if (!activeSpaceId) {
-      setSpaceName("");
+    if (error) {
+      console.error("❌ Failed to fetch private spaces:", error);
       return;
     }
-    (async () => {
-      const { data, error } = await supabase
-        .from("private_spaces")
-        .select("name")
-        .eq("id", activeSpaceId)
-        .single();
 
-      setSpaceName(error ? "" : data?.name ?? "");
-    })();
-  }, [activeSpaceId]);
+    setSpaces(data ?? []);
+    if (!activeSpaceId && data?.length) setActiveSpaceId(data[0].id);
+  }, [activeSpaceId, setActiveSpaceId]);
 
-  // Fetch documents for active private space
+  useEffect(() => { fetchSpaces(); }, [fetchSpaces]);
+
+  // Fetch documents for the active space
+  const fetchDocuments = useCallback(async (spaceId) => {
+    const { data, error } = await supabase
+      .from("private_vault_items")
+      .select("*")
+      .eq("private_space_id", spaceId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("❌ Failed to fetch private docs:", error);
+      return;
+    }
+
+    setAllDocuments(data || []);
+    setAllTags(Array.from(new Set((data || []).flatMap((d) => d.tags || []))));
+    setExpanded({});
+  }, []);
+
   useEffect(() => {
-    if (!activeSpaceId) return;
-    (async () => {
-      const { data, error } = await supabase
-        .from("private_vault_items")
-        .select("*")
-        .eq("private_space_id", activeSpaceId)
-        .order("created_at", { ascending: false });
+    if (activeSpaceId) fetchDocuments(activeSpaceId);
+  }, [activeSpaceId, fetchDocuments]);
 
-      if (error) {
-        console.error("❌ Failed to fetch private docs:", error);
-        return;
-      }
-      setAllDocuments(data || []);
-      setAllTags(Array.from(new Set((data || []).flatMap((d) => d.tags || []))));
-      setExpanded({}); // reset expansion when switching spaces
-    })();
-  }, [activeSpaceId]);
-
-  // Close tag filter when clicking outside
+  // close tag filter on outside click
   useEffect(() => {
     const onDown = (e) => {
       if (tagBoxRef.current && !tagBoxRef.current.contains(e.target)) {
@@ -172,7 +181,7 @@ export default function PrivateDocList({ workspaces }) {
         workspaces={spacesForUI}
         activeId={activeSpaceId}
         onSelect={(id) => setActiveSpaceId(id)}
-        onSettingsClick={() => navigate(`/privatespace/settings/${activeSpaceId}`)}
+        onSettingsClick={() => setShowPrivateSettings(true)}
         onCreateClick={() => setShowCreateModal(true)}
         onReorder={handleReorder}
       />
@@ -304,7 +313,7 @@ export default function PrivateDocList({ workspaces }) {
                   )}
                   <div
                     ref={(el) => (titleRefs.current[doc.id] = el)}
-                    className={`text-md text-black font-extrabold ${isExpanded ? "" : "line-clamp-5"}`}
+                    className={`text-md text-black font-bold ${isExpanded ? "" : "line-clamp-5"}`}
                   >
                     {doc.title || doc.name || "Untitled"}
                   </div>
@@ -313,7 +322,7 @@ export default function PrivateDocList({ workspaces }) {
                 {/* Tags */}
                 {doc.tags?.length > 0 && (
                   <div className="mb-2 text-xs text-gray-800">
-                    <strong>Tags:</strong>{" "}
+                    Tags:{" "}
                     {doc.tags.map((tag, index) => (
                       <React.Fragment key={tag}>
                         <span className="bg-yellow-50 px-1 rounded">{tag}</span>
@@ -346,12 +355,12 @@ export default function PrivateDocList({ workspaces }) {
                 {/* Timestamps */}
                 {doc.updated_at && doc.updated_at !== doc.created_at && (
                   <div className="text-xs text-gray-500 mb-1">
-                    <strong>Last Modified:</strong>{" "}
+                    Last Modified:{" "}
                     {dayjs(doc.updated_at).format("MMM D, YYYY h:mm A")}
                   </div>
                 )}
                 <div className="text-xs text-gray-500">
-                  <strong>Uploaded:</strong>{" "}
+                  Uploaded:{" "}
                   {dayjs(doc.created_at).format("MMM D, YYYY h:mm A")}
                 </div>
 
@@ -372,17 +381,39 @@ export default function PrivateDocList({ workspaces }) {
           })}
         </div>
       </div>
+      {/* Private Space Settings Modal */}
+      <PrivateSpaceSettingsModal
+        open={showPrivateSettings}
+        onClose={() => setShowPrivateSettings(false)}
+        spaceName={spaceName}
+        setSpaceName={setSpaceName}
+        loading={loading}
+        errorMsg={errorMsg}
+        successMsg={successMsg}
+        handleRename={async () => {
+          await handleRenameSpace();
+          // after success you can refetch tabs and close:
+          // await fetchSpaces();
+          // setShowPrivateSettings(false);
+        }}
+        onVerifyVaultCode={verifyUserPrivateVaultCode}
+        onDelete={async () => {
+          const ok = await handleDeleteSpace();
+          if (ok) {
+            // Update UI: refetch spaces, switch selection, close modal, navigate
+            // await fetchSpaces();
+            // setShowPrivateSettings(false);
+            // navigate("/privatespace/vaults");
+          }
+        }}
+      />
 
       {/* Create Private Space Modal */}
       <CreatePrivateSpaceModal
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onCreated={(ps) => {
-          // add new space and activate it
-          setSpaces((prev) => {
-            const next = [...prev, { id: ps.id, name: ps.name, sort_order: prev.length }];
-            return next;
-          });
+          setSpaces((prev) => [...prev, { id: ps.id, name: ps.name, sort_order: prev.length }]);
           setActiveSpaceId(ps.id);
         }}
       />

@@ -85,18 +85,18 @@ export default function WorkspaceViewDoc() {
 
     const { data: vaultCodeRow, error: codeError } = await supabase
       .from("vault_codes")
-      .select("private_code")
+      .select("private_code_hash")
       .eq("id", user.id)
       .single();
 
-    if (codeError || !vaultCodeRow?.private_code) {
+    if (codeError || !vaultCodeRow?.private_code_hash) {
       setErrorMsg("Vault code not set. Please try again later.");
       setLoading(false);
       return;
     }
 
     // 3. Validate input code
-    const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
+    const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code_hash);
     if (!isMatch) {
       setErrorMsg("Incorrect Vault Code.");
       setLoading(false);
@@ -274,7 +274,7 @@ export default function WorkspaceViewDoc() {
       {showConfirmPopup && (
         <div className="fixed top-6 right-6 bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
           <p className="mt-10 text-gray-900">
-            Are you sure you want to delete <strong>{doc?.title || "this document"}</strong>?
+            Are you sure you want to delete {doc?.title || "this document"}?
             <br />
             This action cannot be undone.
           </p>
@@ -307,13 +307,13 @@ export default function WorkspaceViewDoc() {
           <X size={20} />
         </button>
 
-        <h2 className="text-xl font-bold text-gray-800 mb-5">📂 View Document</h2>
-        {doc?.title && <h3 className="text-lg text-gray-800 font-semibold mb-2">{doc.title}</h3>}
-        {doc?.notes && <p className="text-sm text-gray-700 mb-3">{doc.notes}</p>}
+        {doc?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{doc.title}</h2>}
+        <h2 className="text-sm mb-1 text-gray-700">Notes:</h2>
+        {doc?.notes && <p className="text-sm text-gray-800 mb-4">{doc.notes}</p>}
         {/* Tags */}
         {doc?.tags?.length > 0 && (
           <div className="mb-4 text-sm text-gray-700">
-            <strong>Tags:</strong>{" "}
+            Tags:{" "}
             {doc.tags.map((tag, index) => (
               <React.Fragment key={tag}>
                 <span className="bg-yellow-50 px-1 rounded">{tag}</span>
@@ -346,7 +346,7 @@ export default function WorkspaceViewDoc() {
           !entered ? (
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Enter <strong>Vault Code</strong> to Decrypt Document:
+                Enter Vault Code to Decrypt Document:
               </label>
               <input
                 type="password"
@@ -404,9 +404,9 @@ export default function WorkspaceViewDoc() {
             {renderFileViewer()}
 
             {/* Tags */}
-            {doc?.tags?.length > 0 && (
+            {/* {doc?.tags?.length > 0 && (
               <div className="mb-4 text-sm text-gray-700">
-                <strong>Tags:</strong>{" "}
+                Tags:{" "}
                 {doc.tags.map((tag, index) => (
                   <React.Fragment key={tag}>
                     <span className="bg-yellow-50 px-1 rounded">{tag}</span>
@@ -414,7 +414,7 @@ export default function WorkspaceViewDoc() {
                   </React.Fragment>
                 ))}
               </div>
-            )}
+            )} */}
 
             {/* Public controls */}
             <div className="flex gap-4 text-sm mb-4">

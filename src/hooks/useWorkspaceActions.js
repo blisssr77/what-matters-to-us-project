@@ -12,36 +12,45 @@ export const useWorkspaceActions = ({
   const [workspaceActionSuccessMsg, setWorkspaceActionSuccessMsg] = useState("");
   const [shouldRefresh, setShouldRefresh] = useState(false);
 
-  // Effect to reset success message after a delay and refresh if needed
+  // Effect to reset success message after a delay
   useEffect(() => {
     if (!workspaceActionSuccessMsg) return;
     const t = setTimeout(() => {
       setWorkspaceActionSuccessMsg("");
-      if (shouldRefresh) {
-        window.location.reload();
-      }
+      // refresh after success
+      window.location.reload();
     }, 3000);
     return () => clearTimeout(t);
   }, [workspaceActionSuccessMsg, shouldRefresh]);
 
   // Function to rename the workspace
   const handleRename = async () => {
+    if (!activeWorkspaceId) {
+      setWorkspaceActionErrorMsg("No active workspace.");
+      return;
+    }
+    const next = (workspaceName || "").trim();
+    if (!next) {
+      setWorkspaceActionErrorMsg("Name cannot be empty.");
+      return;
+    }
+
     setWorkspaceActionLoading(true);
     setWorkspaceActionErrorMsg("");
-    setShouldRefresh(false); // reset before action
+    setWorkspaceActionSuccessMsg("");
 
     const { error } = await supabase
       .from("workspaces")
-      .update({ name: workspaceName })
+      .update({ name: next })
       .eq("id", activeWorkspaceId);
 
     if (error) {
-      setWorkspaceActionErrorMsg("❌ Failed to rename workspace");
+      console.error("Rename failed:", error);
+      setWorkspaceActionErrorMsg(error.message || "❌ Failed to rename workspace");
     } else {
       setWorkspaceActionSuccessMsg("✅ Workspace renamed successfully");
-      setShouldRefresh(true); // trigger refresh after success
+      // optional: window.location.reload();
     }
-
     setWorkspaceActionLoading(false);
   };
 
@@ -60,7 +69,6 @@ export const useWorkspaceActions = ({
   };
 
   // Function to delete the workspace
-  // This function should handle deleting the workspace and its related data
   const handleDeleteWorkspace = async () => {
     if (!activeWorkspaceId) return;
     setWorkspaceActionLoading(true);
@@ -68,7 +76,7 @@ export const useWorkspaceActions = ({
     setWorkspaceActionSuccessMsg("");
 
     try {
-      // If you have FK CASCADE on child tables,  just:
+      // If you have FK CASCADE on child tables, just:
       // const { error: wsErr } = await supabase.from("workspaces").delete().eq("id", activeWorkspaceId);
       // if (wsErr) throw wsErr;
 

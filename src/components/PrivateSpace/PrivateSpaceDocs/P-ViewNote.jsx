@@ -138,7 +138,7 @@ export default function PrivateViewNote() {
         {showDeleteConfirm && (
             <div className="fixed top-6 right-6 bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
             <p className="mt-10 text-gray-800">
-                Are you sure you want to delete <strong>{noteData?.title || "this note"}</strong>?
+                Are you sure you want to delete {noteData?.title || "this note"}?
             </p>
             <div className="flex gap-3 justify-end mt-4">
                 <button
@@ -167,14 +167,15 @@ export default function PrivateViewNote() {
             </button>
 
             {noteData?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{noteData.title}</h2>}
-            {noteData?.notes && <p className="text-sm text-gray-700 mb-4">{noteData.notes}</p>}
+            <h2 className="text-sm mb-1 text-gray-700">Notes:</h2>
+            {noteData?.notes && <p className="text-sm text-gray-800 mb-4">{noteData.notes}</p>}
 
             {/* If not vaulted, show content without requiring code */}
             {!isVaulted ? (
             <>
                 {/* Tags */}
                 {noteData?.tags?.length > 0 && (
-                <div className="mb-3 text-sm text-gray-900 font-medium">
+                <div className="mb-3 text-sm text-gray-700 font-medium">
                     Tags:{" "}
                     {noteData.tags.map((tag, index) => (
                     <React.Fragment key={tag}>
@@ -217,7 +218,7 @@ export default function PrivateViewNote() {
                 {!codeEntered ? (
                 <>
                     <label className="block text-sm font-medium mb-1 mt-6 text-gray-600">
-                    Enter <strong>Private</strong> Vault Code to Decrypt Note:
+                    Enter Private Vault Code to Decrypt Note:
                     </label>
                     {/* Vault code input */}
                     <div className="mt-2 flex items-center gap-3">

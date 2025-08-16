@@ -73,17 +73,17 @@ export default function WorkspaceViewNote() {
 
             const { data: vaultCodeRow, error: codeError } = await supabase
                 .from("vault_codes")
-                .select("private_code")
+                .select("private_code_hash")
                 .eq("id", user.id)
                 .single();
 
-            if (codeError || !vaultCodeRow?.private_code) {
+            if (codeError || !vaultCodeRow?.private_code_hash) {
                 setErrorMsg("Vault code not set. Please try again later.");
                 setLoading(false);
                 return;
             }
 
-            const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code);
+            const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code_hash);
             if (!isMatch) {
                 setErrorMsg("Incorrect Vault Code.");
                 setLoading(false);
@@ -138,7 +138,7 @@ export default function WorkspaceViewNote() {
             {showDeleteConfirm && (
                 <div className="fixed top-6 right-6 bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
                     <p className="mt-10 text-gray-800">
-                    Are you sure you want to delete <strong>{noteData?.title || "this note"}</strong>?
+                    Are you sure you want to delete {noteData?.title || "this note"}?
                     </p>
                     <div className="flex gap-3 justify-end mt-4">
                     <button
@@ -169,12 +169,12 @@ export default function WorkspaceViewNote() {
                     <X size={20} />
                 </button>
 
-                <h2 className="text-lg font-bold mb-4 text-gray-900">🔓 View Note</h2>
-                {noteData?.title && <h3 className="text-md text-gray-800 font-semibold mb-2">{noteData.title}</h3>}
-                {noteData?.notes && <p className="text-sm text-gray-700 mb-4">{noteData.notes}</p>}
+                {noteData?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{noteData.title}</h2>}
+                <h2 className="text-sm mb-1 text-gray-700">Notes:</h2>
+                {noteData?.notes && <p className="text-sm text-gray-800 mb-4">{noteData.notes}</p>}
                 {/* Display tags content */}
                 {Array.isArray(noteData?.tags) && noteData.tags.length > 0 && (
-                    <div className="mb-3 text-sm text-gray-900 font-medium">
+                    <div className="mb-3 text-sm text-gray-700 font-medium">
                         Tags:{" "}
                         {noteData.tags.map((tag, index) => (
                         <React.Fragment key={tag}>
@@ -189,7 +189,7 @@ export default function WorkspaceViewNote() {
                 {noteData?.is_vaulted && !codeEntered ? (
                     <>
                         <label className="block text-sm mt-6 font-medium mb-1 text-gray-900">
-                            Enter <strong>Private</strong> Vault Code to Decrypt Note:
+                            Enter Private Vault Code to Decrypt Note:
                         </label>
                         <input
                             type="password"

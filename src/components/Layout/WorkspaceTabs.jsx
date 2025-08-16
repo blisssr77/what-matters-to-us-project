@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Settings, ChevronLeft, ChevronRight } from "lucide-react";
 import clsx from "clsx";
+import { create } from "zustand";
 
 export default function WorkspaceTabs({
   workspaces = [],
@@ -9,6 +10,8 @@ export default function WorkspaceTabs({
   onSettingsClick,
   onCreateClick,
   onReorder, // optional: (newOrderArray) => void
+  settingsTitle = "Workspace Settings",
+  createTitle = "Create new workspace",
 }) {
   const scrollerRef = useRef(null);
   const tabRefs = useRef({});
@@ -17,6 +20,7 @@ export default function WorkspaceTabs({
   const [dragIdx, setDragIdx] = useState(null);
   const [overIdx, setOverIdx] = useState(null);
 
+  // Memoize the workspaces to avoid unnecessary re-renders
   useEffect(() => {
     const el = tabRefs.current[activeId];
     if (el?.scrollIntoView) {
@@ -24,6 +28,7 @@ export default function WorkspaceTabs({
     }
   }, [activeId]);
 
+  // Create a new array for UI to avoid mutating the original workspaces
   const updateScrollState = () => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -31,6 +36,7 @@ export default function WorkspaceTabs({
     setCanScrollR(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
   };
 
+  // Create a new array for UI to avoid mutating the original workspaces
   useEffect(() => {
     updateScrollState();
     const el = scrollerRef.current;
@@ -50,6 +56,7 @@ export default function WorkspaceTabs({
     };
   }, [workspaces.length]);
 
+  // Function to scroll left or right
   const scrollBy = (dx) => scrollerRef.current?.scrollBy({ left: dx, behavior: "smooth" });
 
   // drag to reorder (optional)
@@ -58,10 +65,12 @@ export default function WorkspaceTabs({
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", String(i));
   };
+  // Handle drag over and drop
   const handleDragOver = (i) => (e) => {
     e.preventDefault();
     setOverIdx(i);
   };
+  // Handle drop event
   const handleDrop = (i) => (e) => {
     e.preventDefault();
     setOverIdx(null);
@@ -73,6 +82,7 @@ export default function WorkspaceTabs({
     setDragIdx(null);
     onReorder?.(copy);
   };
+  // Reset drag state
   const handleDragEnd = () => {
     setDragIdx(null);
     setOverIdx(null);
@@ -127,7 +137,7 @@ export default function WorkspaceTabs({
           <button
             onClick={onCreateClick}
             className="ml-1 h-6 w-6 rounded-md bg-[#15181d] text-gray-300 hover:bg-[#1a1d22] hover:text-white flex items-center justify-center border border-transparent"
-            title="Create new workspace"
+            title={createTitle}
           >
             <Plus size={14} />
           </button>
@@ -148,7 +158,7 @@ export default function WorkspaceTabs({
       <button
         onClick={onSettingsClick}
         className="ml-1 p-1 text-gray-400 hover:text-gray-200 rounded-md"
-        title="Workspace Settings"
+        title={settingsTitle}
       >
         <Settings size={18} />
       </button>

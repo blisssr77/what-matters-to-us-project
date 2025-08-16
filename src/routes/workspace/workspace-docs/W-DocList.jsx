@@ -27,7 +27,9 @@ export default function WorkspaceVaultList() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [members, setMembers] = useState([]);
   const [workspaceName, setWorkspaceName] = useState("");
-  const { activeWorkspaceId, setActiveWorkspaceId } = useWorkspaceStore();
+  const activeWorkspaceId = useWorkspaceStore(s => s.activeWorkspaceId);
+  const setActiveWorkspaceId = useWorkspaceStore(s => s.setActiveWorkspaceId);
+  const ensureForUser = useWorkspaceStore(s => s.ensureForUser);
   const userRole = useUserRole(activeWorkspaceId);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -433,7 +435,7 @@ export default function WorkspaceVaultList() {
                   )}
                   <div
                     ref={(el) => (titleRefs.current[doc.id] = el)}
-                    className={`text-md text-black font-extrabold ${
+                    className={`text-md text-black font-bold ${
                       isExpanded ? "" : "line-clamp-5"
                     }`}
                   >
@@ -444,7 +446,7 @@ export default function WorkspaceVaultList() {
                 {/* Tags */}
                 {doc.tags?.length > 0 && (
                   <div className="mb-2 text-xs text-gray-800">
-                    <strong>Tags:</strong>{" "}
+                    Tags:{" "}
                     {doc.tags.map((tag, index) => (
                       <React.Fragment key={tag}>
                         <span className="bg-yellow-50 px-1 rounded">{tag}</span>
@@ -479,12 +481,12 @@ export default function WorkspaceVaultList() {
                 {/* Timestamps */}
                 {doc.updated_at && doc.updated_at !== doc.created_at && (
                   <div className="text-xs text-gray-500 mb-1">
-                    <strong>Last Modified:</strong>{" "}
+                    Last Modified:{" "}
                     {dayjs(doc.updated_at).format("MMM D, YYYY h:mm A")}
                   </div>
                 )}
                 <div className="text-xs text-gray-500">
-                  <strong>Uploaded:</strong>{" "}
+                  Uploaded:{" "}
                   {dayjs(doc.created_at).format("MMM D, YYYY h:mm A")}
                 </div>
 

@@ -321,7 +321,7 @@ const PrivateUploadNote = () => {
         {isVaulted && (
           <>
             <p className="text-sm text-red-400 mb-1">
-              🔐 <strong>Private note</strong> will be encrypted using your Private vault code:
+              🔐 Private note will be encrypted using your Private vault code:
             </p>
             <textarea
               value={privateNote}
@@ -332,7 +332,7 @@ const PrivateUploadNote = () => {
             />
 
             <label className="block text-sm font-medium mb-1 text-gray-700">
-              Enter <strong>Private</strong> vault code:
+              Enter Private vault code:
             </label>
             <input
               type="password"

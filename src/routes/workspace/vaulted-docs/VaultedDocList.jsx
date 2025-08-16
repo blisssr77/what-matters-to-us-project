@@ -202,7 +202,7 @@ export default function WorkspaceVaultList() {
 
                 {doc.tags?.length > 0 && (
                   <div className="mb-2 text-xs text-gray-700">
-                    <strong>Tags:</strong>{" "}
+                    Tags:{" "}
                     {/* Map over each tag to apply individual styling */}
                     {doc.tags.map((tag, index) => (
                       <React.Fragment key={tag}> 
@@ -222,13 +222,13 @@ export default function WorkspaceVaultList() {
 
                 {doc.updated_at && doc.updated_at !== doc.created_at && (
                   <div className="text-xs text-gray-400 mb-1">
-                    <strong>Last Modified:</strong>{" "}
+                    Last Modified:{" "}
                     {dayjs(doc.updated_at).format("MMM D, YYYY h:mm A")}
                   </div>
                 )}
 
                 <div className="text-xs text-gray-400">
-                  <strong>Uploaded:</strong>{" "}
+                  Uploaded:{" "}
                   {dayjs(doc.created_at).format("MMM D, YYYY h:mm A")}
                 </div>
 

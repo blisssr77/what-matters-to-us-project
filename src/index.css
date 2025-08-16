@@ -28,7 +28,7 @@ body {
 }
 
 .btn-secondary {
-  @apply px-3 py-1.5 bg-gradient-to-r from-zinc-600 via-neutral-700 to-zinc-800 text-white 
+  @apply px-3 py-1.5 bg-gradient-to-r from-zinc-600 via-neutral-700 to-zinc-800 text-white text-sm
           rounded-xl shadow hover:from-neutral-800 hover:to-gray-800 transition;
 }
 

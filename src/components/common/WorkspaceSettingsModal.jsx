@@ -129,16 +129,19 @@ export default function WorkspaceSettingsModal({
                 onChange={(e) => setWorkspaceName(e.target.value)}
                 disabled={loading}
               />
-              <Button className="btn-secondary" onClick={handleRename} disabled={loading}>
-                {loading ? "Renaming..." : "Rename Workspace"}
-              </Button>
-
-              {successMsg && (
-                <p className="text-sm text-green-600">{successMsg}</p>
-              )}
-              {errorMsg && (
-                <p className="text-sm text-red-500">{errorMsg}</p>
-              )}
+              <div className="w-full flex justify-end">
+                <Button className="btn-secondary" onClick={handleRename} disabled={loading}>
+                  {loading ? "Renaming..." : "Rename Workspace"}
+                </Button>
+              </div>
+              <div className="w-full text-right mt-2">
+                {successMsg && (
+                  <p className="text-sm text-green-600">{successMsg}</p>
+                )}
+                {errorMsg && (
+                  <p className="text-sm text-red-500">{errorMsg}</p>
+                )}
+              </div>
             </TabsContent>
           )}
 
