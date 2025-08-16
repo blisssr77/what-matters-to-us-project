@@ -40,6 +40,66 @@ export default function WorkspaceViewDoc() {
   const [loading, setLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
+  // remember-opt-in
+  const [codeEntered, setCodeEntered] = useState(false);
+  const [rememberCode, setRememberCode] = useState(false);
+  // per-user namespacing (safer if multiple accounts use same browser)
+  const [storageKey, setStorageKey] = useState("pv_vault_code:anon");
+
+  // 15-minute TTL in ms
+  const FIFTEEN_MIN = 15 * 60 * 1000;
+
+  // per-item cached code helpers
+  const setExpiringItem = (key, value, ttlMs) => {
+    const payload = { v: String(value), e: Date.now() + ttlMs };
+    localStorage.setItem(key, JSON.stringify(payload));
+  };
+  const getExpiringItem = (key) => {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    try {
+      const { v, e } = JSON.parse(raw);
+      if (!e || Date.now() > e) {
+        localStorage.removeItem(key);
+        return null;
+      }
+      return v;
+    } catch {
+      localStorage.removeItem(key);
+      return null;
+    }
+  };
+  const removeExpiringItem = (key) => localStorage.removeItem(key);
+
+  // --- end expiring storage helpers ---
+  useEffect(() => {
+    (async () => {
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      const userId = user?.id ?? "anon";
+      setStorageKey(`pv_vault_code:${userId}:doc:${id}`);
+    })();
+  }, [id]);
+
+  // Auto-fill vault code if previously remembered
+  useEffect(() => {
+      (async () => {
+        if (!doc?.is_vaulted) return;
+
+        const { data: { user } = {} } = await supabase.auth.getUser();
+        const userId = user?.id ?? "anon";
+        const userKey = `pv_vault_code:${userId}:doc:${id}`;
+        const anonKey = `pv_vault_code:anon:doc:${id}`;
+
+        let remembered = getExpiringItem(userKey) || getExpiringItem(anonKey);
+        if (!remembered || codeEntered) return;
+
+        // optional: migrate anon → user key
+        if (!getExpiringItem(userKey)) setExpiringItem(userKey, remembered, FIFTEEN_MIN);
+
+        setVaultCode(remembered);
+        await handleDecrypt(remembered);
+    })();
+  }, [doc, storageKey]); // eslint-disable-line
   
   // Fetch document data on mount
   useEffect(() => {
@@ -63,92 +123,98 @@ export default function WorkspaceViewDoc() {
     fetchDoc();
   }, [id, activeWorkspaceId]);
 
-  // Handle vault code entry and decryption
-  const handleDecrypt = async () => {
-    if (!doc || !vaultCode) return;
+  // Handle vault code entry and decryption — supports optional explicitCode (from auto-fill)
+  const handleDecrypt = async (explicitCode) => {
+    if (!doc) return;
+    if (!doc.is_vaulted) {            // non-vaulted: nothing to decrypt
+      setEntered(true);
+      return;
+    }
+
+    const candidate = (explicitCode ?? vaultCode);
+    const code = String(candidate || "").trim();
+    if (!code) {
+      setErrorMsg("Please enter your Vault Code.");
+      return;
+    }
 
     setLoading(true);
     setErrorMsg("");
 
-    console.log("Vault code verification initiated");
-
-    // 1. Validate content
-    if (!doc.note_iv || !doc.encrypted_note) {
-      setErrorMsg("Nothing to decrypt for this document.");
-      setLoading(true);
-    }
-
-    // 2. Fetch vault code hash from Supabase
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const { data: vaultCodeRow, error: codeError } = await supabase
-      .from("vault_codes")
-      .select("private_code_hash")
-      .eq("id", user.id)
-      .single();
-
-    if (codeError || !vaultCodeRow?.private_code_hash) {
-      setErrorMsg("Vault code not set. Please try again later.");
-      setLoading(false);
-      return;
-    }
-
-    // 3. Validate input code
-    const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code_hash);
-    if (!isMatch) {
-      setErrorMsg("Incorrect Vault Code.");
-      setLoading(false);
-      return;
-    }
-
-    sessionStorage.setItem("vaultCode", vaultCode);
-
-    // 4. Decrypt private note
     try {
-      const note = await decryptText(doc.encrypted_note, doc.note_iv, vaultCode);
-      setDecryptedNote(note);
-      console.log("Decrypted note:", note);
-    } catch (err) {
-      console.error("Note decryption failed:", err);
-      setErrorMsg("Incorrect Vault Code or decryption failed.");
-    }
-
-    // 5. Decrypt each file
-    const files = [];
-
-    if (doc.file_metas?.length) {
-      for (const fileMeta of doc.file_metas) {
-        const { url, iv, type, name } = fileMeta;
-
-        try {
-          const urlObj = new URL(url);
-          const pathname = urlObj.pathname;
-          const bucket = "workspace.vaulted";
-          const prefix = `/storage/v1/object/public/${bucket}/`;
-          const filePath = pathname.startsWith(prefix)
-            ? pathname.slice(prefix.length)
-            : pathname;
-
-          const { data, error } = await supabase.storage.from(bucket).download(filePath);
-          if (error) throw error;
-
-          const encryptedBuffer = await data.arrayBuffer();
-          const blob = await decryptFile(encryptedBuffer, iv, vaultCode, type);
-          const blobUrl = URL.createObjectURL(blob);
-
-          files.push({ url: blobUrl, type: blob.type, name });
-        } catch (err) {
-          console.error(`Failed to decrypt file "${name}":`, err);
-        }
+      // 1) Verify via RPC (safer than selecting vault_codes)
+      const { data: ok, error: verifyError } = await supabase.rpc(
+        "verify_user_private_code",
+        { p_code: code }
+      );
+      if (verifyError) {
+        setErrorMsg(verifyError.message || "Failed to verify Vault Code.");
+        return;
+      }
+      if (!ok) {
+        setErrorMsg("Incorrect Vault Code.");
+        return;
       }
 
-      setDecryptedFiles(files);
-    }
+      // 2) Remember per-doc for 15 minutes (or clear)
+      if (rememberCode) {
+        setExpiringItem(storageKey, code, FIFTEEN_MIN);
+      } else {
+        removeExpiringItem(storageKey);
+      }
+      // Keep session copy for this tab
+      sessionStorage.setItem("vaultCode", code);
 
-    setEntered(true); // Mark entry complete
-    setLoading(false);
+      // 3) Decrypt private note (if present)
+      if (doc.encrypted_note && doc.note_iv) {
+        try {
+          const note = await decryptText(doc.encrypted_note, doc.note_iv, code);
+          setDecryptedNote(note);
+        } catch (err) {
+          console.error("Note decryption failed:", err);
+          setErrorMsg("Decryption failed for the private note.");
+        }
+      } else {
+        // If there’s nothing to decrypt, surface it but don’t block files
+        // setErrorMsg("Nothing to decrypt for this document.");
+      }
+
+      // 4) Decrypt each file (vaulted bucket)
+      const files = [];
+      if (Array.isArray(doc.file_metas) && doc.file_metas.length) {
+        for (const fileMeta of doc.file_metas) {
+          const { url, iv, type, name, path } = fileMeta;
+          try {
+            const bucket = "workspace.vaulted";
+            // Prefer stored path; fallback to deriving from the public URL
+            let filePath = path;
+            if (!filePath && url) {
+              const urlObj = new URL(url);
+              const prefix = `/storage/v1/object/public/${bucket}/`;
+              filePath = urlObj.pathname.startsWith(prefix)
+                ? urlObj.pathname.slice(prefix.length)
+                : urlObj.pathname.replace(/^\/+/, "");
+            }
+
+            const { data, error } = await supabase.storage.from(bucket).download(filePath);
+            if (error) throw error;
+
+            const encryptedBuffer = await data.arrayBuffer();
+            const blob = await decryptFile(encryptedBuffer, iv, code, type);
+            const blobUrl = URL.createObjectURL(blob);
+
+            files.push({ url: blobUrl, type: blob.type, name });
+          } catch (err) {
+            console.error(`Failed to decrypt file "${name}":`, err);
+          }
+        }
+        setDecryptedFiles(files);
+      }
+
+      setEntered(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Triggers decryption when vault code is entered
@@ -346,18 +412,34 @@ export default function WorkspaceViewDoc() {
           !entered ? (
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Enter Vault Code to Decrypt Document:
-              </label>
-              <input
-                type="password"
-                value={vaultCode}
-                onChange={(e) => setVaultCode(e.target.value)}
-                className="border border-gray-300 rounded px-3 py-2 w-full text-gray-600 mb-4 text-sm"
-                placeholder="Vault Code"
-              />
-              <button onClick={handleDecrypt} className="btn-secondary">
-                {loading ? "Decrypting..." : "Decrypt"}
-              </button>
+              Enter Vault Code to Decrypt Document:
+            </label>
+
+            {/* Vault code input */}
+            <div className="mt-2 flex items-center gap-3">
+                <input
+                    type="password"
+                    value={vaultCode}
+                    onChange={(e) => setVaultCode(e.target.value)}
+                    className="w-full p-2 border rounded text-sm text-gray-700"
+                    placeholder="Vault Code"
+                    autoComplete="current-password"
+                />
+                {/* Remember option for 15 minutes */}
+                <label className="flex items-center gap-2 text-xs text-gray-600">
+                    <input
+                    type="checkbox"
+                    checked={rememberCode}
+                    onChange={(e) => setRememberCode(e.target.checked)}
+                    />
+                    Remember code for 15 min
+                </label>
+
+                <button onClick={() => handleDecrypt()} disabled={loading} className="btn-secondary text-sm">
+                    {loading ? "Decrypting..." : "Decrypt"}
+                </button>
+            </div>
+
               {errorMsg && <p className="text-sm text-red-600 mt-2">{errorMsg}</p>}
             </div>
           ) : loading ? (

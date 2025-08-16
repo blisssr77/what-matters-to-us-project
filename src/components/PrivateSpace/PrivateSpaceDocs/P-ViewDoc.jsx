@@ -385,6 +385,7 @@ export default function PrivateViewDoc() {
                     {loading ? "Decrypting..." : "Decrypt"}
                 </button>
             </div>
+            
             {errorMsg && <p className="text-sm text-red-600 mt-2">{errorMsg}</p>}
           </div>
         ) : loading ? (

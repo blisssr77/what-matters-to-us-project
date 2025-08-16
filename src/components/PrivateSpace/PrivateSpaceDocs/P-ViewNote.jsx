@@ -50,7 +50,7 @@ export default function PrivateViewNote() {
     useEffect(() => {
         (async () => {
             const { data: { user } = {} } = await supabase.auth.getUser();
-            if (user?.id) setStorageKey(`pv_vault_code:${user.id}`);
+            if (user?.id) setStorageKey(`pv_vault_code:${user.id}:note:${id}`);
         })();
     }, []);
 
@@ -84,7 +84,7 @@ export default function PrivateViewNote() {
         })();
     }, [id]);
 
-    // Handle vault code changes
+    // Handle decryption
     const handleDecrypt = async (maybeCode) => {
         const code = String(maybeCode ?? vaultCode ?? "").trim();
         if (!noteData?.is_vaulted) { setDecryptedNote(""); setCodeEntered(true); return; }

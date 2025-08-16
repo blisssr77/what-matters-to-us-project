@@ -22,6 +22,55 @@ export default function WorkspaceViewNote() {
     const [codeEntered, setCodeEntered] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isVaulted, setIsVaulted] = useState(false);
+    // remember-opt-in
+    const [rememberCode, setRememberCode] = useState(false);
+    // per-user namespacing (safer if multiple accounts use same browser)
+    const [storageKey, setStorageKey] = useState("pv_vault_code:anon");
+
+    // 15-minute TTL in ms
+    const FIFTEEN_MIN = 15 * 60 * 1000;
+
+    // --- expiring storage helpers ---
+    const setExpiringItem = (key, value, ttlMs) => {
+        const payload = { v: value, e: Date.now() + ttlMs };
+    localStorage.setItem(key, JSON.stringify(payload));
+    };
+    const getExpiringItem = (key) => {
+        try {
+            const raw = localStorage.getItem(key);
+            if (!raw) return null;
+            const { v, e } = JSON.parse(raw);
+            if (Date.now() > e) {
+            localStorage.removeItem(key);
+            return null;
+            }
+            return v;
+        } catch {
+            return null;
+        }
+    };
+    const removeExpiringItem = (key) => localStorage.removeItem(key);
+
+    // --- end expiring storage helpers ---
+    useEffect(() => {
+        (async () => {
+            const { data: { user } = {} } = await supabase.auth.getUser();
+            if (user?.id) setStorageKey(`pv_vault_code:${user.id}:note:${id}`);
+        })();
+    }, []);
+
+    // Auto-fill vault code if previously remembered
+    useEffect(() => {
+        (async () => {
+            if (!noteData?.is_vaulted) return;
+            const remembered = getExpiringItem(storageKey);
+            if (!remembered || codeEntered) return;
+
+            // auto-fill + auto-decrypt only if the user previously opted in
+            setVaultCode(remembered);
+            await handleDecrypt(remembered); // pass code directly (see next change)
+        })();
+    }, [noteData, storageKey]); // eslint-disable-line
 
     // Fetch note data on mount
     useEffect(() => {
@@ -51,57 +100,66 @@ export default function WorkspaceViewNote() {
     }, [id, activeWorkspaceId]);
 
     // Handle decryption when vault code is entered
-    const handleDecrypt = async () => {
+    const handleDecrypt = async (explicitCode) => {
         if (loading) return; // Prevent multiple clicks
         setLoading(true);
         setErrorMsg("");
 
         try {
             const { data: { user }, error: userError } = await supabase.auth.getUser();
-
             if (userError || !user) {
                 setErrorMsg("User not found. Please log in again.");
                 setLoading(false);
                 return;
             }
 
-            if (!vaultCode.trim()) {
+            // accept code from input or from auto-fill (explicitCode)
+            const candidate = (explicitCode ?? vaultCode);
+            const code = String(candidate || "").trim();
+            if (!code) {
                 setErrorMsg("Vault Code is required.");
                 setLoading(false);
                 return;
             }
 
-            const { data: vaultCodeRow, error: codeError } = await supabase
-                .from("vault_codes")
-                .select("private_code_hash")
-                .eq("id", user.id)
-                .single();
-
-            if (codeError || !vaultCodeRow?.private_code_hash) {
-                setErrorMsg("Vault code not set. Please try again later.");
+            // ✅ verify via RPC (safer than selecting the vault_codes table)
+            const { data: ok, error: verifyError } = await supabase.rpc(
+                "verify_user_private_code",
+                { p_code: code }
+            );
+            if (verifyError) {
+                setErrorMsg(verifyError.message || "Failed to verify Vault Code.");
                 setLoading(false);
                 return;
             }
-
-            const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code_hash);
-            if (!isMatch) {
+            if (!ok) {
                 setErrorMsg("Incorrect Vault Code.");
                 setLoading(false);
                 return;
             }
 
+            // nothing to decrypt?
             if (!noteData?.encrypted_note || !noteData?.note_iv) {
                 setErrorMsg("Nothing to decrypt for this note.");
                 setLoading(false);
                 return;
             }
 
-            sessionStorage.setItem("vaultCode", vaultCode);
+            // 🔒 remember-for-15-min logic (per your storageKey + checkbox)
+            if (rememberCode) {
+                setExpiringItem(storageKey, code, FIFTEEN_MIN);
+            } else {
+                removeExpiringItem(storageKey);
+            }
 
+            // also keep a session copy for this tab
+            sessionStorage.setItem("vaultCode", code);
+
+            // decrypt
             const decrypted = await decryptText(
                 noteData.encrypted_note,
                 noteData.note_iv,
-                vaultCode
+                code
             );
 
             setDecryptedNote(decrypted);
@@ -188,27 +246,33 @@ export default function WorkspaceViewNote() {
                 <div>
                 {noteData?.is_vaulted && !codeEntered ? (
                     <>
-                        <label className="block text-sm mt-6 font-medium mb-1 text-gray-900">
-                            Enter Private Vault Code to Decrypt Note:
+                        <label className="block text-sm font-medium mb-1 mt-6 text-gray-600">
+                        Enter Private Vault Code to Decrypt Note:
                         </label>
-                        <input
-                            type="password"
-                            value={vaultCode}
-                            onChange={(e) => {
-                                const newCode = e.target.value;
-                                setVaultCode(newCode);
-                                sessionStorage.setItem("vaultCode", newCode); // persist vault code immediately
-                            }}
-                            className="w-full p-2 border rounded mb-3 text-gray-600 text-sm"
-                            placeholder="Vault Code"
-                        />
-                        <button
-                            onClick={handleDecrypt}
-                            disabled={loading}
-                            className="btn-secondary"
-                        >
-                            {loading ? "Decrypting..." : "Decrypt"}
-                        </button>
+                        {/* Vault code input */}
+                        <div className="mt-2 flex items-center gap-3">
+                            <input
+                                type="password"
+                                value={vaultCode}
+                                onChange={(e) => setVaultCode(e.target.value)}
+                                className="w-full p-2 border rounded text-sm text-gray-700"
+                                placeholder="Vault Code"
+                                autoComplete="current-password"
+                            />
+                            {/* Remember option for 15 minutes */}
+                            <label className="flex items-center gap-2 text-xs text-gray-600">
+                                <input
+                                type="checkbox"
+                                checked={rememberCode}
+                                onChange={(e) => setRememberCode(e.target.checked)}
+                                />
+                                Remember code for 15 min
+                            </label>
+                            <button onClick={() => handleDecrypt()} disabled={loading} className="btn-secondary text-sm">
+                                {loading ? "Decrypting..." : "Decrypt"}
+                            </button>
+                        </div>
+
                         {errorMsg && <p className="text-sm text-red-500 mt-2">{errorMsg}</p>}
                     </>
                 ) : (
