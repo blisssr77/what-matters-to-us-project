@@ -68,7 +68,7 @@ export default function WorkspaceViewNote() {
 
             // auto-fill + auto-decrypt only if the user previously opted in
             setVaultCode(remembered);
-            await handleDecrypt(remembered); // pass code directly (see next change)
+            await handleDecrypt(remembered, true); // pass code directly (see next change)
         })();
     }, [noteData, storageKey]); // eslint-disable-line
 
@@ -100,73 +100,31 @@ export default function WorkspaceViewNote() {
     }, [id, activeWorkspaceId]);
 
     // Handle decryption when vault code is entered
-    const handleDecrypt = async (explicitCode) => {
-        if (loading) return; // Prevent multiple clicks
-        setLoading(true);
-        setErrorMsg("");
+    const handleDecrypt = async (maybeCode) => {
+        const code = String(maybeCode ?? vaultCode ?? "").trim();
+        if (!noteData?.is_vaulted) { setDecryptedNote(""); setCodeEntered(true); return; }
+        if (!code) { setErrorMsg("Please enter your Vault Code."); return; }
+
+        setLoading(true); setErrorMsg("");
+
+        const { data: ok, error: vErr } = await supabase.rpc("verify_user_private_code", { p_code: code });
+        if (vErr) { setErrorMsg(vErr.message || "Failed to verify Vault Code."); setLoading(false); return; }
+        if (!ok)  { setErrorMsg("Incorrect Vault Code."); setLoading(false); return; }
+
+        if (!noteData.note_iv || !noteData.encrypted_note) {
+            setErrorMsg("This note has no encrypted content to decrypt.");
+            setCodeEntered(true); setLoading(false); return;
+        }
 
         try {
-            const { data: { user }, error: userError } = await supabase.auth.getUser();
-            if (userError || !user) {
-                setErrorMsg("User not found. Please log in again.");
-                setLoading(false);
-                return;
-            }
-
-            // accept code from input or from auto-fill (explicitCode)
-            const candidate = (explicitCode ?? vaultCode);
-            const code = String(candidate || "").trim();
-            if (!code) {
-                setErrorMsg("Vault Code is required.");
-                setLoading(false);
-                return;
-            }
-
-            // ✅ verify via RPC (safer than selecting the vault_codes table)
-            const { data: ok, error: verifyError } = await supabase.rpc(
-                "verify_user_private_code",
-                { p_code: code }
-            );
-            if (verifyError) {
-                setErrorMsg(verifyError.message || "Failed to verify Vault Code.");
-                setLoading(false);
-                return;
-            }
-            if (!ok) {
-                setErrorMsg("Incorrect Vault Code.");
-                setLoading(false);
-                return;
-            }
-
-            // nothing to decrypt?
-            if (!noteData?.encrypted_note || !noteData?.note_iv) {
-                setErrorMsg("Nothing to decrypt for this note.");
-                setLoading(false);
-                return;
-            }
-
-            // 🔒 remember-for-15-min logic (per your storageKey + checkbox)
-            if (rememberCode) {
-                setExpiringItem(storageKey, code, FIFTEEN_MIN);
-            } else {
-                removeExpiringItem(storageKey);
-            }
-
-            // also keep a session copy for this tab
-            sessionStorage.setItem("vaultCode", code);
-
-            // decrypt
-            const decrypted = await decryptText(
-                noteData.encrypted_note,
-                noteData.note_iv,
-                code
-            );
-
-            setDecryptedNote(decrypted);
+            const dec = await decryptText(noteData.encrypted_note, noteData.note_iv, code);
+            setDecryptedNote(dec || "");
             setCodeEntered(true);
-        } catch (err) {
-            console.error("Decryption failed:", err);
-            setErrorMsg("Unexpected error during decryption.");
+            if (rememberCode) setExpiringItem(storageKey, code, FIFTEEN_MIN);
+            else removeExpiringItem(storageKey);
+        } catch (e) {
+            console.error("Decryption failed:", e);
+            setErrorMsg("Decryption failed. Please confirm your code and try again.");
         } finally {
             setLoading(false);
         }

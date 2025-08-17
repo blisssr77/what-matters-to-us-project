@@ -1,5 +1,5 @@
 import React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
 import { decryptFile, decryptText } from "../../../lib/encryption";
@@ -26,28 +26,31 @@ const mimeToExtension = {
 export default function WorkspaceViewDoc() {
   const navigate = useNavigate();
   const { id } = useParams();
-  // Get active workspace ID from store
   const { activeWorkspaceId } = useWorkspaceStore();
 
   const [vaultCode, setVaultCode] = useState("");
   const [entered, setEntered] = useState(false);
   const [doc, setDoc] = useState(null);
+
   const [decryptedFiles, setDecryptedFiles] = useState([]);
   const [decryptedFileType, setDecryptedFileType] = useState("");
   const [decryptedBlob, setDecryptedBlob] = useState(null);
   const [decryptedNote, setDecryptedNote] = useState(null);
+
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
+
   // remember-opt-in
   const [codeEntered, setCodeEntered] = useState(false);
   const [rememberCode, setRememberCode] = useState(false);
   // per-user namespacing (safer if multiple accounts use same browser)
-  const [storageKey, setStorageKey] = useState("pv_vault_code:anon");
+  const [storageKey, setStorageKey] = useState("ws_vault_code:anon");
 
   // 15-minute TTL in ms
   const FIFTEEN_MIN = 15 * 60 * 1000;
+  const autoFillTriedRef = useRef(false);
 
   // per-item cached code helpers
   const setExpiringItem = (key, value, ttlMs) => {
@@ -71,115 +74,127 @@ export default function WorkspaceViewDoc() {
   };
   const removeExpiringItem = (key) => localStorage.removeItem(key);
 
-  // --- end expiring storage helpers ---
+  // reset auto-fill attempt and UI flags when switching docs
+  useEffect(() => {
+    autoFillTriedRef.current = false;
+    setCodeEntered(false);
+  }, [id]);
+
+  // set per-user storage key
   useEffect(() => {
     (async () => {
       const { data: { user } = {} } = await supabase.auth.getUser();
       const userId = user?.id ?? "anon";
-      setStorageKey(`pv_vault_code:${userId}:doc:${id}`);
+      setStorageKey(`ws_vault_code:${userId}:doc:${id}`);
     })();
   }, [id]);
 
-  // Auto-fill vault code if previously remembered
+  // Auto-fill vault code if previously remembered (once per doc id)
   useEffect(() => {
-      (async () => {
-        if (!doc?.is_vaulted) return;
+    (async () => {
+      if (!doc?.is_vaulted) return;
+      if (autoFillTriedRef.current) return;
 
-        const { data: { user } = {} } = await supabase.auth.getUser();
-        const userId = user?.id ?? "anon";
-        const userKey = `pv_vault_code:${userId}:doc:${id}`;
-        const anonKey = `pv_vault_code:anon:doc:${id}`;
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      const userId = user?.id ?? "anon";
+      const userKey = `ws_vault_code:${userId}:doc:${id}`;
+      const anonKey = `ws_vault_code:anon:doc:${id}`;
 
-        let remembered = getExpiringItem(userKey) || getExpiringItem(anonKey);
-        if (!remembered || codeEntered) return;
+      const remembered = getExpiringItem(userKey) || getExpiringItem(anonKey);
+      if (!remembered) return;
 
-        // optional: migrate anon → user key
-        if (!getExpiringItem(userKey)) setExpiringItem(userKey, remembered, FIFTEEN_MIN);
+      // migrate anon → user key (refresh TTL)
+      if (!getExpiringItem(userKey)) setExpiringItem(userKey, remembered, FIFTEEN_MIN);
 
-        setVaultCode(remembered);
-        await handleDecrypt(remembered);
+      autoFillTriedRef.current = true;
+      setVaultCode(remembered);
+      await handleDecrypt(remembered, true);
     })();
   }, [doc, storageKey]); // eslint-disable-line
-  
-  // Fetch document data on mount
+
+  // Fetch the document
   useEffect(() => {
-    const fetchDoc = async () => {
+    (async () => {
       if (!id || !activeWorkspaceId) return;
 
       const { data, error } = await supabase
         .from("workspace_vault_items")
         .select("*")
         .eq("id", id)
-        .eq("workspace_id", activeWorkspaceId) 
+        .eq("workspace_id", activeWorkspaceId)
         .single();
 
       if (error) {
         setErrorMsg("Failed to load document.");
-        console.error("Failed to fetch doc:", error);
+        console.error("❌ Failed to fetch doc:", error);
       } else {
         setDoc(data);
+        // If not vaulted, display immediately
+        if (data && !data.is_vaulted) {
+          const files = (data.file_metas || []).map((fm) => ({
+            url: fm.url,
+            type: fm.type,
+            name: fm.name,
+          }));
+          setDecryptedFiles(files);
+          setEntered(true);
+        }
       }
-    };
-    fetchDoc();
+    })();
   }, [id, activeWorkspaceId]);
 
-  // Handle vault code entry and decryption — supports optional explicitCode (from auto-fill)
-  const handleDecrypt = async (explicitCode) => {
+  // Decrypt (vaulted) — supports optional explicitCode (auto-fill) and 15-min remember
+  const handleDecrypt = async (explicitCode, isFromRememberedStorage = false) => {
     if (!doc) return;
-    if (!doc.is_vaulted) {            // non-vaulted: nothing to decrypt
-      setEntered(true);
-      return;
-    }
+    if (!doc.is_vaulted) { setEntered(true); return; }
 
-    const candidate = (explicitCode ?? vaultCode);
+    const candidate = explicitCode ?? vaultCode;
     const code = String(candidate || "").trim();
-    if (!code) {
-      setErrorMsg("Please enter your Vault Code.");
-      return;
-    }
+    if (!code) { setErrorMsg("Please enter your Vault Code."); return; }
 
     setLoading(true);
     setErrorMsg("");
-
     try {
-      // 1) Verify via RPC (safer than selecting vault_codes)
-      const { data: ok, error: verifyError } = await supabase.rpc(
-        "verify_user_private_code",
-        { p_code: code }
-      );
-      if (verifyError) {
-        setErrorMsg(verifyError.message || "Failed to verify Vault Code.");
-        return;
-      }
-      if (!ok) {
-        setErrorMsg("Incorrect Vault Code.");
-        return;
+      const { data: ok, error: verifyErr } = await supabase.rpc("verify_user_private_code", { p_code: code });
+      if (verifyErr) { setErrorMsg(verifyErr.message || "Failed to verify Vault Code."); return; }
+      if (!ok) { setErrorMsg("Incorrect Vault Code."); return; }
+
+      // Remember logic (per-doc key)
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      const userId = user?.id ?? "anon";
+      const effectiveKey = `ws_vault_code:${userId}:doc:${id}`;
+
+      const alreadyRemembered = !!getExpiringItem(effectiveKey);
+
+      // If auto-fill triggered, always refresh TTL; otherwise honor checkbox
+      if (isFromRememberedStorage) {
+        // came from auto-fill → just refresh the TTL
+        setExpiringItem(effectiveKey, code, FIFTEEN_MIN);
+      } else if (rememberCode) {
+        // user explicitly opted in → save/refresh
+        setExpiringItem(effectiveKey, code, FIFTEEN_MIN);
+      } else if (alreadyRemembered) {
+        // user didn’t opt-in now, but we already had one → KEEP it alive
+        setExpiringItem(effectiveKey, code, FIFTEEN_MIN);
+      } else {
+        removeExpiringItem(effectiveKey);
       }
 
-      // 2) Remember per-doc for 15 minutes (or clear)
-      if (rememberCode) {
-        setExpiringItem(storageKey, code, FIFTEEN_MIN);
-      } else {
-        removeExpiringItem(storageKey);
-      }
       // Keep session copy for this tab
       sessionStorage.setItem("vaultCode", code);
 
-      // 3) Decrypt private note (if present)
+      // Decrypt private note (if present)
       if (doc.encrypted_note && doc.note_iv) {
         try {
           const note = await decryptText(doc.encrypted_note, doc.note_iv, code);
           setDecryptedNote(note);
         } catch (err) {
-          console.error("Note decryption failed:", err);
+          console.error("❌ Note decryption failed:", err);
           setErrorMsg("Decryption failed for the private note.");
         }
-      } else {
-        // If there’s nothing to decrypt, surface it but don’t block files
-        // setErrorMsg("Nothing to decrypt for this document.");
       }
 
-      // 4) Decrypt each file (vaulted bucket)
+      // Decrypt each file (vaulted bucket)
       const files = [];
       if (Array.isArray(doc.file_metas) && doc.file_metas.length) {
         for (const fileMeta of doc.file_metas) {
@@ -204,14 +219,20 @@ export default function WorkspaceViewDoc() {
             const blobUrl = URL.createObjectURL(blob);
 
             files.push({ url: blobUrl, type: blob.type, name });
+
+            if (!decryptedBlob) {
+              setDecryptedBlob(blob);
+              setDecryptedFileType(blob.type);
+            }
           } catch (err) {
-            console.error(`Failed to decrypt file "${name}":`, err);
+            console.error(`❌ Failed to decrypt file "${name}":`, err);
           }
         }
         setDecryptedFiles(files);
       }
 
       setEntered(true);
+      setCodeEntered(true);
     } finally {
       setLoading(false);
     }

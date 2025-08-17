@@ -104,15 +104,15 @@ export default function AuthPage() {
       }
 
       // 3. Check if the user is already a member of any workspace
-      const { data: memberships, error: memberFetchError } = await supabase
-        .from("workspace_members")
-        .select("id")
-        .eq("user_id", userId)
-        .limit(1);
+      // const { data: memberships, error: memberFetchError } = await supabase
+      //   .from("workspace_members")
+      //   .select("id")
+      //   .eq("user_id", userId)
+      //   .limit(1);
 
-      if (memberFetchError) {
-        console.error("❌ Error checking membership:", memberFetchError);
-      }
+      // if (memberFetchError) {
+      //   console.error("❌ Error checking membership:", memberFetchError);
+      // }
 
       // 4. Insert membership only if none exist
       // if (!memberships || memberships.length === 0) {

@@ -298,7 +298,7 @@ export default function WorkspaceEditNote() {
                         setEditedTitle(e.target.value);
                         setHasUnsavedChanges(true);
                     }}
-                    className="w-full p-2 border rounded mb-3 text-gray-800 font-bold text-sm bg-gray-50"
+                    className="w-full p-2 border rounded mb-3 text-gray-800 text-sm bg-gray-50"
                     placeholder="Title"
                 />
                 {/* Public Notes */}

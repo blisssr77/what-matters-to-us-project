@@ -106,7 +106,7 @@ export default function PrivateViewNote() {
             setDecryptedNote(dec || "");
             setCodeEntered(true);
             if (rememberCode) setExpiringItem(storageKey, code, FIFTEEN_MIN);
-            else removeItem(storageKey);
+            else removeExpiringItem(storageKey);
         } catch (e) {
             console.error("Decryption failed:", e);
             setErrorMsg("Decryption failed. Please confirm your code and try again.");
