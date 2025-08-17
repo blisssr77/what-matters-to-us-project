@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
 import { decryptText } from "../../../lib/encryption";
@@ -21,6 +21,7 @@ export default function PrivateViewNote() {
     const [rememberCode, setRememberCode] = useState(false);
     // per-user namespacing (safer if multiple accounts use same browser)
     const [storageKey, setStorageKey] = useState("pv_vault_code:anon");
+    const autoFillTriedRef = useRef(false);
   
     // 15-minute TTL in ms
     const FIFTEEN_MIN = 15 * 60 * 1000;
@@ -50,20 +51,23 @@ export default function PrivateViewNote() {
     useEffect(() => {
         (async () => {
             const { data: { user } = {} } = await supabase.auth.getUser();
-            if (user?.id) setStorageKey(`pv_vault_code:${user.id}:note:${id}`);
+            const userId = user?.id ?? "anon";
+            setStorageKey(`pv_vault_code:${userId}:note:${id}`);
         })();
-    }, []);
+    }, [id]);
 
     // Auto-fill vault code if previously remembered
     useEffect(() => {
         (async () => {
             if (!noteData?.is_vaulted) return;
+            if (autoFillTriedRef.current) return; // only once per mount
             const remembered = getExpiringItem(storageKey);
             if (!remembered || codeEntered) return;
 
             // auto-fill + auto-decrypt only if the user previously opted in
             setVaultCode(remembered);
-            await handleDecrypt(remembered); // pass code directly (see next change)
+            autoFillTriedRef.current = true;
+            await handleDecrypt(remembered, true); // true = from remembered storage
         })();
     }, [noteData, storageKey]); // eslint-disable-line
 
@@ -85,7 +89,7 @@ export default function PrivateViewNote() {
     }, [id]);
 
     // Handle decryption
-    const handleDecrypt = async (maybeCode) => {
+    const handleDecrypt = async (maybeCode, isFromRememberedStorage = false) => {
         const code = String(maybeCode ?? vaultCode ?? "").trim();
         if (!noteData?.is_vaulted) { setDecryptedNote(""); setCodeEntered(true); return; }
         if (!code) { setErrorMsg("Please enter your Vault Code."); return; }
@@ -105,8 +109,20 @@ export default function PrivateViewNote() {
             const dec = await decryptText(noteData.encrypted_note, noteData.note_iv, code);
             setDecryptedNote(dec || "");
             setCodeEntered(true);
-            if (rememberCode) setExpiringItem(storageKey, code, FIFTEEN_MIN);
-            else removeExpiringItem(storageKey);
+            // refresh/save TTL without accidentally deleting an existing memory
+            const alreadyRemembered = !!getExpiringItem(storageKey);
+            if (isFromRememberedStorage) {
+                // came from storage → refresh TTL
+                setExpiringItem(storageKey, code, FIFTEEN_MIN);
+            } else if (rememberCode) {
+                // user opted in → save/refresh
+                setExpiringItem(storageKey, code, FIFTEEN_MIN);
+            } else if (alreadyRemembered) {
+                // keep existing memory alive even if box is unchecked
+                setExpiringItem(storageKey, code, FIFTEEN_MIN);
+            }
+            // if you want a real “Forget” action, add a dedicated button that calls removeExpiringItem(storageKey)
+            sessionStorage.setItem("vaultCode", code);
         } catch (e) {
             console.error("Decryption failed:", e);
             setErrorMsg("Decryption failed. Please confirm your code and try again.");
