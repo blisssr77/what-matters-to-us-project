@@ -9,6 +9,8 @@ import PasswordChecklist from "./PasswordCheckList";
 import PasswordField from "./PasswordField";
 import VaultCodeField from "./VaultCodeField";
 import VaultCodeChecklist, { buildCodeRules } from "./VaultCodeChecklist";
+import { rotateWorkspaceCodeClient } from "@/utils/rotateWorkspaceCodeClient";
+
 
 export default function ManageAccount() {
     /* ────────────────── Profile / Basic Info state ────────────────── */
@@ -217,6 +219,34 @@ export default function ManageAccount() {
         return !!ok;
     };
 
+    // Clear remembered vault codes
+    const clearRememberedCodes = async () => {
+            const { data: { user } = {} } = await supabase.auth.getUser();
+            const userId = user?.id ?? "anon";
+            const prefixes = [`ws_vault_code:${userId}:`, `pv_vault_code:${userId}:`];
+            for (const k of Object.keys(localStorage)) {
+                if (prefixes.some((p) => k.startsWith(p))) localStorage.removeItem(k);
+            }
+            sessionStorage.removeItem("vaultCode");
+    };
+
+    /** Helper: list workspace ids the current user is a member of */
+    async function getUserWorkspaceIds() {
+        const { data: { user } = {} } = await supabase.auth.getUser();
+        if (!user) return [];
+
+        const { data, error } = await supabase
+            .from("workspace_members")
+            .select("workspace_id")
+            .eq("user_id", user.id);
+
+        if (error) {
+            console.error("Failed to fetch user workspaces:", error);
+            return [];
+        }
+        return (data || []).map(r => r.workspace_id);
+    }
+
     /* ────────────────── Save Vault Code handlers (wire to Supabase) ────────────────── */
     /* ────────────── CREATE WORKSPACE CODE ────────────── */
     const createWorkspaceCode = async () => {
@@ -228,9 +258,9 @@ export default function ManageAccount() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return { ok: false, msg: "User not signed-in" };
 
-        const { error } = await supabase.rpc("set_user_vault_code", {
-            p_code: workspaceCode.trim(),
-        });
+        // Set brand new per-user workspace code hash
+        const newCode = workspaceCode.trim();
+        const { error } = await supabase.rpc("set_user_vault_code", { p_code: newCode });
         if (error) return { ok: false, msg: error.message || "Failed to save code" };
 
         setWorkspaceCode(""); 
@@ -241,29 +271,48 @@ export default function ManageAccount() {
 
 
     /* ────────────── CHANGE WORKSPACE CODE ────────────── */
+    /*   Verify old → rotate all workspaces → set new hash */
     const changeWorkspaceCode = async () => {
         if (!workspaceCurrent || !workspaceCode || !workspaceConfirm)
             return { ok: false, msg: "All fields are required" };
         if (workspaceCode !== workspaceConfirm)
             return { ok: false, msg: "New codes do not match" };
 
-        // 1) verify current
+        const oldCode = workspaceCurrent.trim();
+        const newCode = workspaceCode.trim();
+
+        // 1) verify current per-user code
         const { data: ok, error: vErr } = await supabase.rpc("verify_user_vault_code", {
-            p_code: workspaceCurrent.trim(),
+            p_code: oldCode,
         });
         if (vErr) return { ok: false, msg: vErr.message || "Verify failed" };
         if (!ok)  return { ok: false, msg: "Current code is incorrect." };
 
-        // 2) set new
-        const { error } = await supabase.rpc("set_user_vault_code", {
-            p_code: workspaceCode.trim(),
-        });
+        // 2) rotate all vaulted content in ALL workspaces the user is in
+        try {
+            const workspaceIds = await getUserWorkspaceIds(); // or [activeWorkspaceId] if you prefer
+            for (const wid of workspaceIds) {
+            // progress callback is optional
+            await rotateWorkspaceCodeClient(wid, oldCode, newCode, (i, total) => {
+                // e.g. show progress to user
+                // console.log(`Workspace ${wid}: rotated ${i}/${total}`);
+            });
+            }
+        } catch (e) {
+            console.error("Rotation failed:", e);
+            // Surface to UI. Nothing is corrupted; items already rotated are safe.
+            return { ok: false, msg: e.message || "Rotation failed. Please retry." };
+        }
+
+        // 3) once rotation is complete, set the new hash
+        const { error } = await supabase.rpc("set_user_vault_code", { p_code: newCode });
         if (error) return { ok: false, msg: error.message || "Update failed" };
 
-        setWorkspaceCurrent(""); 
-        setWorkspaceCode(""); 
+        // cleanup UI state
+        setWorkspaceCurrent("");
+        setWorkspaceCode("");
         setWorkspaceConfirm("");
-        return { ok: true, msg: "Workspace code updated successfully ✅" };
+        return { ok: true, msg: "Workspace code updated & content rotated ✅" };
     };
 
 

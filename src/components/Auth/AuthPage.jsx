@@ -68,40 +68,40 @@ export default function AuthPage() {
         return;
       }
 
-      // === Workspace creation happens only if none exist ===
+      // ================================= Workspace creation happens only if none exist =================================
 
       // 1. Check if user already has any workspaces
-      const { data: workspaces, error: workspaceFetchError } = await supabase
-        .from("workspaces")
-        .select("*")
-        .eq("created_by", userId)
-        .limit(1); // Only check for existence
+      // const { data: workspaces, error: workspaceFetchError } = await supabase
+      //   .from("workspaces")
+      //   .select("*")
+      //   .eq("created_by", userId)
+      //   .limit(1); // Only check for existence
 
-      if (workspaceFetchError) {
-        console.error("❌ Error fetching workspaces:", workspaceFetchError);
-        setError("Failed to fetch workspace.");
-        return;
-      }
+      // if (workspaceFetchError) {
+      //   console.error("❌ Error fetching workspaces:", workspaceFetchError);
+      //   setError("Failed to fetch workspace.");
+      //   return;
+      // }
 
-      let workspaceData;
+      // let workspaceData;
 
       // 2. If none found, create a new one
-      if (!workspaces || workspaces.length === 0) {
-        const { data: workspaceArr, error: workspaceError } = await supabase
-          .from("workspaces")
-          .insert({ name: "My First Workspace", created_by: userId, role: "owner" })
-          .select();
+      // if (!workspaces || workspaces.length === 0) {
+      //   const { data: workspaceArr, error: workspaceError } = await supabase
+      //     .from("workspaces")
+      //     .insert({ name: "My First Workspace", created_by: userId, role: "owner" })
+      //     .select();
 
-        if (workspaceError || !workspaceArr?.[0]) {
-          console.error("❌ Workspace creation failed:", workspaceError);
-          setError("Failed to create workspace.");
-          return;
-        }
+      //   if (workspaceError || !workspaceArr?.[0]) {
+      //     console.error("❌ Workspace creation failed:", workspaceError);
+      //     setError("Failed to create workspace.");
+      //     return;
+      //   }
 
-        workspaceData = workspaceArr[0];
-      } else {
-        workspaceData = workspaces[0];
-      }
+      //   workspaceData = workspaceArr[0];
+      // } else {
+      //   workspaceData = workspaces[0];
+      // }
 
       // 3. Check if the user is already a member of any workspace
       // const { data: memberships, error: memberFetchError } = await supabase

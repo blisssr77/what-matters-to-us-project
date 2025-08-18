@@ -155,7 +155,7 @@ export default function WorkspaceViewDoc() {
     setLoading(true);
     setErrorMsg("");
     try {
-      const { data: ok, error: verifyErr } = await supabase.rpc("verify_user_private_code", { p_code: code });
+      const { data: ok, error: verifyErr } = await supabase.rpc("verify_workspace_code", { p_workspace: activeWorkspaceId, p_code: code });
       if (verifyErr) { setErrorMsg(verifyErr.message || "Failed to verify Vault Code."); return; }
       if (!ok) { setErrorMsg("Incorrect Vault Code."); return; }
 

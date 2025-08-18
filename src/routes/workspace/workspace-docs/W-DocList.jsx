@@ -273,14 +273,14 @@ export default function WorkspaceVaultList() {
   };
 
   // Verify workspace vault code
-  const verifyWorkspaceVaultCode = async (code) => {
+  const verifyWorkspaceCode = async (code) => {
     if (!activeWorkspaceId) return false;
-    const { data, error } = await supabase.rpc("verify_workspace_vault_code", {
+    const { data, error } = await supabase.rpc("verify_workspace_code", {
       p_workspace_id: activeWorkspaceId,
       p_code: code,
     });
     if (error) {
-      console.error("verify_workspace_vault_code error:", error);
+      console.error("verify_workspace_code error:", error);
       return false;
     }
     return !!data; // true if valid
@@ -543,7 +543,7 @@ export default function WorkspaceVaultList() {
         setMembers={setMembers}
         handleRoleChange={handleRoleChange}
         onDelete={handleConfirmDelete}
-        onVerifyVaultCode={verifyWorkspaceVaultCode}
+        onVerifyVaultCode={verifyWorkspaceCode}
       />
       {/* Create Workspace Modal */}
       <CreateWorkspaceModal

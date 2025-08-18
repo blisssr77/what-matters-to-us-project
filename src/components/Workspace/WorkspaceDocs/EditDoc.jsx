@@ -191,32 +191,33 @@ export default function WorkspaceEditDoc() {
             setErrorMsg("User not authenticated.");
             return;
         }
+        // Check if workspace is vaulted (Model A: per-user workspace code)
         if (isVaulted) {
-            if (!vaultCode) {
+            const code = String(vaultCode || sessionStorage.getItem("vaultCode") || "").trim();
+            if (!code) {
                 setUploading(false);
                 setErrorMsg("Please enter your Vault Code to encrypt the document.");
                 return;
             }
 
-            // Validate vault code
-            const { data: vaultRow, error: vaultError } = await supabase
-                .from("vault_codes")
-                .select("private_code_hash")
-                .eq("id", user.id)
-                .single();
+            const { data: ok, error } = await supabase.rpc("verify_workspace_code", {
+                p_workspace: activeWorkspaceId,
+                p_code: code,
+            });
 
-            if (vaultError || !vaultRow?.private_code_hash) {
+            if (error) {
                 setUploading(false);
-                setErrorMsg("Vault code not found or not set.");
+                setErrorMsg(error.message || "Verification failed.");
                 return;
             }
-
-            const isMatch = await bcrypt.compare(vaultCode, vaultRow.private_code_hash);
-            if (!isMatch) {
+            if (!ok) {
                 setUploading(false);
                 setErrorMsg("Incorrect Vault Code.");
                 return;
             }
+
+            // Optionally keep it for this tab:
+            sessionStorage.setItem("vaultCode", code);
         }
 
         // Delete marked files from Supabase Storage

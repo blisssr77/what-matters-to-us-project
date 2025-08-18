@@ -10,141 +10,166 @@ import dayjs from "dayjs";
 import bcrypt from "bcryptjs";
 
 export default function WorkspaceViewNote() {
-    const { id } = useParams();
-    const navigate = useNavigate();
-    const { activeWorkspaceId } = useWorkspaceStore();
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { activeWorkspaceId } = useWorkspaceStore();
 
-    const [vaultCode, setVaultCode] = useState("");
-    const [noteData, setNoteData] = useState(null);
-    const [decryptedNote, setDecryptedNote] = useState("");
-    const [errorMsg, setErrorMsg] = useState("");
-    const [loading, setLoading] = useState(false);
-    const [codeEntered, setCodeEntered] = useState(false);
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [isVaulted, setIsVaulted] = useState(false);
-    // remember-opt-in
-    const [rememberCode, setRememberCode] = useState(false);
-    // per-user namespacing (safer if multiple accounts use same browser)
-    const [storageKey, setStorageKey] = useState("ws_vault_code:anon");
-    const autoFillTriedRef = useRef(false);
+  const [vaultCode, setVaultCode] = useState("");
+  const [noteData, setNoteData] = useState(null);
+  const [decryptedNote, setDecryptedNote] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isVaulted, setIsVaulted] = useState(false);
 
-    // 15-minute TTL in ms
-    const FIFTEEN_MIN = 15 * 60 * 1000;
+  // same flags as ViewDoc
+  const [codeEntered, setCodeEntered] = useState(false);
+  const [rememberCode, setRememberCode] = useState(false);
 
-    // --- expiring storage helpers ---
-    const setExpiringItem = (key, value, ttlMs) => {
-        const payload = { v: value, e: Date.now() + ttlMs };
+  // per-user, per-item storage key (note)
+  const [storageKey, setStorageKey] = useState("ws_vault_code:anon");
+  const FIFTEEN_MIN = 15 * 60 * 1000;
+
+  // expiring storage helpers — identical to ViewDoc
+  const setExpiringItem = (key, value, ttlMs) => {
+    const payload = { v: String(value), e: Date.now() + ttlMs };
     localStorage.setItem(key, JSON.stringify(payload));
-    };
-    const getExpiringItem = (key) => {
-        try {
-            const raw = localStorage.getItem(key);
-            if (!raw) return null;
-            const { v, e } = JSON.parse(raw);
-            if (Date.now() > e) {
-            localStorage.removeItem(key);
-            return null;
-            }
-            return v;
-        } catch {
-            return null;
+  };
+  const getExpiringItem = (key) => {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    try {
+      const { v, e } = JSON.parse(raw);
+      if (!e || Date.now() > e) {
+        localStorage.removeItem(key);
+        return null;
+      }
+      return v;
+    } catch {
+      localStorage.removeItem(key);
+      return null;
+    }
+  };
+  const removeExpiringItem = (key) => localStorage.removeItem(key);
+
+  // reset UI flags when switching notes (like ViewDoc does for docs)
+  useEffect(() => {
+    setCodeEntered(false);
+    setDecryptedNote("");
+    setErrorMsg("");
+    setVaultCode("");
+  }, [id]);
+
+  // set per-user storage key (NOTE not DOC)
+  useEffect(() => {
+    (async () => {
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      const userId = user?.id ?? "anon";
+      setStorageKey(`ws_vault_code:${userId}:note:${id}`);
+    })();
+  }, [id]);
+
+  // DO NOT prefill or auto-decrypt. Unlike ViewDoc, we skip the auto-fill effect entirely.
+
+  // Fetch the note
+  useEffect(() => {
+    (async () => {
+      if (!id || !activeWorkspaceId) return;
+
+      const { data, error } = await supabase
+        .from("workspace_vault_items")
+        .select("*")
+        .eq("id", id)
+        .eq("workspace_id", activeWorkspaceId)
+        .single();
+
+      if (error) {
+        console.error("❌ Failed to fetch note:", error);
+        setErrorMsg("Note not found or access denied.");
+      } else {
+        setNoteData(data);
+        if (data && !data.is_vaulted) {
+          // not vaulted → show immediately (like ViewDoc does for non-vaulted docs)
+          setDecryptedNote(data.notes || "");
+          setCodeEntered(true);
         }
-    };
-    const removeExpiringItem = (key) => localStorage.removeItem(key);
+      }
+    })();
+  }, [id, activeWorkspaceId]);
 
-    // --- end expiring storage helpers ---
-    useEffect(() => {
-        (async () => {
-            const { data: { user } = {} } = await supabase.auth.getUser();
-            const userId = user?.id ?? "anon";
-            setStorageKey(`ws_vault_code:${userId}:note:${id}`);
-        })();
-    }, [id]);
+  // Decrypt (same pattern as ViewDoc; optional explicit code param kept for parity)
+  const handleDecrypt = async (explicitCode, isFromRememberedStorage = false) => {
+    if (!noteData) return;
+    if (!noteData.is_vaulted) { setCodeEntered(true); return; }
 
-    // Auto-fill vault code if previously remembered
-    useEffect(() => {
-        (async () => {
-            if (!noteData?.is_vaulted) return;
-            if (autoFillTriedRef.current) return; // only once per mount
-            const remembered = getExpiringItem(storageKey);
-            if (!remembered || codeEntered) return;
+    const candidate = explicitCode ?? vaultCode;
+    const code = String(candidate || "").trim();
+    if (!code) { setErrorMsg("Please enter your Vault Code."); return; }
 
-            // auto-fill + auto-decrypt only if the user previously opted in
-            setVaultCode(remembered);
-            autoFillTriedRef.current = true;
-            await handleDecrypt(remembered, true); // true = from remembered storage
-        })();
-    }, [noteData, storageKey]); // eslint-disable-line
+    setLoading(true);
+    setErrorMsg("");
 
-    // Fetch note data on mount
-    useEffect(() => {
-        const fetchNote = async () => {
-            if (!id || !activeWorkspaceId) return;
+    try {
+      // 1) verify code against workspace code RPC (same as ViewDoc)
+      const { data: ok, error: verifyErr } = await supabase.rpc(
+        "verify_workspace_code",
+        { p_workspace: activeWorkspaceId, p_code: code }
+      );
+      if (verifyErr) {
+        setErrorMsg(verifyErr.message || "Failed to verify Vault Code.");
+        return;
+      }
+      if (!ok) {
+        setErrorMsg("Incorrect Vault Code.");
+        return;
+      }
 
-            const { data, error } = await supabase
-                .from("workspace_vault_items")
-                .select("*")
-                .eq("id", id)
-                .eq("workspace_id", activeWorkspaceId)
-                .single();
+      // 2) remember 15m logic (identical pattern)
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      const userId = user?.id ?? "anon";
+      const effectiveKey = `ws_vault_code:${userId}:note:${id}`;
+      const alreadyRemembered = !!getExpiringItem(effectiveKey);
 
-            if (error) {
-                console.error("Error fetching note:", error);
-                setErrorMsg("Note not found or access denied.");
-            } else {
-                setNoteData(data);
-                setIsVaulted(!!data.is_vaulted);
-                if (!data.is_vaulted) {
-                    setCodeEntered(true); // Auto-show content if not vaulted
-                }
-            }
-        };
+      if (isFromRememberedStorage) {
+        setExpiringItem(effectiveKey, code, FIFTEEN_MIN);
+      } else if (rememberCode) {
+        setExpiringItem(effectiveKey, code, FIFTEEN_MIN);
+      } else if (alreadyRemembered) {
+        setExpiringItem(effectiveKey, code, FIFTEEN_MIN);
+      } else {
+        removeExpiringItem(effectiveKey);
+      }
 
-        fetchNote();
-    }, [id, activeWorkspaceId]);
+      sessionStorage.setItem("vaultCode", code);
 
-    // Handle decryption when vault code is entered
-    const handleDecrypt = async (maybeCode, isFromRememberedStorage = false) => {
-        const code = String(maybeCode ?? vaultCode ?? "").trim();
-        if (!noteData?.is_vaulted) { setDecryptedNote(""); setCodeEntered(true); return; }
-        if (!code) { setErrorMsg("Please enter your Vault Code."); return; }
+      // 3) decrypt note text — single call, with defensive checks
+      const ivToUse = noteData?.note_iv || noteData?.iv;
+      if (!ivToUse || !noteData?.encrypted_note) {
+        console.debug("Nothing to decrypt. note_iv:", noteData?.note_iv, "iv:", noteData?.iv, "enc:", !!noteData?.encrypted_note);
+        setErrorMsg("This note has no encrypted content to decrypt.");
+        setCodeEntered(true);
+        return;
+      }
 
-        setLoading(true); setErrorMsg("");
+      try {
+        const plaintext = await decryptText(noteData.encrypted_note, ivToUse, code);
+        setDecryptedNote(plaintext || "");
+      } catch (decErr) {
+        // AES-GCM OperationError → wrong key/iv/ciphertext
+        console.error("❌ Note decryption failed:", decErr, {
+          ivLen: typeof ivToUse === "string" ? ivToUse.length : "n/a",
+          hasCipher: !!noteData.encrypted_note
+        });
+        setErrorMsg("Decryption failed for the private note.");
+        return;
+      }
 
-        const { data: ok, error: vErr } = await supabase.rpc("verify_user_private_code", { p_code: code });
-        if (vErr) { setErrorMsg(vErr.message || "Failed to verify Vault Code."); setLoading(false); return; }
-        if (!ok)  { setErrorMsg("Incorrect Vault Code."); setLoading(false); return; }
+      setCodeEntered(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        if (!noteData.note_iv || !noteData.encrypted_note) {
-            setErrorMsg("This note has no encrypted content to decrypt.");
-            setCodeEntered(true); setLoading(false); return;
-        }
-
-        try {
-            const dec = await decryptText(noteData.encrypted_note, noteData.note_iv, code);
-            setDecryptedNote(dec || "");
-            setCodeEntered(true);
-            // refresh/save TTL without accidentally deleting an existing memory
-        const alreadyRemembered = !!getExpiringItem(storageKey);
-        if (isFromRememberedStorage) {
-            // came from storage → refresh TTL
-            setExpiringItem(storageKey, code, FIFTEEN_MIN);
-        } else if (rememberCode) {
-            // user opted in → save/refresh
-            setExpiringItem(storageKey, code, FIFTEEN_MIN);
-        } else if (alreadyRemembered) {
-            // keep existing memory alive even if box is unchecked
-            setExpiringItem(storageKey, code, FIFTEEN_MIN);
-        }
-        // if you want a real “Forget” action, add a dedicated button that calls removeExpiringItem(storageKey)
-        sessionStorage.setItem("vaultCode", code);
-        } catch (e) {
-            console.error("Decryption failed:", e);
-            setErrorMsg("Decryption failed. Please confirm your code and try again.");
-        } finally {
-            setLoading(false);
-        }
-    };
 
     // Handle copy to clipboard
     const handleCopy = () => {

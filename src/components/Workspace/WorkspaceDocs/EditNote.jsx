@@ -91,146 +91,137 @@ export default function WorkspaceEditNote() {
     }, [id]);
 
     // Handle decryption
-    const handleDecrypt = async (code = vaultCode) => {
+    const handleDecrypt = async (codeParam = vaultCode) => {
         if (!noteData?.is_vaulted) {
             console.warn("Note is not vaulted. Skipping decryption.");
+            return;
+        }
+
+        const code = String(codeParam || "").trim();
+        if (!code) {
+            setErrorMsg("Please enter your Vault Code.");
             return;
         }
 
         setLoading(true);
         setErrorMsg("");
 
-        const {
-            data: { user },
-        } = await supabase.auth.getUser();
+        // 1) Verify against the per-user workspace code (and membership)
+        const { data: ok, error } = await supabase.rpc("verify_workspace_code", {
+            p_workspace: activeWorkspaceId,
+            p_code: code,
+        });
 
-        const { data: vaultCodeRow, error: codeError } = await supabase
-            .from("vault_codes")
-            .select("private_code_hash")
-            .eq("id", user.id)
-            .single();
-
-        if (codeError || !vaultCodeRow?.private_code_hash) {
-            setErrorMsg("Vault code not set.");
+        if (error) {
             setLoading(false);
+            setErrorMsg(error.message || "Verification failed.");
             return;
         }
-
-        const isMatch = await bcrypt.compare(code.trim(), vaultCodeRow.private_code_hash);
-        if (!isMatch) {
+        if (!ok) {
+            setLoading(false);
             setErrorMsg("Incorrect Vault Code.");
-            setLoading(false);
             return;
         }
 
+        // 2) Decrypt
         try {
             const ivToUse = noteData.note_iv || noteData.iv;
             const decrypted = await decryptText(noteData.encrypted_note, ivToUse, code);
-
             setEditedNote(decrypted);
             setEditedTitle(noteData.title || "");
+
+            // (optional) keep for this tab so user isn't prompted again
+            sessionStorage.setItem("vaultCode", code);
         } catch (err) {
             console.error("Decryption error:", err);
             setErrorMsg("Failed to decrypt note.");
+        } finally {
+            setLoading(false);
         }
-
-        setLoading(false);
     };
-
 
     // Handle saving the edited note
     const handleSave = async () => {
         setSaving(true);
         setErrorMsg("");
 
-        const {
-            data: { user },
-        } = await supabase.auth.getUser();
-
+        const { data: { user } = {} } = await supabase.auth.getUser();
         if (!user?.id) {
             setErrorMsg("User not authenticated.");
             setSaving(false);
             return;
         }
 
-        // Vaulted note requires Vault Code
+        // We’ll use the code the user typed OR a previously verified code in this tab
+        const sessionCode = sessionStorage.getItem("vaultCode") || "";
+        const code = String(vaultCode || sessionCode || "").trim();
+
+        // If you’re saving as vaulted, verify workspace code via RPC
         if (isVaulted) {
-            if (!vaultCode.trim()) {
-                setErrorMsg("Vault Code is required to save the note.");
-                setSaving(false);
-                return;
-            }
-
-            // Step 1: Fetch hashed vault code
-            const { data: vaultCodeRow, error: codeError } = await supabase
-                .from("vault_codes")
-                .select("private_code_hash")
-                .eq("id", user.id)
-                .single();
-
-            if (codeError || !vaultCodeRow?.private_code_hash) {
-                setErrorMsg("Vault Code not set or fetch failed.");
-                setSaving(false);
-                return;
-            }
-
-            // Step 2: Compare input vaultCode with hashed version
-            const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code_hash);
-            if (!isMatch) {
-                setErrorMsg("Incorrect Vault Code.");
-                setSaving(false);
-                return;
-            }
-        }
-
-        // Step 3: Encrypt if needed
-        let encryptedData = "";
-        let iv = "";
-
-        if (isVaulted) {
-            const encrypted = await encryptText(editedNote, vaultCode);
-            encryptedData = encrypted.encryptedData;
-            iv = encrypted.iv;
-        }
-
-        try {
-            const updatedTags = tags
-                .map((tag) => tag.trim())
-                .filter((tag) => tag.length > 0);
-
-            // Step 4: Save to DB
-            const { error: updateError } = await supabase
-                .from("workspace_vault_items")
-                .update({
-                    title: editedTitle,
-                    tags: updatedTags,
-                    notes, // public note
-                    encrypted_note: encryptedData, // only if vaulted
-                    note_iv: iv,                   // only if vaulted
-                    updated_at: new Date().toISOString(),
-                    is_vaulted: isVaulted,
-                })
-                .eq("id", id)
-                .eq("workspace_id", activeWorkspaceId);
-
-            if (updateError) {
-                console.error("Update error:", updateError);
-                if (isVaulted) {
-                    setErrorMsg("Failed to update note.");
-                }
-            } else {
-                setSuccessMsg("Note updated successfully!");
-                setTimeout(() => {
-                    navigate(`/workspace/vaults/`);
-                }, 1300);
-            }
-        } catch (err) {
-            console.error("Encryption error:", err);
-            setErrorMsg("Encryption failed.");
-        } finally {
+            if (!code) {
+            setErrorMsg("Vault Code is required to save the note.");
             setSaving(false);
-            setHasUnsavedChanges(false);
+            return;
+            }
+
+            const { data: ok, error } = await supabase.rpc("verify_workspace_code", {
+            p_workspace: activeWorkspaceId,
+            p_code: code,
+            });
+            if (error) {
+            setErrorMsg(error.message || "Verification failed.");
+            setSaving(false);
+            return;
+            }
+            if (!ok) {
+            setErrorMsg("Incorrect Vault Code.");
+            setSaving(false);
+            return;
+            }
+
+            // keep it for this tab so subsequent actions don’t prompt again
+            sessionStorage.setItem("vaultCode", code);
         }
+
+        // Prepare fields
+        const updatedTags = tags.map(t => t.trim()).filter(Boolean);
+
+        let encryptedData = null;
+        let iv = null;
+
+        if (isVaulted) {
+            const { encryptedData: enc, iv: ivHex } = await encryptText(editedNote || "", code);
+            encryptedData = enc;
+            iv = ivHex;
+        }
+
+        // If user turns OFF vaulting, clear encrypted fields
+        const payload = {
+            title: editedTitle,
+            tags: updatedTags,
+            notes,                         // public note
+            updated_at: new Date().toISOString(),
+            is_vaulted: isVaulted,
+            encrypted_note: isVaulted ? encryptedData : null,
+            note_iv: isVaulted ? iv : null,
+        };
+
+        const { error: updateError } = await supabase
+            .from("workspace_vault_items")
+            .update(payload)
+            .eq("id", id)
+            .eq("workspace_id", activeWorkspaceId);
+
+        if (updateError) {
+            console.error("Update error:", updateError);
+            setErrorMsg("Failed to update note.");
+        } else {
+            setSuccessMsg("Note updated successfully!");
+            setTimeout(() => navigate("/workspace/vaults/"), 1200);
+        }
+
+        setSaving(false);
+        setHasUnsavedChanges(false);
     };
 
     // Handle tag addition

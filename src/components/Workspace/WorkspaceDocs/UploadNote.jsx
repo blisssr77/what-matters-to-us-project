@@ -132,30 +132,26 @@ const WorkspaceUploadNote = () => {
             return;
         }
 
-        // Check Vault Code if needed
+        // Check Vault Code if needed (Model A: per-user workspace code)
         if (isVaulted) {
-            if (!vaultCode) {
+            const code = (vaultCode || "").trim();
+            if (!code) {
                 setLoading(false);
                 setErrorMsg("Please enter your Vault Code.");
                 return;
             }
 
-            const { data: vaultCodeRow, error: vaultError } = await supabase
-                .from("vault_codes")
-                .select("private_code_hash")
-                .eq("id", user.id)
-                .single();
+            const { data: ok, error } = await supabase.rpc("verify_workspace_code", {
+                p_workspace: activeWorkspaceId,
+                p_code: code,
+            });
 
-            if (vaultError || !vaultCodeRow?.private_code_hash) {
+            if (error) {
                 setLoading(false);
-                setErrorMsg(
-                    'Please set your Vault Code in <a href="/account/manage" class="text-blue-600 underline">Account Settings</a> before uploading.'
-                );
+                setErrorMsg(error.message || "Verification failed.");
                 return;
             }
-
-            const isMatch = await bcrypt.compare(vaultCode, vaultCodeRow.private_code_hash);
-            if (!isMatch) {
+            if (!ok) {
                 setLoading(false);
                 setErrorMsg("Incorrect Vault Code.");
                 return;
