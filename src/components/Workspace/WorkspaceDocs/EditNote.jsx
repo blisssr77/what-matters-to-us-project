@@ -402,6 +402,7 @@ export default function WorkspaceEditNote() {
                             Re-enter Private vault code to encrypt:
                         </label>
                         <input
+                            name="workspace_vault_code"
                             type="password"
                             value={vaultCode}
                             onChange={(e) => setVaultCode(e.target.value)}

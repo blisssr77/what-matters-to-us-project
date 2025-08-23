@@ -4,7 +4,8 @@ import { supabase } from "@/lib/supabaseClient";
 import { decryptFile, decryptText } from "@/lib/encryption";
 import Layout from "@/components/Layout/Layout";
 import { X, Copy, Edit2, Trash2 } from "lucide-react";
-import { saveAs } from "file-saver";
+import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
+import { usePrivateSpaceActions } from "@/hooks/usePrivateSpaceActions";
 
 const mimeToExtension = {
   "application/pdf": ".pdf",

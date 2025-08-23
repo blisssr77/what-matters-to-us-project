@@ -1,13 +1,17 @@
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import clsx from "clsx";
+import { useEnsureAuthScopedStores } from "@/hooks/useEnsureAuthScopedStores";
 
 const Layout = ({
   children,
-  noGutters = false,          // 🔹 set true to remove the inner padding
-  contentClassName = "",      // 🔹 optional extra classes for <main>
-  contentBg = "bg-gray-100",  // 🔹 override page background if needed
+  noGutters = false,          // set true to remove the inner padding
+  contentClassName = "",      // optional extra classes for <main>
+  contentBg = "bg-gray-100",  // override page background if needed
 }) => {
+  // Ensure auth-scoped stores are initialized
+  useEnsureAuthScopedStores();
+
   return (
     <div className="flex h-screen">
       <Sidebar />

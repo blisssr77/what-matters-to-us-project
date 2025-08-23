@@ -48,6 +48,25 @@ export default function PrivateDocList() {
     return found?.name || "";
   }, [spaces, activeSpaceId]);
 
+  // When opening settings, prefill the input with the current space name
+  const openSettings = useCallback(() => {
+    // prefill the input with the current space name
+    setSpaceName(currentSpaceName || "");
+    setShowPrivateSettings(true);
+  }, [currentSpaceName, setSpaceName, setShowPrivateSettings]);
+
+  // Log the current active space whenever it changes
+  useEffect(() => {
+    if (!activeSpaceId) {
+      console.info("[PrivateDocList] Active space: (none)");
+      return;
+    }
+    console.info("[PrivateDocList] Active space:", {
+      id: activeSpaceId,
+      name: currentSpaceName || "(unknown/loading)",
+    });
+  }, [activeSpaceId, currentSpaceName]);
+
   // ensure store scoped to signed-in user (guard if ensureForUser is not in your store)
   useEffect(() => {
     (async () => {
@@ -136,6 +155,7 @@ export default function PrivateDocList() {
     }
 
     setSpaces(data ?? []);
+    console.info("[PrivateDocList] Fetched spaces:", data?.length ?? 0);
     if (!activeSpaceId && data?.length) setActiveSpaceId(data[0].id);
   }, [activeSpaceId, setActiveSpaceId]);
 
@@ -159,6 +179,12 @@ export default function PrivateDocList() {
     setExpanded({});
   }, []);
 
+  // Log action outcomes from the actions hook (rename/delete)
+  useEffect(() => {
+    if (successMsg) console.info("[PrivateDocList] Action success:", successMsg);
+    if (errorMsg) console.warn("[PrivateDocList] Action error:", errorMsg);
+  }, [successMsg, errorMsg]);
+
   useEffect(() => {
     if (activeSpaceId) fetchDocuments(activeSpaceId);
   }, [activeSpaceId, fetchDocuments]);
@@ -181,7 +207,7 @@ export default function PrivateDocList() {
         workspaces={spacesForUI}
         activeId={activeSpaceId}
         onSelect={(id) => setActiveSpaceId(id)}
-        onSettingsClick={() => setShowPrivateSettings(true)}
+        onSettingsClick={openSettings}
         onCreateClick={() => setShowCreateModal(true)}
         onReorder={handleReorder}
       />

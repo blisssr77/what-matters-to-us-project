@@ -1,5 +1,4 @@
-// src/components/PrivateSpace/PrivateSpaceDocs/P-UploadDoc.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 import { Loader2, X, Search } from "lucide-react";
@@ -7,12 +6,13 @@ import Layout from "../../Layout/Layout";
 import { encryptText, encryptFile } from "../../../lib/encryption";
 import bcrypt from "bcryptjs";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
+import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
 
 export default function PrivateSpaceUploadDoc() {
+  const navigate = useNavigate();
+
+  // files / notes / UI
   const [files, setFiles] = useState([]);
-  const [tags, setTags] = useState([]);
-  const [availableTags, setAvailableTags] = useState([]);
-  const [newTag, setNewTag] = useState("");
   const [notes, setNotes] = useState("");
   const [privateNote, setPrivateNote] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -21,15 +21,19 @@ export default function PrivateSpaceUploadDoc() {
   const [dragging, setDragging] = useState(false);
   const [title, setTitle] = useState("");
   const [vaultCode, setVaultCode] = useState("");
+  const [isVaulted, setIsVaulted] = useState(true);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
 
-  // PrivateSpace equivalents
-  const [activePrivateSpaceId, setActivePrivateSpaceId] = useState(null);
-  const [psName, setPsName] = useState("");
-  const [isVaulted, setIsVaulted] = useState(true);
+  // tags
+  const [tags, setTags] = useState([]);                // selected tags (strings)
+  const [availableTags, setAvailableTags] = useState([]); // options list (strings)
+  const [newTag, setNewTag] = useState("");
 
-  const navigate = useNavigate();
+  // Use the STORE for the active space
+  const activePrivateSpaceId = usePrivateSpaceStore((s) => s.activeSpaceId);
+  const setActivePrivateSpaceId = usePrivateSpaceStore((s) => s.setActiveSpaceId);
+  const [psName, setPsName] = useState("");
 
   // Allowed MIME types (same as workspace version)
   const allowedMimes = [
@@ -46,75 +50,105 @@ export default function PrivateSpaceUploadDoc() {
     "image/png",
   ];
 
-  // 1) Pick an active private space for this user (first one)
+    // Pick the first space if none selected in store
   useEffect(() => {
     (async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      console.log('user?', userData);
-      const userId = userData?.user?.id;
-      if (!userId) return;
-      // 2) see what the DB returns (and any error)
-      const { data, error } = await supabase.from('private_spaces').select('id,name,created_by');
-      console.log('spaces', data, error);
+      if (activePrivateSpaceId) return;
 
-      const { data: space } = await supabase
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      const userId = user?.id;
+      if (!userId) return;
+
+      const { data, error } = await supabase
         .from("private_spaces")
-        .select("id")
+        .select("id, name")
         .eq("created_by", userId)
         .order("sort_order", { ascending: true })
         .order("created_at", { ascending: false })
         .limit(1);
 
-      if (!data.length) {
-        console.warn('⚠️ No private space found for user.');
-        return;
-      }
-
-      const first = data[0];
-      setActivePrivateSpaceId((prev) =>
-        prev ? prev : first.id
-      );
-      setPsName(first.name);
-
-      if (space.length) {
-        const keep = space.find(s => s.id === activePrivateSpaceId)?.id;
-        setActivePrivateSpaceId(keep ?? space[0].id);
-        setPsName(space.find(s => s.id === (keep ?? space[0].id))?.name ?? '');
-      } else {
-        console.warn('⚠️ No private space found for user.');
+      if (!error && data?.length) {
+        setActiveSpaceId(data[0].id);
+        setPsName(data[0].name || "");
       }
     })();
-  }, []);
+  }, [activePrivateSpaceId, setActivePrivateSpaceId]);
 
-  // 2) Fetch the private space name whenever active changes
+  // Keep psName in sync (optional)
   useEffect(() => {
-    if (!activePrivateSpaceId) {
-      setPsName("");
-      return;
-    }
+    if (!activePrivateSpaceId) { setPsName(""); return; }
     (async () => {
       const { data, error } = await supabase
         .from("private_spaces")
         .select("name")
         .eq("id", activePrivateSpaceId)
-        .single();
-
-      setPsName(error ? "" : data?.name ?? "");
+        .maybeSingle();
+      setPsName(error ? "" : (data?.name || ""));
     })();
   }, [activePrivateSpaceId]);
 
-  // Fetch available tags scoped to this private space (same UX)
+  // 🔎 Log current space for debugging
   useEffect(() => {
-    if (!activePrivateSpaceId) return;
-    const fetchTags = async () => {
+    console.log("Private Upload — activePrivateSpaceId:", activePrivateSpaceId, "name:", psName);
+  }, [activePrivateSpaceId, psName]);
+
+  // 🚩 Canonical tag fetch for Private pages
+  // Show union: (a) user-level global private tags (NULL private_space_id) + (b) space-scoped tags
+  useEffect(() => {
+    (async () => {
+      if (!activePrivateSpaceId) return;
+
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      const userId = user?.id;
+      if (!userId) return;
+
       const { data, error } = await supabase
         .from("vault_tags")
-        .select("*")
-        .eq("private_space_id", activePrivateSpaceId);
-      if (!error) setAvailableTags((data || []).map((t) => t.name));
-    };
-    fetchTags();
+        .select("name, private_space_id")
+        .eq("user_id", userId)
+        .eq("section", "Private")
+        .or(`private_space_id.is.null,private_space_id.eq.${activePrivateSpaceId}`);
+
+      if (error) {
+        console.error("❌ Failed to fetch private tags:", error);
+        return;
+      }
+
+      // de-dupe by name
+      const names = [...new Set((data || []).map((t) => t.name))];
+      setAvailableTags(names);
+    })();
   }, [activePrivateSpaceId]);
+
+  // Add tag (insert if missing) — recommend scoping to this space going forward
+  const handleTagAdd = useCallback(async () => {
+    const t = newTag.trim();
+    if (!t) return;
+
+    const { data: { user } = {}, error: uErr } = await supabase.auth.getUser();
+    if (uErr || !user?.id) {
+      console.error("Unable to get user.");
+      return;
+    }
+    if (!activePrivateSpaceId) {
+      setErrorMsg("No active private space selected.");
+      return;
+    }
+
+    // If not already present in available list, insert as space-scoped
+    if (!availableTags.includes(t)) {
+      const { error } = await supabase.from("vault_tags").insert({
+        name: t,
+        section: "Private",
+        user_id: user.id,
+        private_space_id: activePrivateSpaceId, // 🔹 space-scoped
+      });
+      if (!error) setAvailableTags((prev) => [...prev, t]);
+    }
+
+    if (!tags.includes(t)) setTags((prev) => [...prev, t]);
+    setNewTag("");
+  }, [newTag, availableTags, tags, activePrivateSpaceId]);
 
   // File DnD
   const handleFileDrop = (e) => {
@@ -125,36 +159,36 @@ export default function PrivateSpaceUploadDoc() {
   };
 
   // Add tag (insert if missing)
-  const handleTagAdd = async () => {
-    if (!newTag.trim()) return;
+  // const handleTagAdd = async () => {
+  //   if (!newTag.trim()) return;
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-    if (userError || !user?.id) {
-      console.error("Unable to get user.");
-      return;
-    }
+  //   const {
+  //     data: { user },
+  //     error: userError,
+  //   } = await supabase.auth.getUser();
+  //   if (userError || !user?.id) {
+  //     console.error("Unable to get user.");
+  //     return;
+  //   }
 
-    if (!activePrivateSpaceId) {
-      setErrorMsg("No active private space selected.");
-      return;
-    }
+  //   if (!activePrivateSpaceId) {
+  //     setErrorMsg("No active private space selected.");
+  //     return;
+  //   }
 
-    if (!availableTags.includes(newTag)) {
-      await supabase.from("vault_tags").insert({
-        name: newTag,
-        section: "Private",
-        user_id: user.id,
-        private_space_id: activePrivateSpaceId,
-      });
-      setAvailableTags((prev) => [...prev, newTag]);
-    }
+  //   if (!availableTags.includes(newTag)) {
+  //     await supabase.from("vault_tags").insert({
+  //       name: newTag,
+  //       section: "Private",
+  //       user_id: user.id,
+  //       private_space_id: activePrivateSpaceId,
+  //     });
+  //     setAvailableTags((prev) => [...prev, newTag]);
+  //   }
 
-    if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
-    setNewTag("");
-  };
+  //   if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
+  //   setNewTag("");
+  // };
 
   // Auto clear messages
   useEffect(() => {

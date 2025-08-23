@@ -89,7 +89,8 @@ export default function PrivateEditNote() {
       try {
         const dec = await decryptText(noteData.encrypted_note, noteData.note_iv, stored);
         setPrivateNote(dec);
-        setVaultCode(stored);
+        // optional: make it available to this tab only
+        // setVaultCode(stored);
       } catch (e) {
         console.warn("Auto-decrypt failed:", e);
       } finally {
@@ -98,11 +99,11 @@ export default function PrivateEditNote() {
     })();
   }, [noteData]);
 
-  // Decrypt explicitly when user enters vault code
+  // Private EditNote: explicit decrypt on user action (no autofill)
   const handleDecrypt = async () => {
     if (!noteData?.is_vaulted) return;
 
-    const code = vaultCode.trim();
+    const code = String(vaultCode || "").trim();
     if (!code) {
       setErrorMsg("Please enter your Vault Code.");
       return;
@@ -111,31 +112,30 @@ export default function PrivateEditNote() {
     setLoading(true);
     setErrorMsg("");
 
-    const { data: ok, error: vErr } = await supabase.rpc("verify_user_private_code", {
-      p_code: code,
-    });
-
-    if (vErr) {
-      setErrorMsg(vErr.message || "Failed to verify Vault Code.");
-      setLoading(false);
-      return;
-    }
-    if (!ok) {
-      setErrorMsg("Incorrect Vault Code.");
-      setLoading(false);
-      return;
-    }
-
     try {
-      if (!noteData.encrypted_note || !noteData.note_iv) {
-        setErrorMsg("Nothing to decrypt for this note.");
-        setLoading(false);
+      // Verify the *private* code (user-level)
+      const { data: ok, error: vErr } = await supabase.rpc("verify_user_private_code", {
+        p_code: code,
+      });
+      if (vErr) throw new Error(vErr.message || "Failed to verify Vault Code.");
+      if (!ok) {
+        setErrorMsg("Incorrect Vault Code.");
         return;
       }
 
-      const dec = await decryptText(noteData.encrypted_note, noteData.note_iv, code);
+      // Decrypt note
+      const ivToUse = noteData?.note_iv || noteData?.iv;
+      if (!ivToUse || !noteData?.encrypted_note) {
+        setErrorMsg("Nothing to decrypt for this note.");
+        return;
+      }
+
+      const dec = await decryptText(noteData.encrypted_note, ivToUse, code);
       setPrivateNote(dec);
-      sessionStorage.setItem("vaultCode", code);
+
+      // optional: make it available to this tab only
+      // sessionStorage.setItem("vaultCode", code);
+
     } catch (err) {
       console.error("Decryption error:", err);
       setErrorMsg("Decryption failed.");
@@ -143,6 +143,7 @@ export default function PrivateEditNote() {
       setLoading(false);
     }
   };
+
 
   // Add tag
   const handleTagAdd = async () => {
@@ -378,21 +379,22 @@ export default function PrivateEditNote() {
               </label>
               <div className="flex gap-2">
                 <input
+                  name="private_vault_code"
                   type="password"
                   value={vaultCode}
                   onChange={(e) => setVaultCode(e.target.value)}
                   className="w-full p-2 border font-medium rounded text-gray-600 text-sm bg-gray-50"
                   placeholder="Vault code"
-                  autoComplete="off"
+                  autoComplete="new-password"
                 />
-                <button
+                {/* <button
                   type="button"
                   onClick={handleDecrypt}
                   disabled={loading}
                   className="px-3 py-2 rounded border text-sm"
                 >
                   {loading ? "Decrypting…" : "Use Code"}
-                </button>
+                </button> */}
               </div>
             </div>
           </>
@@ -418,6 +420,7 @@ export default function PrivateEditNote() {
             </button>
           </div>
 
+          {/* Available tags (filtered) */}
           <div className="max-h-40 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50">
             {availableTags
               .filter(
@@ -442,6 +445,7 @@ export default function PrivateEditNote() {
               ))}
           </div>
 
+          {/* Selected tags */}
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-3">
               {tags.map((t) => (
@@ -463,7 +467,7 @@ export default function PrivateEditNote() {
 
         {/* Save */}
         <div className="flex gap-4 mt-4">
-          <button onClick={handleSave} className="btn-secondary w-full mt-3" disabled={saving}>
+          <button onClick={() => { handleSave(); handleDecrypt(); }} className="btn-secondary w-full mt-3" disabled={saving || loading}>
             {saving ? "Saving…" : "Save Note"}
           </button>
         </div>
