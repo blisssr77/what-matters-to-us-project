@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, Search, ChevronDown, Lock } from "lucide-react";
+import { FileText, Search, ChevronDown, Lock, Settings, XCircle } from "lucide-react";
 import Layout from "@/components/Layout/Layout";
 import WorkspaceTabs from "@/components/Layout/WorkspaceTabs";
 import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
@@ -42,32 +42,31 @@ export default function PrivateDocList() {
     setSpaceName,
   });
 
-  // derived, always correct space name
+  // derived, always-correct space name
   const currentSpaceName = useMemo(() => {
     const found = spaces.find((s) => s.id === activeSpaceId);
     return found?.name || "";
   }, [spaces, activeSpaceId]);
 
-  // When opening settings, prefill the input with the current space name
+  // open settings: prefill input with current space name
   const openSettings = useCallback(() => {
-    // prefill the input with the current space name
     setSpaceName(currentSpaceName || "");
     setShowPrivateSettings(true);
-  }, [currentSpaceName, setSpaceName, setShowPrivateSettings]);
+  }, [currentSpaceName]);
 
-  // Log the current active space whenever it changes
+  // log current active space
   useEffect(() => {
     if (!activeSpaceId) {
       console.info("[PrivateDocList] Active space: (none)");
-      return;
+    } else {
+      console.info("[PrivateDocList] Active space:", {
+        id: activeSpaceId,
+        name: currentSpaceName || "(unknown/loading)",
+      });
     }
-    console.info("[PrivateDocList] Active space:", {
-      id: activeSpaceId,
-      name: currentSpaceName || "(unknown/loading)",
-    });
   }, [activeSpaceId, currentSpaceName]);
 
-  // ensure store scoped to signed-in user (guard if ensureForUser is not in your store)
+  // scope store to signed-in user
   useEffect(() => {
     (async () => {
       const { data: { user } = {} } = await supabase.auth.getUser();
@@ -75,7 +74,6 @@ export default function PrivateDocList() {
     })();
   }, [ensureForUser]);
 
-  // tabs data
   const spacesForUI = useMemo(
     () => spaces.map((s) => ({ id: s.id, name: s.name })),
     [spaces]
@@ -111,7 +109,7 @@ export default function PrivateDocList() {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Filtered docs
+  // filtered docs (compute before overflow measuring, like Workspace list)
   const filteredDocs = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return allDocuments.filter((doc) => {
@@ -124,7 +122,7 @@ export default function PrivateDocList() {
     });
   }, [allDocuments, searchTerm, selectedTag]);
 
-  // measure overflow
+  // measure overflow (same pattern)
   useEffect(() => {
     const t = {};
     const n = {};
@@ -159,10 +157,12 @@ export default function PrivateDocList() {
     if (!activeSpaceId && data?.length) setActiveSpaceId(data[0].id);
   }, [activeSpaceId, setActiveSpaceId]);
 
+  // initial fetch
   useEffect(() => { fetchSpaces(); }, [fetchSpaces]);
 
-  // Fetch documents for the active space
+  // fetch documents for active space
   const fetchDocuments = useCallback(async (spaceId) => {
+    if (!spaceId) return;
     const { data, error } = await supabase
       .from("private_vault_items")
       .select("*")
@@ -179,15 +179,41 @@ export default function PrivateDocList() {
     setExpanded({});
   }, []);
 
-  // Log action outcomes from the actions hook (rename/delete)
+  // fetch when active space changes
+  useEffect(() => {
+    if (activeSpaceId) fetchDocuments(activeSpaceId);
+  }, [activeSpaceId, fetchDocuments]);
+
+  // helper to run after delete (PrivateSpace)
+  const handleConfirmDeleteSpace = async (code) => {
+    const psId = activeSpaceId; // snapshot before mutations
+
+    // If your modal already verified the code, you can skip this:
+    // const okCode = await verifyUserPrivateVaultCode?.(code);
+    // if (!okCode) return;
+
+    // run your delete (client-side sequence from usePrivateSpaceActions)
+    const ok = await handleDeleteSpace?.(); // it already deletes the space + items
+    if (!ok) return;
+
+    // compute nextId using current state
+    const remaining = spaces.filter((s) => s.id !== psId);
+    const nextId = remaining[0]?.id ?? null;
+
+    // now update states separately (event handler = safe)
+    setSpaces(remaining);
+    setActiveSpaceId(nextId);
+    setAllDocuments([]);
+    setAllTags([]);                // optional: clear tag list after removal
+    setShowPrivateSettings(false); // close settings modal if open
+    setSpaceName(remaining.find((s) => s.id === nextId)?.name || "");
+  };
+
+  // action logs (rename/delete)
   useEffect(() => {
     if (successMsg) console.info("[PrivateDocList] Action success:", successMsg);
     if (errorMsg) console.warn("[PrivateDocList] Action error:", errorMsg);
   }, [successMsg, errorMsg]);
-
-  useEffect(() => {
-    if (activeSpaceId) fetchDocuments(activeSpaceId);
-  }, [activeSpaceId, fetchDocuments]);
 
   // close tag filter on outside click
   useEffect(() => {
@@ -199,6 +225,31 @@ export default function PrivateDocList() {
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
+
+  // ---- callbacks from modals ----
+  const handleSpaceCreated = useCallback((space) => {
+    // re-fetch + activate the newly created space
+    fetchSpaces().then(() => {
+      if (space?.id) setActiveSpaceId(space.id);
+    });
+  }, [fetchSpaces, setActiveSpaceId]);
+
+  const handleSpaceRenamed = useCallback((spaceId, newName) => {
+    setSpaces((prev) => prev.map((s) => (s.id === spaceId ? { ...s, name: newName } : s)));
+    if (spaceId === activeSpaceId) setSpaceName(newName);
+  }, [activeSpaceId]);
+
+  const handleSpaceDeleted = useCallback((spaceId) => {
+    setSpaces((prev) => {
+      const remaining = prev.filter((s) => s.id !== spaceId);
+      // choose next active
+      const next = remaining[0]?.id ?? null;
+      setActiveSpaceId(next);
+      setAllDocuments([]);
+      setAllTags([]);
+      return remaining;
+    });
+  }, [setActiveSpaceId]);
 
   return (
     <Layout noGutters>
@@ -424,15 +475,7 @@ export default function PrivateDocList() {
           setShowPrivateSettings(false);
         }}
         onVerifyVaultCode={verifyUserPrivateVaultCode}
-        onDelete={async () => {
-          const ok = await handleDeleteSpace();
-          if (ok) {
-            // Update UI: refetch spaces, switch selection, close modal, navigate
-            await fetchSpaces();
-            setShowPrivateSettings(false);
-            navigate("/privatespace/vaults");
-          }
-        }}
+        onDelete={handleConfirmDeleteSpace}
       />
 
       {/* Create Private Space Modal */}

@@ -79,7 +79,7 @@ export default function WorkspaceVaultList() {
     });
   }, [allDocuments, searchTerm, selectedTag]);
 
-  // 3) Now it's safe to use filteredDocs in effects / deps
+  // 3) It's safe to use filteredDocs in effects / deps
   useEffect(() => {
     const newTitleOverflow = {};
     const newNoteOverflow = {};
@@ -142,7 +142,7 @@ export default function WorkspaceVaultList() {
     fetchAllWorkspaces();
   }, [activeWorkspaceId, setActiveWorkspaceId]);
 
-  // Fetch workspace name and documents when activeWorkspaceId changes
+  // Fetch and ensure workspace data when activeWorkspaceId changes
   const handleReorder = async (newList) => {
     // optimistic UI
     setWorkspaceList(newList.map((ws, idx) => ({ ...ws, sort_order: idx })));
@@ -256,7 +256,7 @@ export default function WorkspaceVaultList() {
   const handleConfirmDelete = async (code) => {
     const wsId = activeWorkspaceId;              // snapshot before mutations
 
-    // run your delete (RPC or client-side sequence)
+    // run delete (RPC or client-side sequence)
     const ok = await handleDeleteWorkspace?.(code); // or serverDeleteWorkspace(code)
     if (!ok) return;
 
@@ -276,7 +276,7 @@ export default function WorkspaceVaultList() {
   const verifyWorkspaceCode = async (code) => {
     if (!activeWorkspaceId) return false;
     const { data, error } = await supabase.rpc("verify_workspace_code", {
-      p_workspace_id: activeWorkspaceId,
+      p_workspace: activeWorkspaceId,
       p_code: code,
     });
     if (error) {
@@ -285,7 +285,6 @@ export default function WorkspaceVaultList() {
     }
     return !!data; // true if valid
   };
-  
 
   return (
     <Layout noGutters>
@@ -550,7 +549,7 @@ export default function WorkspaceVaultList() {
         open={showCreateWorkspaceModal}
         onClose={() => setShowCreateWorkspaceModal(false)}
         onCreated={(newWs) => {
-          setWorkspaceList((prev) => [...prev, { id: newWs.id, name: newWs.name }]);
+          setWorkspaceList((prev) => [...prev, { id: newWs.id, name: newWs.name, sort_order: prev.length }]);
           setActiveWorkspaceId(newWs.id);
         }}
       />

@@ -31,7 +31,7 @@ import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
 export default function PrivateSpaceSettingsModal({
   open,
   onClose,
-  // Optional overrides so parent can control these if you prefer:
+  // Optional overrides so parent can control these if prefer:
   spaceName: spaceNameProp,
   setSpaceName: setSpaceNameProp,
   onVerifyVaultCode, // optional override; if absent we call RPC verify_user_private_code
@@ -129,7 +129,7 @@ export default function PrivateSpaceSettingsModal({
       setVerifyErr("Incorrect Vault Code.");
       return;
     }
-    // Delete the private space; FK on private_vault_items should cascade if you set it earlier
+    // Delete the private space; FK on private_vault_items should cascade if set it earlier
     const { error } = await supabase
       .from("private_spaces")
       .delete()

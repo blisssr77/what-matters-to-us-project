@@ -1,4 +1,3 @@
-// src/components/common/CreateWorkspaceModal.jsx
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { X } from "lucide-react";
@@ -12,108 +11,108 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
 
   // Auto-clear success message after 3 seconds
   useEffect(() => {
-      if (successMsg) {
-        const t = setTimeout(() => setSuccessMsg(""), 3000);
-        return () => clearTimeout(t);
-      }
-    }, [successMsg]);
+    if (successMsg) {
+      const t = setTimeout(() => setSuccessMsg(""), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [successMsg]);
 
-    if (!open) return null;
+  if (!open) return null;
 
-    // Function to handle workspace creation
-    const handleCreate = async () => {
-      const trimmedName = name.trim();
-      const trimmedCode = vaultCode.trim();
+  // Function to handle workspace creation
+  const handleCreate = async () => {
+    const trimmedName = name.trim();
+    const trimmedCode = vaultCode.trim();
 
-      if (!trimmedName) {
-        setErrorMsg("Workspace name is required.");
+    if (!trimmedName) {
+      setErrorMsg("Workspace name is required.");
+      return;
+    }
+    if (!trimmedCode) {
+      setErrorMsg("Vault Code is required for creation.");
+      return;
+    }
+
+    setLoading(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    try {
+      // 0) must be logged in
+      const {
+        data: { user },
+        error: userErr,
+      } = await supabase.auth.getUser();
+      if (userErr || !user) {
+        setErrorMsg("You must be logged in.");
         return;
       }
-      if (!trimmedCode) {
-        setErrorMsg("Vault Code is required for creation.");
+
+      // 1) verify the user's account vault code (server-side, 1-arg RPC)
+      const { data: ok, error: vErr } = await supabase.rpc("verify_user_vault_code", {
+        p_code: trimmedCode,
+      });
+      if (vErr) {
+        console.error("verify_user_vault_code error:", vErr);
+        setErrorMsg("Failed to verify Vault Code. Please try again.");
+        return;
+      }
+      if (!ok) {
+        setErrorMsg("Vault Code does not match your account.");
         return;
       }
 
-      setLoading(true);
-      setErrorMsg("");
-      setSuccessMsg("");
-
-      try {
-        // 0) must be logged in
-        const {
-          data: { user },
-          error: userErr,
-        } = await supabase.auth.getUser();
-        if (userErr || !user) {
-          setErrorMsg("You must be logged in.");
-          return;
-        }
-
-        // 1) verify the user's account vault code (server-side, 1-arg RPC)
-        const { data: ok, error: vErr } = await supabase.rpc("verify_user_vault_code", {
-          p_code: trimmedCode,
-        });
-        if (vErr) {
-          console.error("verify_user_vault_code error:", vErr);
-          setErrorMsg("Failed to verify Vault Code. Please try again.");
-          return;
-        }
-        if (!ok) {
-          setErrorMsg("Vault Code does not match your account.");
-          return;
-        }
-
-        // 2) create workspace
-        const { data: ws, error: wsErr } = await supabase
-          .from("workspaces")
-          .insert({
-            name: trimmedName,
-            created_by: user.id,
-            created_at: new Date().toISOString(),
-          })
-          .select("id, name")
-          .single();
-
-        if (wsErr || !ws) {
-          setErrorMsg(wsErr?.message || "Failed to create workspace.");
-          return;
-        }
-
-        // 3) add creator as owner
-        const { error: memErr } = await supabase.from("workspace_members").insert({
-          workspace_id: ws.id,
-          user_id: user.id,
-          role: "owner",
-          invited_by_name: null,
-          is_admin: true,
+      // 2) create workspace
+      const { data: ws, error: wsErr } = await supabase
+        .from("workspaces")
+        .insert({
+          name: trimmedName,
+          created_by: user.id,
           created_at: new Date().toISOString(),
-        });
-        if (memErr) {
-          console.error("Failed to insert workspace_members:", memErr);
-          // continue; read access still OK via created_by policy
-        }
+        })
+        .select("id, name")
+        .single();
 
-        // 4) set the workspace's own code (hashing done in RPC)
-        const { error: codeErr } = await supabase.rpc("set_workspace_vault_code", {
-          p_workspace_id: ws.id,
-          p_code: trimmedCode,
-        });
-        if (codeErr) {
-          console.error("set_workspace_vault_code error:", codeErr);
-        }
-
-        setSuccessMsg("✅ Workspace created successfully!");
-        onCreated?.(ws);
-        setName("");
-        setVaultCode("");
-        onClose();
-      } catch (e) {
-        console.error(e);
-        setErrorMsg(e.message || "Something went wrong.");
-      } finally {
-        setLoading(false);
+      if (wsErr || !ws) {
+        setErrorMsg(wsErr?.message || "Failed to create workspace.");
+        return;
       }
-    };
+
+      // 3) add creator as owner
+      const { error: memErr } = await supabase.from("workspace_members").insert({
+        workspace_id: ws.id,
+        user_id: user.id,
+        role: "owner",
+        invited_by_name: null,
+        is_admin: true,
+        created_at: new Date().toISOString(),
+      });
+      if (memErr) {
+        console.error("Failed to insert workspace_members:", memErr);
+        // continue; read access still OK via created_by policy
+      }
+
+      // 4) set the workspace's own code (hashing done in RPC)
+      const { error: codeErr } = await supabase.rpc("set_workspace_vault_code", {
+        p_workspace: ws.id,
+        p_code: trimmedCode,
+      });
+      if (codeErr) {
+        console.error("set_workspace_vault_code error:", codeErr);
+      }
+
+      setSuccessMsg("✅ Workspace created successfully!");
+      onCreated?.(ws);
+      setName("");
+      setVaultCode("");
+      onClose();
+    } catch (e) {
+      console.error(e);
+      setErrorMsg(e.message || "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40">
