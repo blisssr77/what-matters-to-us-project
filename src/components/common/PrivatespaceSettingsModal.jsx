@@ -26,7 +26,7 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { useWorkspaceStore } from "@/hooks/useWorkspaceStore";
+import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
 
 export default function PrivateSpaceSettingsModal({
   open,
@@ -38,7 +38,7 @@ export default function PrivateSpaceSettingsModal({
   onDeleted,         // callback after successful delete
   onRenamed,         // callback after successful rename
 }) {
-  const activeSpaceId = useWorkspaceStore((s) => s.activeSpaceId);
+  const activeSpaceId = usePrivateSpaceStore((s) => s.activeSpaceId);
 
   const [tab, setTab] = useState("general");
   const [spaceName, setSpaceName] = useState(spaceNameProp || "");

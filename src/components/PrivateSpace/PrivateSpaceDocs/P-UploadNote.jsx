@@ -1,38 +1,48 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 import { X, Search } from "lucide-react";
 import { encryptText } from "../../../lib/encryption";
 import Layout from "../../Layout/Layout";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
+import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
 
-const PrivateUploadNote = () => {
+export default function PrivateUploadNote() {
+  const navigate = useNavigate();
+
+  // form
   const [title, setTitle] = useState("");
-  const [notes, setNotes] = useState("");            // public note
-  const [privateNote, setPrivateNote] = useState(""); // encrypted note (when vaulted)
-  const [isVaulted, setIsVaulted] = useState(true);   // toggle
+  const [notes, setNotes] = useState("");           // public note
+  const [privateNote, setPrivateNote] = useState(""); // encrypted note
+  const [isVaulted, setIsVaulted] = useState(true);
   const [vaultCode, setVaultCode] = useState("");
 
+  // ui
   const [loading, setLoading] = useState(false);
-  const [newTag, setNewTag] = useState("");
-  const [tags, setTags] = useState([]);
-  const [availableTags, setAvailableTags] = useState([]);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
 
-  // Active private space
-  const [activeSpaceId, setActiveSpaceId] = useState(null);
+  // tags
+  const [tags, setTags] = useState([]);                // selected tags
+  const [availableTags, setAvailableTags] = useState([]); // options list
+  const [newTag, setNewTag] = useState("");
+
+  // 🔹 Use the PRIVATE SPACE STORE (single source of truth)
+  const activeSpaceId = usePrivateSpaceStore((s) => s.activeSpaceId);
+  const setActiveSpaceId = usePrivateSpaceStore((s) => s.setActiveSpaceId);
+
+  // optional (for logging/heading)
   const [spaceName, setSpaceName] = useState("");
 
-  const navigate = useNavigate();
-
-  // 1) Pick an active private space (first one) for this user
+  // If no active space is set in the store, pick the first one for this user
   useEffect(() => {
     (async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.user?.id;
+      if (activeSpaceId) return;
+
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      const userId = user?.id;
       if (!userId) return;
 
       const { data, error } = await supabase
@@ -40,131 +50,108 @@ const PrivateUploadNote = () => {
         .select("id, name")
         .eq("created_by", userId)
         .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(1);
 
-      if (error) {
-        console.error("❌ Failed to fetch private spaces:", error);
-        return;
+      if (!error && data?.length) {
+        setActiveSpaceId(data[0].id);
+        setSpaceName(data[0].name || "");
       }
-
-      const first = data?.[0];
-      setActiveSpaceId(first?.id ?? null);
-      setSpaceName(first?.name ?? "");
     })();
-  }, []);
+  }, [activeSpaceId, setActiveSpaceId]);
 
-  // 2) Load available tags for this space (space-scoped first, fallback to user private tags)
+  // keep space name in sync (optional)
   useEffect(() => {
-    if (!activeSpaceId) {
-      setAvailableTags([]);
-      return;
-    }
-
+    if (!activeSpaceId) { setSpaceName(""); return; }
     (async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.user?.id;
-
-      // Try space-scoped tags
-      let tagsRes = await supabase
-        .from("vault_tags")
+      const { data, error } = await supabase
+        .from("private_spaces")
         .select("name")
-        .eq("section", "Private")
-        .eq("private_space_id", activeSpaceId);
-
-      // Fallback (older schema): user-level Private tags
-      if (tagsRes.error) {
-        tagsRes = await supabase
-          .from("vault_tags")
-          .select("name")
-          .eq("section", "Private")
-          .eq("user_id", userId);
-      }
-
-      if (!tagsRes.error && Array.isArray(tagsRes.data)) {
-        setAvailableTags(tagsRes.data.map((t) => t.name));
-      } else {
-        setAvailableTags([]);
-      }
+        .eq("id", activeSpaceId)
+        .maybeSingle();
+      setSpaceName(error ? "" : (data?.name || ""));
     })();
   }, [activeSpaceId]);
 
-  // Auto-clear messages
+  // DEBUG: see which space this page is using
   useEffect(() => {
-    if (successMsg || errorMsg) {
-      const t = setTimeout(() => {
-        setSuccessMsg("");
-        setErrorMsg("");
-      }, 4000);
-      return () => clearTimeout(t);
-    }
-  }, [successMsg, errorMsg]);
+    console.log("Private UploadNote — activeSpaceId:", activeSpaceId, "name:", spaceName);
+  }, [activeSpaceId, spaceName]);
 
-  // Add / create tag (space-scoped if column exists; fallback to user-scoped)
-  const handleTagAdd = async () => {
-    if (!newTag.trim() || !activeSpaceId) return;
+  // 🚩 Fetch tags = UNION of (a) user-level Private tags (NULL space) + (b) space-scoped
+  useEffect(() => {
+    (async () => {
+      if (!activeSpaceId) { setAvailableTags([]); return; }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user?.id) return;
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      const userId = user?.id;
+      if (!userId) { setAvailableTags([]); return; }
 
-    // If already known locally, just add to selection
-    if (availableTags.includes(newTag)) {
-      if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
-      setNewTag("");
-      return;
-    }
+      const { data, error } = await supabase
+        .from("vault_tags")
+        .select("name, private_space_id")
+        .eq("user_id", userId)
+        .eq("section", "Private")
+        .or(`private_space_id.is.null,private_space_id.eq.${activeSpaceId}`);
 
-    // Try insert with private_space_id
-    let ins = await supabase.from("vault_tags").insert({
-      name: newTag.trim(),
-      section: "Private",
-      user_id: user.id,
-      private_space_id: activeSpaceId,
-    });
+      if (error) {
+        console.error("❌ Failed to fetch private tags:", error);
+        setAvailableTags([]);
+        return;
+      }
 
-    // Fallback: schema without private_space_id
-    if (ins.error && /column .*private_space_id/i.test(ins.error.message)) {
-      ins = await supabase.from("vault_tags").insert({
-        name: newTag.trim(),
+      const names = [...new Set((data || []).map((t) => t.name))];
+      setAvailableTags(names);
+    })();
+  }, [activeSpaceId]);
+
+  // Ensure selected tags are visible even if legacy/user-only
+  const tagOptions = useMemo(
+    () => Array.from(new Set([...(availableTags || []), ...(tags || [])])),
+    [availableTags, tags]
+  );
+
+  // ➕ Add tag (insert if missing) — space-scoped going forward
+  const handleTagAdd = useCallback(async () => {
+    const t = newTag.trim();
+    if (!t) return;
+
+    const { data: { user } = {}, error: uErr } = await supabase.auth.getUser();
+    if (uErr || !user?.id) return;
+    if (!activeSpaceId) { setErrorMsg("No active private space selected."); return; }
+
+    if (!availableTags.includes(t)) {
+      const { error } = await supabase.from("vault_tags").insert({
+        name: t,
         section: "Private",
         user_id: user.id,
+        private_space_id: activeSpaceId, // 🔹 scope to this space
       });
+      if (!error) setAvailableTags((prev) => [...prev, t]);
     }
 
-    if (!ins.error) {
-      setAvailableTags((prev) => [...prev, newTag.trim()]);
-      if (!tags.includes(newTag.trim())) setTags((prev) => [...prev, newTag.trim()]);
-      setNewTag("");
-    }
-  };
+    if (!tags.includes(t)) setTags((prev) => [...prev, t]);
+    setNewTag("");
+  }, [newTag, availableTags, tags, activeSpaceId]);
 
-  // Ensure any brand-new tags exist (best-effort) before insert
-  const ensureTagsExist = async (userId) => {
+  // (optional) ensure any selected tag exists before saving (best-effort)
+  const ensureTagsExist = useCallback(async () => {
+    const { data: { user } = {} } = await supabase.auth.getUser();
+    const userId = user?.id;
+    if (!userId || !activeSpaceId) return;
+
     for (const t of tags) {
       if (!availableTags.includes(t)) {
-        try {
-          await supabase.from("vault_tags").insert({
-            name: t,
-            section: "Private",
-            user_id: userId,
-            private_space_id: activeSpaceId,
-          });
-          setAvailableTags((prev) => (prev.includes(t) ? prev : [...prev, t]));
-        } catch (err) {
-          const msg = String(err?.message || "");
-          if (/column .*private_space_id/i.test(msg)) {
-            const { error: e2 } = await supabase.from("vault_tags").insert({
-              name: t,
-              section: "Private",
-              user_id: userId,
-            });
-            if (!e2) setAvailableTags((prev) => (prev.includes(t) ? prev : [...prev, t]));
-          }
-        }
+        const { error } = await supabase.from("vault_tags").insert({
+          name: t,
+          section: "Private",
+          user_id: userId,
+          private_space_id: activeSpaceId,
+        });
+        if (!error) setAvailableTags((prev) => prev.includes(t) ? prev : [...prev, t]);
       }
     }
-  };
+  }, [tags, availableTags, activeSpaceId]);
 
   // Create note (public or vaulted)
   const handleCreate = async () => {
@@ -306,15 +293,42 @@ const PrivateUploadNote = () => {
         />
 
         {/* Public Note (always available, saved in `notes`) */}
+        {/* Tags */}
         <div className="mb-4">
-          <label className="text-sm font-medium text-gray-800 mb-1 block">Public note:</label>
-          <textarea
-            value={notes}
-            onChange={(e) => { setNotes(e.target.value); setHasUnsavedChanges(true); }}
-            rows={2}
-            className="w-full p-2 border bg-gray-50 rounded text-gray-700 text-sm"
-            placeholder="Public notes (Visible to shared contacts)"
-          />
+          <label className="block text-sm mb-1 text-gray-800">Tags:</label>
+          <div className="flex gap-2">
+            <input
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
+              placeholder="Add a tag"
+            />
+            <button onClick={handleTagAdd} className="btn-secondary">Add</button>
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-2">
+            {tagOptions.map((t) => {
+              const selected = tags.includes(t);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() =>
+                    setTags((prev) =>
+                      selected ? prev.filter((x) => x !== t) : [...prev, t]
+                    )
+                  }
+                  className={`px-2 py-1 rounded text-xs border ${
+                    selected
+                      ? "bg-purple-100 border-purple-400 text-purple-700"
+                      : "bg-white border-gray-300 text-gray-700"
+                  }`}
+                >
+                  {t}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Private Note + Vault Code (only when vaulted) */}
@@ -345,54 +359,6 @@ const PrivateUploadNote = () => {
           </>
         )}
 
-        {/* Tag Section */}
-        <div className="mb-4">
-          <label className="text-sm font-medium text-gray-700 mb-1 block">Add tags:</label>
-
-          <div className="relative flex items-center gap-2 mb-2">
-            <Search className="absolute left-3 text-gray-400" size={16} />
-            <input
-              type="text"
-              value={newTag}
-              onChange={(e) => { setNewTag(e.target.value); setHasUnsavedChanges(true); }}
-              placeholder="Search existing tags or create new"
-              className="w-full pl-8 border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
-            />
-            <button type="button" onClick={handleTagAdd} className="btn-secondary text-sm">
-              Create
-            </button>
-          </div>
-
-          <div className="max-h-40 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50">
-            {availableTags
-              .filter((t) => t.toLowerCase().includes(newTag.toLowerCase()) && !tags.includes(t))
-              .map((t) => (
-                <div key={t} className="flex items-center gap-2 py-1">
-                  <input
-                    type="checkbox"
-                    checked={tags.includes(t)}
-                    onChange={() => {
-                      setHasUnsavedChanges(true);
-                      setTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
-                    }}
-                  />
-                  <span className="text-xs text-gray-700">{t}</span>
-                </div>
-              ))}
-          </div>
-
-          {tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-3">
-              {tags.map((t) => (
-                <span key={t} className="bg-yellow-50 text-gray-800 text-xs px-3 py-1 rounded-full flex items-center gap-1">
-                  {t}
-                  <X size={12} className="cursor-pointer" onClick={() => setTags(tags.filter((x) => x !== t))} />
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
         <button onClick={handleCreate} disabled={loading} className="btn-secondary w-full mt-2">
           {loading ? "Creating..." : "Upload Note"}
         </button>
@@ -405,4 +371,3 @@ const PrivateUploadNote = () => {
   );
 };
 
-export default PrivateUploadNote;

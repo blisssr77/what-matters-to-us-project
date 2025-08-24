@@ -1,13 +1,18 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
 import { decryptText, encryptText } from "../../../lib/encryption";
 import Layout from "../../Layout/Layout";
 import { X, Search } from "lucide-react";
+import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
 
 export default function PrivateEditNote() {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  // Private space store
+  const activeSpaceId = usePrivateSpaceStore((s) => s.activeSpaceId);
+  const setActiveSpaceId = usePrivateSpaceStore((s) => s.setActiveSpaceId);
 
   // Core state
   const [noteData, setNoteData] = useState(null);
@@ -32,17 +37,25 @@ export default function PrivateEditNote() {
   const [tags, setTags] = useState([]);
   const tagBoxRef = useRef(null);
 
+  // For logging / optional header
+  const [spaceName, setSpaceName] = useState("");
+
+  // Effective space this note belongs to (store wins; fallback to note’s space)
+  const effectiveSpaceId = activeSpaceId || noteData?.private_space_id || null;
+
   // Fetch note on mount
   useEffect(() => {
     (async () => {
+      if (!id) return;
+
       const { data, error } = await supabase
         .from("private_vault_items")
         .select("*")
         .eq("id", id)
-        .single();
+        .maybeSingle();
 
-      if (error) {
-        console.error("Error fetching note:", error);
+      if (error || !data) {
+        console.error("❌ Failed to load note:", error);
         setErrorMsg("Failed to load note.");
         return;
       }
@@ -53,17 +66,94 @@ export default function PrivateEditNote() {
       setIsVaulted(!!data.is_vaulted);
       setTags(Array.isArray(data.tags) ? data.tags : []);
 
-      // load tags (basic user-level private tag scope; adjust if you later space-scope)
-      const { data: tagRows, error: tagErr } = await supabase
-        .from("vault_tags")
-        .select("name")
-        .eq("section", "Private");
-
-      if (!tagErr && Array.isArray(tagRows)) {
-        setAvailableTags(tagRows.map((t) => t.name));
+      // If store has no active space yet, sync it to this note's space id
+      if (!activeSpaceId && data.private_space_id) {
+        setActiveSpaceId(data.private_space_id);
       }
     })();
+    // NOTE: we do not depend on activeSpaceId here; we sync it from the note when missing
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Load space name + debug log
+  useEffect(() => {
+    (async () => {
+      if (!effectiveSpaceId) {
+        setSpaceName("");
+        console.log("PrivateEditNote — effectiveSpaceId:", null);
+        return;
+      }
+      const { data, error } = await supabase
+        .from("private_spaces")
+        .select("name")
+        .eq("id", effectiveSpaceId)
+        .maybeSingle();
+      setSpaceName(error ? "" : (data?.name || ""));
+      console.log("PrivateEditNote — effectiveSpaceId:", effectiveSpaceId, "name:", data?.name || "");
+    })();
+  }, [effectiveSpaceId]);
+
+  // Fetch tags (union: user-level Private + space-scoped Private for effectiveSpaceId)
+  useEffect(() => {
+    (async () => {
+      if (!effectiveSpaceId) { setAvailableTags([]); return; }
+
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      const userId = user?.id;
+      if (!userId) { setAvailableTags([]); return; }
+
+      const { data, error } = await supabase
+        .from("vault_tags")
+        .select("name, private_space_id")
+        .eq("user_id", userId)
+        .eq("section", "Private")
+        .or(`private_space_id.is.null,private_space_id.eq.${effectiveSpaceId}`);
+
+      if (error) {
+        console.error("❌ Failed to fetch private tags:", error);
+        setAvailableTags([]);
+        return;
+      }
+
+      const names = [...new Set((data || []).map((t) => t.name))];
+      setAvailableTags(names);
+    })();
+  }, [effectiveSpaceId]);
+
+  // Ensure selected tags are visible even if legacy/user-only
+  const tagOptions = useMemo(
+    () => Array.from(new Set([...(availableTags || []), ...(tags || [])])),
+    [availableTags, tags]
+  );
+
+  // Add tag (insert if missing) — space-scoped going forward
+  const handleTagAdd = useCallback(async () => {
+    const t = newTag.trim();
+    if (!t) return;
+
+    const { data: { user } = {}, error: uErr } = await supabase.auth.getUser();
+    if (uErr || !user?.id) {
+      console.error("Unable to get user.");
+      return;
+    }
+    if (!effectiveSpaceId) {
+      setErrorMsg("No active private space selected.");
+      return;
+    }
+
+    if (!availableTags.includes(t)) {
+      const { error } = await supabase.from("vault_tags").insert({
+        name: t,
+        section: "Private",
+        user_id: user.id,
+        private_space_id: effectiveSpaceId, // ← scope to this space
+      });
+      if (!error) setAvailableTags((prev) => [...prev, t]);
+    }
+
+    if (!tags.includes(t)) setTags((prev) => [...prev, t]);
+    setNewTag("");
+  }, [newTag, availableTags, tags, effectiveSpaceId]);
 
   // Try auto-decrypt with stored vault code (only if vaulted + encrypted fields present)
   useEffect(() => {
@@ -142,34 +232,6 @@ export default function PrivateEditNote() {
     } finally {
       setLoading(false);
     }
-  };
-
-
-  // Add tag
-  const handleTagAdd = async () => {
-    const t = newTag.trim();
-    if (!t) return;
-
-    const {
-      data: { user },
-      error: uErr,
-    } = await supabase.auth.getUser();
-    if (uErr || !user?.id) {
-      console.error("Unable to get user.");
-      return;
-    }
-
-    if (!availableTags.includes(t)) {
-      const { error } = await supabase.from("vault_tags").insert({
-        name: t,
-        section: "Private",
-        user_id: user.id,
-      });
-      if (!error) setAvailableTags((prev) => [...prev, t]);
-    }
-
-    if (!tags.includes(t)) setTags((prev) => [...prev, t]);
-    setNewTag("");
   };
 
   // Save updates
@@ -296,23 +358,25 @@ export default function PrivateEditNote() {
           <X size={20} />
         </button>
 
-        <h2 className="text-xl font-bold mb-5 text-gray-900">✏️ Edit Note</h2>
+        <h2 className="text-xl font-semibold mb-1 text-gray-900">
+          Edit Note {spaceName ? `in “${spaceName}”` : ""}
+        </h2>
 
         {/* Title */}
-        <label className="text-sm font-bold text-gray-800 mb-1 block">Note title:</label>
+        <label className="text-sm text-gray-800 mb-1 block">Note title:</label>
         <input
           value={editedTitle}
           onChange={(e) => {
             setEditedTitle(e.target.value);
             setHasUnsavedChanges(true);
           }}
-          className="w-full p-2 border rounded mb-3 text-gray-800 font-bold text-sm bg-gray-50"
+          className="w-full p-2 border rounded mb-3 text-gray-800 text-sm bg-gray-50"
           placeholder="Title"
         />
 
         {/* Public / Private toggle */}
         <div className="mb-3 text-sm">
-          <label className="mr-4 font-semibold text-gray-800">Note Type:</label>
+          <label className="mr-4 text-gray-800">Note Type:</label>
           <label className="mr-4 text-gray-800">
             <input
               type="radio"
@@ -356,10 +420,48 @@ export default function PrivateEditNote() {
           />
         </div>
 
+        {/* Tags */}
+        <div className="mb-4">
+          <label className="block text-sm mb-1 text-gray-800">Tags:</label>
+          <div className="flex gap-2">
+            <input
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
+              placeholder="Add a tag"
+            />
+            <button onClick={handleTagAdd} className="btn-secondary">Add</button>
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-2">
+            {tagOptions.map((t) => {
+              const selected = tags.includes(t);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() =>
+                    setTags((prev) =>
+                      selected ? prev.filter((x) => x !== t) : [...prev, t]
+                    )
+                  }
+                  className={`px-2 py-1 rounded text-xs border ${
+                    selected
+                      ? "bg-purple-100 border-purple-400 text-purple-700"
+                      : "bg-white border-gray-300 text-gray-700"
+                  }`}
+                >
+                  {t}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Private Note (only when vaulted) */}
         {isVaulted && (
           <>
-            <p className="text-sm text-red-400 mb-1 font-bold">
+            <p className="text-sm text-red-400 mb-1">
               🔐 Private note will be encrypted using your Vault Code:
             </p>
             <textarea
@@ -399,71 +501,6 @@ export default function PrivateEditNote() {
             </div>
           </>
         )}
-
-        {/* Tags */}
-        <div className="mb-4">
-          <label className="text-sm font-bold text-gray-800 mb-1 block">Edit tags:</label>
-          <div className="relative flex items-center gap-2 mb-1 text-sm">
-            <Search className="absolute left-3 text-gray-400" size={16} />
-            <input
-              type="text"
-              value={newTag}
-              onChange={(e) => {
-                setNewTag(e.target.value);
-                setHasUnsavedChanges(true);
-              }}
-              placeholder="Search existing tags or create new"
-              className="w-full pl-8 border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
-            />
-            <button type="button" onClick={handleTagAdd} className="btn-secondary">
-              Create
-            </button>
-          </div>
-
-          {/* Available tags (filtered) */}
-          <div className="max-h-40 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50">
-            {availableTags
-              .filter(
-                (t) =>
-                  (!newTag || t.toLowerCase().includes(newTag.toLowerCase())) &&
-                  !tags.includes(t)
-              )
-              .map((t) => (
-                <div key={t} className="flex items-center gap-2 py-1">
-                  <input
-                    type="checkbox"
-                    checked={tags.includes(t)}
-                    onChange={() => {
-                      setTags((prev) =>
-                        prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
-                      );
-                      setHasUnsavedChanges(true);
-                    }}
-                  />
-                  <span className="text-xs text-gray-700">{t}</span>
-                </div>
-              ))}
-          </div>
-
-          {/* Selected tags */}
-          {tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-3">
-              {tags.map((t) => (
-                <span
-                  key={t}
-                  className="bg-yellow-50 text-gray-800 text-xs px-3 py-1 rounded-full font-medium flex items-center gap-1"
-                >
-                  {t}
-                  <X
-                    size={12}
-                    className="cursor-pointer"
-                    onClick={() => setTags(tags.filter((x) => x !== t))}
-                  />
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
 
         {/* Save */}
         <div className="flex gap-4 mt-4">

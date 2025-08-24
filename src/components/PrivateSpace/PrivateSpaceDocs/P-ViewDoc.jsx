@@ -338,6 +338,18 @@ export default function PrivateViewDoc() {
         {doc?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{doc.title}</h2>}
         <h2 className="text-sm mb-1 text-gray-700">Notes:</h2>
         {doc?.notes && <p className="text-sm text-gray-800 mb-4">{doc.notes}</p>}
+        {/* Tags */}
+        {doc?.tags?.length > 0 && (
+          <div className="mb-4 text-sm text-gray-700">
+            Tags:{" "}
+            {doc.tags.map((tag, i) => (
+              <React.Fragment key={tag}>
+                <span className="bg-yellow-50 px-1 rounded">{tag}</span>
+                {i < doc.tags.length - 1 && ", "}
+              </React.Fragment>
+            ))}
+          </div>
+        )}
 
         {/* Decrypted private note */}
         {entered && decryptedNote && (
@@ -393,18 +405,6 @@ export default function PrivateViewDoc() {
           <p className="text-sm text-gray-500">🔐 Decrypting document...</p>
         ) : (
           <>
-            {/* Tags */}
-            {doc?.tags?.length > 0 && (
-              <div className="mb-4 text-sm text-gray-700">
-                Tags:{" "}
-                {doc.tags.map((tag, i) => (
-                  <React.Fragment key={tag}>
-                    <span className="bg-yellow-50 px-1 rounded">{tag}</span>
-                    {i < doc.tags.length - 1 && ", "}
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
 
             {/* Actions */}
             <div className="flex gap-4 text-sm mb-4">

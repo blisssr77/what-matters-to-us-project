@@ -245,7 +245,6 @@ export default function WorkspaceViewDoc() {
     }
   }, [entered, doc, vaultCode]);
 
-
   // Handle delete confirmation
   const handleDeleteDoc = async () => {
     setShowDeleteConfirm(false);

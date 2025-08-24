@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
 import { decryptText, encryptText } from "../../../lib/encryption";
@@ -89,6 +89,12 @@ export default function WorkspaceEditNote() {
         fetchNote();
         fetchTags();
     }, [id]);
+
+    // Ensure selected tags are visible even if legacy/user-only
+    const tagOptions = useMemo(
+        () => Array.from(new Set([...(availableTags || []), ...(tags || [])])),
+        [availableTags, tags]
+    );
 
     // Handle decryption
     const handleDecrypt = async (codeParam = vaultCode) => {
@@ -292,6 +298,38 @@ export default function WorkspaceEditNote() {
                     className="w-full p-2 border rounded mb-3 text-gray-800 text-sm bg-gray-50"
                     placeholder="Title"
                 />
+
+                {/* Public / Private toggle */}
+                <div className="mb-3 text-sm">
+                    <label className="mr-4 text-gray-800">Note Type:</label>
+                    <label className="mr-4 text-gray-800">
+                        <input
+                        type="radio"
+                        name="privacy"
+                        value="vaulted"
+                        checked={isVaulted}
+                        onChange={() => {
+                            setIsVaulted(true);
+                            setHasUnsavedChanges(true);
+                        }}
+                        />{" "}
+                        Vaulted (Encrypted)
+                    </label>
+                    <label className="text-gray-800">
+                        <input
+                        type="radio"
+                        name="privacy"
+                        value="public"
+                        checked={!isVaulted}
+                        onChange={() => {
+                            setIsVaulted(false);
+                            setHasUnsavedChanges(true);
+                        }}
+                        />{" "}
+                        Public
+                    </label>
+                </div>
+
                 {/* Public Notes */}
                 <div>
                     <label className="text-sm font-bold text-gray-800 mb-1 block">Edit public note:</label>
@@ -309,73 +347,40 @@ export default function WorkspaceEditNote() {
 
                 {/* Tag Input Section */}
                 <div className="mb-4">
-                    <label className="text-sm font-bold text-gray-800 mt-1 mb-1 block">Edit tags:</label>
-                    <div className="relative flex items-center gap-2 mb-1 text-sm">
-                        <Search className="absolute left-3 text-gray-400" size={16} />
+                    <label className="block text-sm mb-1 text-gray-800">Tags:</label>
+                    <div className="flex gap-2">
                         <input
-                            type="text"
-                            value={newTag}
-                            onChange={(e) => {
-                                setNewTag(e.target.value);
-                                setHasUnsavedChanges(true);
-                            }}
-                            placeholder="Search existing tags or create new"
-                            className="w-full pl-8 border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400"
+                        value={newTag}
+                        onChange={(e) => setNewTag(e.target.value)}
+                        className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
+                        placeholder="Add a tag"
                         />
-                        <button
+                        <button onClick={handleTagAdd} className="btn-secondary">Add</button>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        {tagOptions.map((t) => {
+                        const selected = tags.includes(t);
+                        return (
+                            <button
+                            key={t}
                             type="button"
-                            onClick={handleTagAdd}
-                            className="btn-secondary"
-                        >
-                            Create
-                        </button>
-                    </div>
-
-                    {/* Display available tags */}
-                    <div className="max-h-40 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50">
-                        {availableTags
-                    .filter(
-                        (tag) =>
-                            (!newTag || tag.toLowerCase().includes(newTag.toLowerCase())) &&
-                            !tags.includes(tag)
-                        )
-                        .map((tag) => (
-                            <div key={tag} className="flex items-center gap-2 py-1">
-                            <input
-                                type="checkbox"
-                                checked={tags.includes(tag)}
-                                onChange={() => {
-                                    setTags((prev) =>
-                                        prev.includes(tag)
-                                        ? prev.filter((t) => t !== tag)
-                                        : [...prev, tag]
-                                    )
-                                    setHasUnsavedChanges(true);
-                                }}
-                            />
-                            <span className="text-xs text-gray-700">{tag}</span>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Display selected tags */}
-                    {tags.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-3">
-                        {tags.map((tag) => (
-                            <span
-                            key={tag}
-                            className="bg-yellow-50 text-gray-800 text-xs px-3 py-1 rounded-full font-medium flex items-center gap-1"
+                            onClick={() =>
+                                setTags((prev) =>
+                                selected ? prev.filter((x) => x !== t) : [...prev, t]
+                                )
+                            }
+                            className={`px-2 py-1 rounded text-xs border ${
+                                selected
+                                ? "bg-purple-100 border-purple-400 text-purple-700"
+                                : "bg-white border-gray-300 text-gray-700"
+                            }`}
                             >
-                            {tag}
-                            <X
-                                size={12}
-                                className="cursor-pointer"
-                                onClick={() => setTags(tags.filter((t) => t !== tag))}
-                            />
-                            </span>
-                        ))}
-                        </div>
-                    )}
+                            {t}
+                            </button>
+                        );
+                        })}
+                    </div>
                 </div>
 
                 {/* Vaulted Note Section */}

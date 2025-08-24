@@ -230,7 +230,7 @@ export default function PrivateDocList() {
         </div>
 
         {/* Title */}
-        <h2 className="text-xl font-bold text-gray-900 mb-4">{spaceName}</h2>
+        {/* <h2 className="text-xl font-bold text-gray-900 mb-4">{spaceName}</h2> */}
 
         {/* Search + Tag */}
         <div className="flex flex-wrap md:flex-nowrap justify-between items-start gap-4 mb-6">
@@ -416,20 +416,21 @@ export default function PrivateDocList() {
         loading={loading}
         errorMsg={errorMsg}
         successMsg={successMsg}
+        onRenamed={() => fetchSpaces()}
         handleRename={async () => {
           await handleRenameSpace();
           // after success you can refetch tabs and close:
-          // await fetchSpaces();
-          // setShowPrivateSettings(false);
+          await fetchSpaces();
+          setShowPrivateSettings(false);
         }}
         onVerifyVaultCode={verifyUserPrivateVaultCode}
         onDelete={async () => {
           const ok = await handleDeleteSpace();
           if (ok) {
             // Update UI: refetch spaces, switch selection, close modal, navigate
-            // await fetchSpaces();
-            // setShowPrivateSettings(false);
-            // navigate("/privatespace/vaults");
+            await fetchSpaces();
+            setShowPrivateSettings(false);
+            navigate("/privatespace/vaults");
           }
         }}
       />

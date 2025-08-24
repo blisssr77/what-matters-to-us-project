@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 import { Loader2, X, Search } from "lucide-react";
@@ -31,8 +31,8 @@ export default function PrivateSpaceUploadDoc() {
   const [newTag, setNewTag] = useState("");
 
   // Use the STORE for the active space
-  const activePrivateSpaceId = usePrivateSpaceStore((s) => s.activeSpaceId);
-  const setActivePrivateSpaceId = usePrivateSpaceStore((s) => s.setActiveSpaceId);
+  const activeSpaceId = usePrivateSpaceStore((s) => s.activeSpaceId);
+  const setactiveSpaceId = usePrivateSpaceStore((s) => s.setActiveSpaceId);
   const [psName, setPsName] = useState("");
 
   // Allowed MIME types (same as workspace version)
@@ -53,7 +53,7 @@ export default function PrivateSpaceUploadDoc() {
     // Pick the first space if none selected in store
   useEffect(() => {
     (async () => {
-      if (activePrivateSpaceId) return;
+      if (activeSpaceId) return;
 
       const { data: { user } = {} } = await supabase.auth.getUser();
       const userId = user?.id;
@@ -72,31 +72,31 @@ export default function PrivateSpaceUploadDoc() {
         setPsName(data[0].name || "");
       }
     })();
-  }, [activePrivateSpaceId, setActivePrivateSpaceId]);
+  }, [activeSpaceId, setactiveSpaceId]);
 
   // Keep psName in sync (optional)
   useEffect(() => {
-    if (!activePrivateSpaceId) { setPsName(""); return; }
+    if (!activeSpaceId) { setPsName(""); return; }
     (async () => {
       const { data, error } = await supabase
         .from("private_spaces")
         .select("name")
-        .eq("id", activePrivateSpaceId)
+        .eq("id", activeSpaceId)
         .maybeSingle();
       setPsName(error ? "" : (data?.name || ""));
     })();
-  }, [activePrivateSpaceId]);
+  }, [activeSpaceId]);
 
-  // 🔎 Log current space for debugging
+  // Log current space for debugging
   useEffect(() => {
-    console.log("Private Upload — activePrivateSpaceId:", activePrivateSpaceId, "name:", psName);
-  }, [activePrivateSpaceId, psName]);
+    console.log("Private Upload — activeSpaceId:", activeSpaceId, "name:", psName);
+  }, [activeSpaceId, psName]);
 
-  // 🚩 Canonical tag fetch for Private pages
+  // Canonical tag fetch for Private pages
   // Show union: (a) user-level global private tags (NULL private_space_id) + (b) space-scoped tags
   useEffect(() => {
     (async () => {
-      if (!activePrivateSpaceId) return;
+      if (!activeSpaceId) return;
 
       const { data: { user } = {} } = await supabase.auth.getUser();
       const userId = user?.id;
@@ -107,7 +107,7 @@ export default function PrivateSpaceUploadDoc() {
         .select("name, private_space_id")
         .eq("user_id", userId)
         .eq("section", "Private")
-        .or(`private_space_id.is.null,private_space_id.eq.${activePrivateSpaceId}`);
+        .or(`private_space_id.is.null,private_space_id.eq.${activeSpaceId}`);
 
       if (error) {
         console.error("❌ Failed to fetch private tags:", error);
@@ -118,7 +118,13 @@ export default function PrivateSpaceUploadDoc() {
       const names = [...new Set((data || []).map((t) => t.name))];
       setAvailableTags(names);
     })();
-  }, [activePrivateSpaceId]);
+  }, [activeSpaceId]);
+
+  // Ensure selected tags are visible even if legacy/user-only
+  const tagOptions = useMemo(
+    () => Array.from(new Set([...(availableTags || []), ...(tags || [])])),
+    [availableTags, tags]
+  );
 
   // Add tag (insert if missing) — recommend scoping to this space going forward
   const handleTagAdd = useCallback(async () => {
@@ -130,7 +136,7 @@ export default function PrivateSpaceUploadDoc() {
       console.error("Unable to get user.");
       return;
     }
-    if (!activePrivateSpaceId) {
+    if (!activeSpaceId) {
       setErrorMsg("No active private space selected.");
       return;
     }
@@ -141,14 +147,14 @@ export default function PrivateSpaceUploadDoc() {
         name: t,
         section: "Private",
         user_id: user.id,
-        private_space_id: activePrivateSpaceId, // 🔹 space-scoped
+        private_space_id: activeSpaceId, // 🔹 space-scoped
       });
       if (!error) setAvailableTags((prev) => [...prev, t]);
     }
 
     if (!tags.includes(t)) setTags((prev) => [...prev, t]);
     setNewTag("");
-  }, [newTag, availableTags, tags, activePrivateSpaceId]);
+  }, [newTag, availableTags, tags, activeSpaceId]);
 
   // File DnD
   const handleFileDrop = (e) => {
@@ -157,38 +163,6 @@ export default function PrivateSpaceUploadDoc() {
     const droppedFiles = Array.from(e.dataTransfer.files);
     setFiles(droppedFiles);
   };
-
-  // Add tag (insert if missing)
-  // const handleTagAdd = async () => {
-  //   if (!newTag.trim()) return;
-
-  //   const {
-  //     data: { user },
-  //     error: userError,
-  //   } = await supabase.auth.getUser();
-  //   if (userError || !user?.id) {
-  //     console.error("Unable to get user.");
-  //     return;
-  //   }
-
-  //   if (!activePrivateSpaceId) {
-  //     setErrorMsg("No active private space selected.");
-  //     return;
-  //   }
-
-  //   if (!availableTags.includes(newTag)) {
-  //     await supabase.from("vault_tags").insert({
-  //       name: newTag,
-  //       section: "Private",
-  //       user_id: user.id,
-  //       private_space_id: activePrivateSpaceId,
-  //     });
-  //     setAvailableTags((prev) => [...prev, newTag]);
-  //   }
-
-  //   if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
-  //   setNewTag("");
-  // };
 
   // Auto clear messages
   useEffect(() => {
@@ -259,7 +233,7 @@ export default function PrivateSpaceUploadDoc() {
       }
     }
 
-    if (!activePrivateSpaceId) {
+    if (!activeSpaceId) {
       setUploading(false);
       setErrorMsg("Private space not selected. Please refresh or select a private space.");
       return;
@@ -272,8 +246,8 @@ export default function PrivateSpaceUploadDoc() {
     for (const file of files) {
       try {
         const sanitizedName = file.name.replace(/[^\w.-]/g, "_");
-        const filePath = `${activePrivateSpaceId}/${Date.now()}-${sanitizedName}`;
-        console.log('upload path:', filePath, 'spaceId:', activePrivateSpaceId);
+        const filePath = `${activeSpaceId}/${Date.now()}-${sanitizedName}`;
+        console.log('upload path:', filePath, 'spaceId:', activeSpaceId);
 
         let ivHex = "";
         let uploadError, urlData;
@@ -288,7 +262,7 @@ export default function PrivateSpaceUploadDoc() {
             .upload(filePath, encryptedBlob, {
               contentType: file.type,
               upsert: false,
-              metadata: { user_id: userId, private_space_id: activePrivateSpaceId },
+              metadata: { user_id: userId, private_space_id: activeSpaceId },
             }));
 
           ({ data: urlData } = supabase.storage.from("private.vaulted").getPublicUrl(filePath));
@@ -298,7 +272,7 @@ export default function PrivateSpaceUploadDoc() {
             .upload(filePath, file, {
               contentType: file.type,
               upsert: false,
-              metadata: { user_id: userId, private_space_id: activePrivateSpaceId },
+              metadata: { user_id: userId, private_space_id: activeSpaceId },
             }));
 
           ({ data: urlData } = supabase.storage.from("private.public").getPublicUrl(filePath));
@@ -316,7 +290,7 @@ export default function PrivateSpaceUploadDoc() {
           type: file.type,
           path: filePath,
           user_id: userId,
-          private_space_id: activePrivateSpaceId,
+          private_space_id: activeSpaceId,
         });
 
         uploadedCount++;
@@ -355,7 +329,7 @@ export default function PrivateSpaceUploadDoc() {
           name: tag,
           section: "Private",
           user_id: userId,
-          private_space_id: activePrivateSpaceId,
+          private_space_id: activeSpaceId,
         });
 
         if (!error) {
@@ -377,7 +351,7 @@ export default function PrivateSpaceUploadDoc() {
       encrypted_note: encryptedNote,
       note_iv: noteIv,
       created_at: new Date().toISOString(),
-      private_space_id: activePrivateSpaceId,
+      private_space_id: activeSpaceId,
       created_by: userId,
       is_vaulted: isVaulted,
     });
@@ -500,66 +474,41 @@ export default function PrivateSpaceUploadDoc() {
           </div>
 
           {/* Tag Input Section */}
-          <div>
-            <label className="text-sm font-medium text-gray-800 mb-1 block">Add tags:</label>
-
-            {/* Search + Create */}
-            <div className="relative flex items-center gap-2 mb-2">
-              <Search className="absolute left-3 text-gray-400" size={16} />
+          <div className="mb-4">
+            <label className="block text-sm mb-1 text-gray-800">Tags:</label>
+            <div className="flex gap-2">
               <input
-                type="text"
                 value={newTag}
-                onChange={(e) => {
-                  setNewTag(e.target.value);
-                  setHasUnsavedChanges(true);
-                }}
-                placeholder="Search existing tags or create new"
-                className="w-full pl-8 border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400  text-sm"
+                onChange={(e) => setNewTag(e.target.value)}
+                className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
+                placeholder="Add a tag"
               />
-              <button type="button" onClick={handleTagAdd} className="btn-secondary text-sm px-3 py-1">
-                Create
-              </button>
+              <button onClick={handleTagAdd} className="btn-secondary">Add</button>
             </div>
 
-            {/* Filtered Tag Suggestions (scrollable) */}
-            <div className="max-h-40 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50">
-              {availableTags
-                .filter((tag) => tag.toLowerCase().includes(newTag.toLowerCase()) && !tags.includes(tag))
-                .map((tag) => (
-                  <div key={tag} className="flex items-center gap-2 py-1">
-                    <input
-                      type="checkbox"
-                      checked={tags.includes(tag)}
-                      onChange={() => {
-                        setHasUnsavedChanges(true);
-                        setTags((prev) =>
-                          prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-                        );
-                      }}
-                    />
-                    <span className="text-xs text-gray-700">{tag}</span>
-                  </div>
-                ))}
-            </div>
-
-            {/* Selected Tags */}
-            {tags.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-3">
-                {tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="bg-yellow-50 text-gray-800 text-sm px-3 py-1 rounded-full flex items-center gap-1"
+            <div className="mt-2 flex flex-wrap gap-2">
+              {tagOptions.map((t) => {
+                const selected = tags.includes(t);
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() =>
+                      setTags((prev) =>
+                        selected ? prev.filter((x) => x !== t) : [...prev, t]
+                      )
+                    }
+                    className={`px-2 py-1 rounded text-xs border ${
+                      selected
+                        ? "bg-purple-100 border-purple-400 text-purple-700"
+                        : "bg-white border-gray-300 text-gray-700"
+                    }`}
                   >
-                    {tag}
-                    <X
-                      size={12}
-                      className="cursor-pointer"
-                      onClick={() => setTags(tags.filter((t) => t !== tag))}
-                    />
-                  </span>
-                ))}
-              </div>
-            )}
+                    {t}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Notes */}

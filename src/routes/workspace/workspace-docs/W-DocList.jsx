@@ -322,7 +322,7 @@ export default function WorkspaceVaultList() {
         </div>
 
         {/* Title */}
-        <h2 className="text-xl font-bold text-gray-900 mb-4">{workspaceName}</h2>
+        {/* <h2 className="text-xl font-bold text-gray-900 mb-4">{workspaceName}</h2> */}
 
         {/* Search and Tag Filters */}
         <div className="flex flex-wrap md:flex-nowrap justify-between items-start gap-4 mb-6">

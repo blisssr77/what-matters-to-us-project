@@ -185,6 +185,18 @@ export default function PrivateViewNote() {
             {noteData?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{noteData.title}</h2>}
             <h2 className="text-sm mb-1 text-gray-700">Notes:</h2>
             {noteData?.notes && <p className="text-sm text-gray-800 mb-4">{noteData.notes}</p>}
+            {/* Tags */}
+            {noteData?.tags?.length > 0 && (
+                <div className="mb-3 text-sm text-gray-900 font-medium">
+                    Tags:{" "}
+                    {noteData.tags.map((tag, index) => (
+                    <React.Fragment key={tag}>
+                        <span className="bg-yellow-50 px-1 rounded">{tag}</span>
+                        {index < noteData.tags.length - 1 && ", "}
+                    </React.Fragment>
+                    ))}
+                </div>
+            )}
 
             {/* If not vaulted, show content without requiring code */}
             {!isVaulted ? (
@@ -264,19 +276,6 @@ export default function PrivateViewNote() {
                 </>
                 ) : (
                 <>
-                    {/* Tags */}
-                    {noteData?.tags?.length > 0 && (
-                        <div className="mb-3 text-sm text-gray-900 font-medium">
-                            Tags:{" "}
-                            {noteData.tags.map((tag, index) => (
-                            <React.Fragment key={tag}>
-                                <span className="bg-yellow-50 px-1 rounded">{tag}</span>
-                                {index < noteData.tags.length - 1 && ", "}
-                            </React.Fragment>
-                            ))}
-                        </div>
-                    )}
-
                     <div className="mb-1 text-xs text-gray-400">
                         Created: {dayjs(noteData.created_at).format("MMM D, YYYY h:mm A")}
                     </div>
