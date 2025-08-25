@@ -464,18 +464,27 @@ export default function PrivateDocList() {
         onClose={() => setShowPrivateSettings(false)}
         spaceName={spaceName}
         setSpaceName={setSpaceName}
-        loading={loading}
-        errorMsg={errorMsg}
-        successMsg={successMsg}
-        onRenamed={() => fetchSpaces()}
-        handleRename={async () => {
-          await handleRenameSpace();
-          // after success you can refetch tabs and close:
-          await fetchSpaces();
-          setShowPrivateSettings(false);
-        }}
         onVerifyVaultCode={verifyUserPrivateVaultCode}
-        onDelete={handleConfirmDeleteSpace}
+        onRenamed={(spaceId, newName) => {
+          // keep local list & header in sync
+          setSpaces(prev => prev.map(s => (s.id === spaceId ? { ...s, name: newName } : s)));
+          if (spaceId === activeSpaceId) setSpaceName(newName);
+          // optional: pull latest from DB
+          fetchSpaces();
+        }}
+        onDeleted={(spaceId) => {
+          // remove locally + pick next active
+          setSpaces(prev => {
+            const remaining = prev.filter(s => s.id !== spaceId);
+            const nextId = remaining[0]?.id ?? null;
+            setActiveSpaceId(nextId);
+            setAllDocuments([]);
+            setAllTags([]);
+            return remaining;
+          });
+          // optional: pull latest from DB
+          fetchSpaces();
+        }}
       />
 
       {/* Create Private Space Modal */}
@@ -483,8 +492,10 @@ export default function PrivateDocList() {
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onCreated={(ps) => {
-          setSpaces((prev) => [...prev, { id: ps.id, name: ps.name, sort_order: prev.length }]);
-          setActiveSpaceId(ps.id);
+          // No manual sort_order setting — trigger does it.
+          // Just refetch and activate the new space.
+          fetchSpaces().then(() => setActiveSpaceId(ps.id));
+          setShowCreateModal(false);
         }}
       />
     </Layout>

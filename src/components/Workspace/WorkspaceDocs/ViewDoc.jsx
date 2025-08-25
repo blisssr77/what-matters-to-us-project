@@ -468,9 +468,9 @@ export default function WorkspaceViewDoc() {
             <>
               {/* Action buttons */}
               <div className="flex gap-4 text-sm mb-4">
-                <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
+                {/* <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
                   <Copy size={16} /> Copy
-                </button>
+                </button> */}
                 <button onClick={() => navigate(`/workspace/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
                   <Edit2 size={16} /> Edit
                 </button>
@@ -503,6 +503,16 @@ export default function WorkspaceViewDoc() {
         ) : (
           // 🌐 Public document
           <>
+            {/* Public controls */}
+            <div className="flex gap-4 text-sm mb-4">
+              <button onClick={() => navigate(`/workspace/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
+                <Edit2 size={16} /> Edit
+              </button>
+              <button onClick={() => setShowConfirmPopup(true)} className="flex items-center gap-1 text-red-600 hover:underline">
+                <Trash2 size={16} /> Delete
+              </button>
+            </div>
+
             {renderFileViewer()}
 
             {/* Tags */}
@@ -517,16 +527,10 @@ export default function WorkspaceViewDoc() {
                 ))}
               </div>
             )} */}
-
-            {/* Public controls */}
-            <div className="flex gap-4 text-sm mb-4">
-              <button onClick={() => navigate(`/workspace/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
-                <Edit2 size={16} /> Edit
-              </button>
-              <button onClick={() => setShowConfirmPopup(true)} className="flex items-center gap-1 text-red-600 hover:underline">
-                <Trash2 size={16} /> Delete
-              </button>
+            <div className="mt-4 text-xs text-gray-400">
+              Last viewed just now · Private log only. Team audit history coming soon.
             </div>
+            
           </>
         )}
       </div>

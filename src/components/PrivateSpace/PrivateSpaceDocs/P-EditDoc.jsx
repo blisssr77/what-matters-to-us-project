@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import Layout from "@/components/Layout/Layout";
 import { X, Search, Loader2 } from "lucide-react";
-import { encryptFile, encryptText, decryptText } from "@/lib/encryption";
+import { encryptFile, encryptText, decryptText, decryptFile } from "@/lib/encryption";
 import { UnsavedChangesModal } from "@/components/common/UnsavedChangesModal";
 import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
 
@@ -34,6 +34,7 @@ export default function PrivateEditDoc() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
   const [isVaulted, setIsVaulted] = useState(false);
+  const [originalIsVaulted, setOriginalIsVaulted] = useState(false);
 
   // doc belongs-to space id (from DB)
   const [docSpaceId, setDocSpaceId] = useState(null);
@@ -95,6 +96,7 @@ export default function PrivateEditDoc() {
       setNotes(data.notes || "");
       setExistingFiles(Array.isArray(data.file_metas) ? data.file_metas : []);
       setIsVaulted(!!data.is_vaulted);
+      setOriginalIsVaulted(!!data.is_vaulted);
       setDocSpaceId(data.private_space_id || null);
 
       // If the store has no active space yet, align it with the doc’s space
@@ -219,38 +221,64 @@ export default function PrivateEditDoc() {
     });
   };
 
-  // Mark existing file for deletion (store path if available, else URL)
+  // Helper: pick the best deletion token (prefer storage path; else derive from URL)
+  const tokenForMeta = (m) => {
+    if (!m) return null;
+    if (m.path) return m.path; // best: already a storage path
+
+    if (m.url) {
+      // infer bucket from presence of iv (vaulted) vs public
+      const bucket = m.iv ? "private.vaulted" : "private.public";
+      const p = parsePathFromAnyUrl(m.url, bucket); // the helper we added earlier
+      return p || m.url; // fallback to URL if parsing fails
+    }
+    return null;
+  };
+
+  // Mark existing file for deletion (store a *path* if we can), and remove from UI list
   const handleRemoveExistingFile = (index) => {
-    const f = existingFiles[index];
-    if (!f) return;
+    const meta = existingFiles[index];
+    if (!meta) return;
 
-    const token = f.path || f.url || null;
-    if (token) setFilesToRemove((prev) => [...prev, token]);
+    const token = tokenForMeta(meta);
+    if (token) {
+      setFilesToRemove((prev) => {
+        const next = new Set(prev);
+        next.add(token);              // dedupe
+        return Array.from(next);
+      });
+    }
 
-    // remove from UI list
+    // remove from visible list
     setExistingFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Helpers: derive path from a public URL if needed
-  const parsePathFromUrl = (url) => {
+  const parsePathFromAnyUrl = (url, bucket) => {
     try {
       const u = new URL(url);
-      // works for public URLs like /storage/v1/object/public/<bucket>/<path>
-      const parts = u.pathname.split("/storage/v1/object/public/")[1];
-      if (!parts) return null;
-      const [_bucket, ...rest] = parts.split("/");
-      return rest.join("/");
+      const p = decodeURIComponent(u.pathname);
+      const pub = `/storage/v1/object/public/${bucket}/`;
+      const pri = `/storage/v1/object/${bucket}/`;
+      if (p.startsWith(pub)) return p.slice(pub.length);
+      if (p.startsWith(pri)) return p.slice(pri.length);
+      const i = p.indexOf(`/${bucket}/`);
+      return i >= 0 ? p.slice(i + bucket.length + 2) : null;
     } catch {
       return null;
     }
   };
+  const sanitizeName = (s) => (s || "file").replace(/[^\w.-]/g, "_");
 
-  // Submit update
+  // Submit update =============================================================
   const handleUpload = async (e) => {
     e.preventDefault();
     setUploading(true);
     setErrorMsg("");
     setSuccessMsg("");
+
+    // treat privacy-only flip as an update
+    const privacyChanged = originalIsVaulted !== isVaulted;
 
     const nothingToUpdate =
       files.length === 0 &&
@@ -258,7 +286,8 @@ export default function PrivateEditDoc() {
       !title &&
       !(tags?.length) &&
       !notes &&
-      (!privateNote || privateNote === "🔐 Encrypted");
+      (!privateNote || privateNote === "🔐 Encrypted") &&
+      !privacyChanged;
 
     if (nothingToUpdate) {
       setUploading(false);
@@ -273,78 +302,195 @@ export default function PrivateEditDoc() {
       return;
     }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } = {} } = await supabase.auth.getUser();
     if (!user) {
       setUploading(false);
       setErrorMsg("User not authenticated.");
       return;
     }
 
-    // If this doc is vaulted, require a correct private code to encrypt new content
-    if (isVaulted) {
-      if (!vaultCode.trim()) {
+    // transitions
+    const wasVaulted   = !!originalIsVaulted;
+    const goingPublic  = wasVaulted && !isVaulted;
+    const goingVaulted = !wasVaulted && isVaulted;
+
+    // You need the code when final is vaulted (encrypt) OR when going public (decrypt)
+    let code = String(vaultCode || sessionStorage.getItem("vaultCode") || "").trim();
+    if (isVaulted || goingPublic) {
+      if (!code) {
         setUploading(false);
-        setErrorMsg("Please enter your Vault Code to encrypt the document.");
+        setErrorMsg(
+          goingPublic
+            ? "Please enter your Vault Code to migrate files to Public."
+            : "Please enter your Vault Code to encrypt the document."
+        );
         return;
       }
-      const { data: ok, error: vErr } = await supabase.rpc("verify_user_private_code", {
-        p_code: vaultCode.trim(),
-      });
-      if (vErr) {
+      const { data: ok, error: vErr } = await supabase.rpc("verify_user_private_code", { p_code: code });
+      if (vErr || !ok) {
         setUploading(false);
-        setErrorMsg(vErr.message || "Failed to verify Vault Code.");
+        setErrorMsg(vErr?.message || "Failed to verify Vault Code.");
         return;
       }
-      if (!ok) {
-        setUploading(false);
-        setErrorMsg("Incorrect Vault Code.");
-        return;
-      }
+      sessionStorage.setItem("vaultCode", code);
+      if (!vaultCode) setVaultCode(code);
     }
 
-    // Delete marked files from the correct bucket
-    const bucketForExisting = isVaulted ? "private.vaulted" : "private.public";
-    const filePathsToDelete = [];
+    // -------- Delete explicitly removed files (build per-bucket lists) --------
+    const byBucketToDelete = { "private.public": [], "private.vaulted": [] };
 
     for (const token of filesToRemove) {
-      if (!token) continue;
-      if (token.includes("/storage/v1/object/public/")) {
-        const p = parsePathFromUrl(token);
-        if (p) filePathsToDelete.push(p);
-      } else {
-        // already a path
-        filePathsToDelete.push(token);
+      const meta = existingFiles.find(
+        (f) => (f.path && f.path === token) || (f.url && f.url === token)
+      );
+      const wasEnc = !!meta?.iv || (meta?.url || "").includes("private.vaulted");
+      const bucket = wasEnc ? "private.vaulted" : "private.public";
+
+      let path = token;
+      if (typeof token === "string" && token.includes("/storage/v1/object/")) {
+        path = parsePathFromAnyUrl(token, bucket);
       }
+      if (path) byBucketToDelete[bucket].push(path);
     }
 
-    if (filePathsToDelete.length) {
-      const { error: delErr } = await supabase.storage
-        .from(bucketForExisting)
-        .remove(filePathsToDelete);
-      if (delErr) {
-        console.error("Storage deletion error:", delErr);
-        setErrorMsg("Failed to delete one or more files from storage.");
-      }
+    if (byBucketToDelete["private.public"].length) {
+      const { error } = await supabase.storage
+        .from("private.public")
+        .remove(byBucketToDelete["private.public"]);
+      if (error) console.warn("Delete public files:", error);
+    }
+    if (byBucketToDelete["private.vaulted"].length) {
+      const { error } = await supabase.storage
+        .from("private.vaulted")
+        .remove(byBucketToDelete["private.vaulted"]);
+      if (error) console.warn("Delete vaulted files:", error);
     }
 
-    // Keep remaining metas (exclude removed)
-    let updatedFileMetas = existingFiles.filter((f) => {
-      const token = f.path || f.url;
-      if (!token) return true;
-      if (token.includes("/storage/v1/object/public/")) {
-        const p = parsePathFromUrl(token);
-        return !filePathsToDelete.includes(p);
+    // Keep remaining metas (exclude the deleted ones)
+    const deletedSet = new Set(
+      [...byBucketToDelete["private.public"], ...byBucketToDelete["private.vaulted"]]
+    );
+    const normPath = (m) => {
+      if (m.path) return m.path;
+      if (m.url) {
+        const b = m.iv ? "private.vaulted" : "private.public";
+        return parsePathFromAnyUrl(m.url, b);
       }
-      return !filePathsToDelete.includes(token);
+      return null;
+    };
+    let updatedFileMetas = (existingFiles || []).filter((m) => {
+      const p = normPath(m);
+      return p ? !deletedSet.has(p) : true;
     });
 
-    // Upload any newly added files
+    // -------- Privacy migrations --------
+
+    // Vaulted ➜ Public: download (vaulted), decrypt, upload to public, then remove old
+    if (goingPublic) {
+      const migrated = [];
+      let failed = false;
+
+      for (const meta of updatedFileMetas) {
+        const isEnc = !!meta.iv || (meta.url || "").includes("private.vaulted");
+        if (!isEnc) {
+          // already public: keep, clear iv just in case
+          migrated.push({ ...meta, iv: "" });
+          continue;
+        }
+
+        const encPath = meta.path || parsePathFromAnyUrl(meta.url, "private.vaulted");
+        if (!encPath) { migrated.push(meta); failed = true; continue; }
+
+        const { data: encObj, error: dlErr } = await supabase.storage
+          .from("private.vaulted")
+          .download(encPath);
+        if (dlErr) { console.error("DL vaulted failed", dlErr, encPath); migrated.push(meta); failed = true; continue; }
+
+        let plainBlob;
+        try {
+          const encBuf = await encObj.arrayBuffer();
+          const mime = meta.type || "application/octet-stream";
+          plainBlob = await decryptFile(encBuf, meta.iv, code, mime);
+        } catch (e2) {
+          console.error("Decrypt vaulted file failed:", e2, meta);
+          migrated.push(meta); failed = true; continue;
+        }
+
+        const newPath = `${effectiveSpaceId}/${Date.now()}-${sanitizeName(meta.name)}`;
+        const { error: upErr } = await supabase.storage
+          .from("private.public")
+          .upload(newPath, plainBlob, { contentType: meta.type || "application/octet-stream", upsert: false });
+        if (upErr) { console.error("UP public failed", upErr, newPath); migrated.push(meta); failed = true; continue; }
+
+        const { data: urlData } = await supabase.storage.from("private.public").getPublicUrl(newPath);
+        migrated.push({
+          name: meta.name,
+          type: meta.type || "application/octet-stream",
+          url: urlData?.publicUrl || "",
+          path: newPath,
+          iv: "",
+        });
+
+        // remove old encrypted only after success
+        await supabase.storage.from("private.vaulted").remove([encPath]).catch(() => {});
+      }
+
+      if (failed) {
+        setUploading(false);
+        setErrorMsg("Some files could not be migrated. Nothing was changed.");
+        return;
+      }
+      updatedFileMetas = migrated;
+    }
+
+    // Public ➜ Vaulted: download (public), encrypt, upload to vaulted, then remove old
+    if (goingVaulted) {
+      const migrated = [];
+
+      for (const meta of updatedFileMetas) {
+        const alreadyEnc = !!meta.iv || (meta.url || "").includes("private.vaulted");
+        if (alreadyEnc) { migrated.push(meta); continue; }
+
+        const srcPath = meta.path || parsePathFromAnyUrl(meta.url, "private.public");
+        if (!srcPath) { console.warn("No public path", meta); continue; }
+
+        const { data: srcObj, error: dlErr } =
+          await supabase.storage.from("private.public").download(srcPath);
+        if (dlErr) { console.error("DL public→vaulted failed", dlErr, srcPath); continue; }
+
+        const buf = await srcObj.arrayBuffer();
+        const ivBytes = crypto.getRandomValues(new Uint8Array(12));
+        const { encryptedBlob, ivHex } = await encryptFile(
+          new Blob([buf], { type: meta.type || "application/octet-stream" }),
+          code,
+          ivBytes
+        );
+
+        const newPath = `${effectiveSpaceId}/${Date.now()}-${sanitizeName(meta.name)}`;
+        const { error: upErr } = await supabase.storage
+          .from("private.vaulted")
+          .upload(newPath, encryptedBlob, { contentType: meta.type || "application/octet-stream" });
+        if (upErr) { console.error("UP public→vaulted failed", upErr, meta); continue; }
+
+        migrated.push({
+          name: meta.name,
+          type: meta.type,
+          path: newPath, // vaulted keeps path
+          iv: ivHex,     // vaulted keeps iv
+          url: null,
+        });
+
+        await supabase.storage.from("private.public").remove([srcPath]).catch(() => {});
+      }
+
+      updatedFileMetas = migrated;
+    }
+
+    // -------- Upload any *new* files --------
     let noteIv = "";
     for (const file of files) {
-      const sanitizedName = file.name.replace(/[^\w.-]/g, "_");
-      const filePath = `${activeSpaceId}/${Date.now()}-${sanitizedName}`;
+      const sanitized = sanitizeName(file.name);
+      const filePath = `${effectiveSpaceId}/${Date.now()}-${sanitized}`;
       const bucket = isVaulted ? "private.vaulted" : "private.public";
 
       let ivHex = "";
@@ -352,7 +498,7 @@ export default function PrivateEditDoc() {
 
       if (isVaulted) {
         const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
-        const { encryptedBlob, ivHex: hex } = await encryptFile(file, vaultCode.trim(), ivBytes);
+        const { encryptedBlob, ivHex: hex } = await encryptFile(file, code, ivBytes);
         ivHex = hex;
 
         ({ error: uploadErr } = await supabase.storage
@@ -361,39 +507,47 @@ export default function PrivateEditDoc() {
             contentType: file.type,
             upsert: false,
           }));
+        if (!uploadErr) {
+          updatedFileMetas.push({
+            name: file.name,
+            type: file.type,
+            path: filePath,
+            iv: ivHex,
+            url: null,
+            user_id: user.id,
+            private_space_id: effectiveSpaceId,
+          });
+        }
       } else {
         ({ error: uploadErr } = await supabase.storage
           .from(bucket)
           .upload(filePath, file, {
             contentType: file.type,
             upsert: false,
-            metadata: { user_id: user.id, private_space_id: activeSpaceId },
+            metadata: { user_id: user.id, private_space_id: effectiveSpaceId },
           }));
-      }
-
-      if (!uploadErr) {
-        const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
-        if (urlData?.publicUrl) {
+        if (!uploadErr) {
+          const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
           updatedFileMetas.push({
             name: file.name,
-            url: urlData.publicUrl,
-            iv: isVaulted ? ivHex : "",
             type: file.type,
             path: filePath,
+            url: urlData?.publicUrl || "",
+            iv: "",
             user_id: user.id,
-            private_space_id: activeSpaceId,
+            private_space_id: effectiveSpaceId,
           });
         }
-      } else {
-        console.error("Upload failed:", uploadErr);
       }
+
+      if (uploadErr) console.error("Upload failed:", uploadErr);
     }
 
-    // Encrypt private note if changed (only when vaulted)
+    // -------- Encrypt private note if needed --------
     let encryptedNote = "";
-    if (isVaulted && privateNote && privateNote !== "🔐 Encrypted") {
+    if (!goingPublic && isVaulted && privateNote && privateNote !== "🔐 Encrypted") {
       try {
-        const res = await encryptText(privateNote, vaultCode.trim());
+        const res = await encryptText(privateNote, code);
         encryptedNote = res.encryptedData;
         noteIv = res.iv;
       } catch (err) {
@@ -404,16 +558,18 @@ export default function PrivateEditDoc() {
       }
     }
 
-    // Update DB
+    // -------- Final DB update --------
+    const safeMetas = Array.isArray(updatedFileMetas) ? updatedFileMetas : [];
     const { error: updateError } = await supabase
       .from("private_vault_items")
       .update({
         title,
         tags,
         notes,
-        encrypted_note: isVaulted ? (encryptedNote || undefined) : null,
-        note_iv: isVaulted ? (noteIv || (privateNote ? undefined : null)) : null,
-        file_metas: updatedFileMetas,
+        is_vaulted: isVaulted,
+        encrypted_note: goingPublic ? null : (isVaulted ? (encryptedNote || undefined) : null),
+        note_iv: goingPublic ? null : (isVaulted ? (noteIv || undefined) : null),
+        file_metas: safeMetas,
       })
       .eq("id", id);
 
@@ -555,12 +711,12 @@ export default function PrivateEditDoc() {
           {/* New Files */}
           {files.length > 0 && (
             <div>
-              <h4 className="text-sm font-medium text-blue-800 mb-1">Newly selected files:</h4>
+              <h4 className="text-sm font-medium text-gray-800 mb-1">Newly selected files:</h4>
               <ul className="space-y-1">
                 {files.map((file, index) => (
                   <li
                     key={index}
-                    className="flex items-center justify-between px-3 py-2 border border-gray-200 rounded text-sm text-blue-600 bg-gray-50"
+                    className="flex items-center justify-between px-3 py-2 border border-gray-200 rounded text-sm text-blue-800 bg-gray-50"
                   >
                     {file.name}
                     <button
@@ -578,6 +734,38 @@ export default function PrivateEditDoc() {
               </ul>
             </div>
           )}
+
+          {/* Public / Private toggle */}
+          <div className="mb-3 text-sm">
+              <label className="mr-4 text-gray-800">Document Type:</label>
+              <label className="mr-4 text-gray-800">
+                  <input
+                  type="radio"
+                  name="privacy"
+                  value="vaulted"
+                  checked={isVaulted}
+                  onChange={() => {
+                      setIsVaulted(true);
+                      setHasUnsavedChanges(true);
+                  }}
+                  />{" "}
+                  Vaulted (Encrypted)
+              </label>
+              <label className="text-gray-800">
+                  <input
+                  type="radio"
+                  name="privacy"
+                  value="public"
+                  checked={!isVaulted}
+                  onChange={() => {
+                      setIsVaulted(false);
+                      setHasUnsavedChanges(true);
+                  }}
+                  />{" "}
+                  Public
+              </label>
+              <h2 className="text-xs text-purple-500 mt-1">Switching to Public will permanently delete the Private note.</h2>
+          </div>
 
           {/* Title */}
           <div>
@@ -609,10 +797,16 @@ export default function PrivateEditDoc() {
               <input
                 value={newTag}
                 onChange={(e) => setNewTag(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault(); 
+                    handleTagAdd();
+                  }
+                }}
                 className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
                 placeholder="Add a tag"
               />
-              <button onClick={handleTagAdd} className="btn-secondary">Add</button>
+              <button type="button" onClick={handleTagAdd} className="btn-secondary">Add</button>
             </div>
 
             <div className="mt-2 flex flex-wrap gap-2">
@@ -644,7 +838,7 @@ export default function PrivateEditDoc() {
           {isVaulted && (
             <>
               <div>
-                <p className="text-sm text-red-400 mb-1">
+                <p className="text-sm text-red-500 mb-1">
                   🔐 Private note will be encrypted using your Private vault code:
                 </p>
                 <textarea

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
 import Layout from "../../Layout/Layout";
 import { X, Search, Loader2 } from "lucide-react";
-import { encryptFile, encryptText, decryptText } from "../../../lib/encryption";
+import { encryptFile, encryptText, decryptText, decryptFile } from "../../../lib/encryption";
 import bcrypt from "bcryptjs";
 import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
@@ -31,6 +31,7 @@ export default function WorkspaceEditDoc() {
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
     const [isVaulted, setIsVaulted] = useState(false);
+    const [initialIsVaulted, setInitialIsVaulted] = useState(null);
 
     const { activeWorkspaceId } = useWorkspaceStore();
 
@@ -79,21 +80,22 @@ export default function WorkspaceEditDoc() {
             setNotes(data.notes || []);
             setExistingFiles(data.file_metas || []);
             setIsVaulted(data.is_vaulted || false);
+            setInitialIsVaulted(data.is_vaulted || false);
 
 
             const storedVaultCode = sessionStorage.getItem("vaultCode");
 
             if (data.encrypted_note && data.note_iv && storedVaultCode) {
                 try {
-                const decrypted = await decryptText(
-                    data.encrypted_note,
-                    data.note_iv,
-                    storedVaultCode
-                );
-                setPrivateNote(decrypted);
+                    const decrypted = await decryptText(
+                        data.encrypted_note,
+                        data.note_iv,
+                        storedVaultCode
+                    );
+                    setPrivateNote(decrypted);
                 } catch (err) {
-                console.error("Failed to decrypt note:", err);
-                setPrivateNote("🔐 Encrypted");
+                    console.error("Failed to decrypt note:", err);
+                    setPrivateNote("🔐 Encrypted");
                 }
             } else {
                 setPrivateNote(""); // no encrypted note
@@ -110,7 +112,7 @@ export default function WorkspaceEditDoc() {
 
         fetchDoc();
         fetchTags();
-    }, [id]);
+    }, [id, activeWorkspaceId]);
 
     // Ensure selected tags are visible even if legacy/user-only
     const tagOptions = useMemo(
@@ -158,27 +160,47 @@ export default function WorkspaceEditDoc() {
         setNewTag("");
     };
 
+    // Parse storage path from any URL ------- HELPER function
+    const parsePathFromAnyUrl = (url, bucket) => {
+        try {
+            const u = new URL(url);
+            const p = decodeURIComponent(u.pathname);
+            const pub = `/storage/v1/object/public/${bucket}/`;
+            const pri = `/storage/v1/object/${bucket}/`; // signed URL style
+            if (p.startsWith(pub)) return p.slice(pub.length);
+            if (p.startsWith(pri)) return p.slice(pri.length);
+            const i = p.indexOf(`/${bucket}/`);
+            return i >= 0 ? p.slice(i + bucket.length + 2) : null;
+        } catch {
+            return null;
+        }
+    };
+    const sanitizeName = (s) => (s || "file").replace(/[^\w.-]/g, "_");
 
     // Remove existing file from the list
     const handleRemoveExistingFile = (index) => {
-        const fileToRemove = existingFiles[index];
-        if (!fileToRemove?.url) return;
-
-        setFilesToRemove((prev) => [...prev, fileToRemove.url]);
-
-        // Optionally: remove it from visible UI
-        const updatedFiles = existingFiles.filter((_, i) => i !== index);
-        setExistingFiles(updatedFiles);
+        const meta = existingFiles[index];
+        if (!meta) return;
+        const token = meta.path || meta.url; // << path first, then url
+        if (token) setFilesToRemove((prev) => [...prev, token]);
+        setExistingFiles((prev) => prev.filter((_, i) => i !== index));
     };
 
-    // Handle file upload and document update
+    // Handle file upload and document update =============================================================
     const handleUpload = async (e) => {
         e.preventDefault();
         setUploading(true);
         setErrorMsg("");
         setSuccessMsg("");
 
-        if (!files.length && !privateNote && !title && !tags.length && !notes && filesToRemove.length === 0) {
+        if (
+            !files.length &&
+            !privateNote &&
+            !title &&
+            !tags.length &&
+            !notes &&
+            filesToRemove.length === 0
+        ) {
             setUploading(false);
             setErrorMsg("⚠️ Nothing to update.");
             return;
@@ -191,107 +213,262 @@ export default function WorkspaceEditDoc() {
             return;
         }
 
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user } = {} } = await supabase.auth.getUser();
         if (!user) {
             setUploading(false);
             setErrorMsg("User not authenticated.");
             return;
         }
-        // Check if workspace is vaulted (Model A: per-user workspace code)
-        if (isVaulted) {
-            const code = String(vaultCode || sessionStorage.getItem("vaultCode") || "").trim();
+
+        // Detect Vaulted → Public transition
+        const wasVaulted   = !!initialIsVaulted;
+        const goingPublic  = wasVaulted && !isVaulted;
+        const goingVaulted = !wasVaulted && isVaulted;
+
+        // You need a code when (a) staying vaulted (to encrypt new things) OR (b) going public (to decrypt old things)
+        const code = String(vaultCode || sessionStorage.getItem("vaultCode") || "").trim();
+        if (isVaulted || goingPublic) {
             if (!code) {
                 setUploading(false);
-                setErrorMsg("Please enter your Vault Code to encrypt the document.");
+                setErrorMsg(
+                    goingPublic
+                    ? "Please enter your Vault Code to migrate files to Public."
+                    : "Please enter your Vault Code to encrypt the document."
+                );
                 return;
             }
 
-            const { data: ok, error } = await supabase.rpc("verify_workspace_code", {
+            const { data: ok, error: vErr } = await supabase.rpc("verify_workspace_code", {
                 p_workspace: activeWorkspaceId,
                 p_code: code,
             });
-
-            if (error) {
-                setUploading(false);
-                setErrorMsg(error.message || "Verification failed.");
-                return;
-            }
-            if (!ok) {
-                setUploading(false);
-                setErrorMsg("Incorrect Vault Code.");
-                return;
-            }
-
-            // Optionally keep it for this tab:
-            sessionStorage.setItem("vaultCode", code);
+            if (vErr || !ok) {
+            setUploading(false);
+            setErrorMsg(vErr?.message || "Verification failed. Check your Vault Code.");
+            return;
         }
 
-        // Delete marked files from Supabase Storage
-        const filePathsToDelete = [];
+        sessionStorage.setItem("vaultCode", code);
+        if (!vaultCode) setVaultCode(code);
+        }
 
-        for (const url of filesToRemove) {
-            try {
-                const urlParts = url.split("/");
-                const index = urlParts.findIndex(part => part === "workspace.vaulted");
-                const filePath = decodeURIComponent(urlParts.slice(index + 1).join("/"));
+        // -------- Delete marked files from the correct bucket(s) --------
+        // Build delete lists per bucket by inspecting meta (iv ⇒ vaulted) or URL prefix
+        const byBucketToDelete = { "workspace.public": [], "workspace.vaulted": [] };
 
-                if (filePath) {
-                    filePathsToDelete.push(filePath);
+        for (const token of filesToRemove) {
+        const meta = existingFiles.find(
+            (f) => (f.path && f.path === token) || (f.url && f.url === token)
+        );
+        const wasVaulted = !!meta?.iv || (meta?.url || "").includes("workspace.vaulted");
+        const bucket = wasVaulted ? "workspace.vaulted" : "workspace.public";
+
+        let path = token;
+        if (typeof token === "string" && token.includes("/storage/v1/object/")) {
+            path = parsePathFromAnyUrl(token, bucket);
+        }
+        if (path) byBucketToDelete[bucket].push(path);
+        }
+
+        if (byBucketToDelete["workspace.public"].length) {
+        const { error } = await supabase.storage
+            .from("workspace.public")
+            .remove(byBucketToDelete["workspace.public"]);
+        if (error) console.warn("Delete public files:", error);
+        }
+        if (byBucketToDelete["workspace.vaulted"].length) {
+        const { error } = await supabase.storage
+            .from("workspace.vaulted")
+            .remove(byBucketToDelete["workspace.vaulted"]);
+        if (error) console.warn("Delete vaulted files:", error);
+        }
+
+        const deletedSet = new Set(Object.values(byBucketToDelete).flat());
+        const normPath = (m) => m.path || (m.url ? (
+        parsePathFromAnyUrl(m.url, m.iv ? "workspace.vaulted" : "workspace.public")
+        ) : null);
+
+        let updatedFileMetas = (existingFiles || []).filter((m) => {
+            const p = normPath(m);
+            return p ? !deletedSet.has(p) : true;
+        });
+
+        // -------- If going Public, migrate remaining vaulted files to public --------
+        if (goingPublic) {
+            const migrated = [];
+            let migrationFailed = false;
+
+            for (const meta of updatedFileMetas) {
+                const wasVaulted = !!meta.iv || (meta.url || "").includes("workspace.vaulted");
+
+                // Already public → keep, but clear iv defensively
+                if (!wasVaulted) {
+                migrated.push({ ...meta, iv: "" });
+                continue;
                 }
-            } catch (err) {
-                console.warn("⚠️ Failed to parse file path from URL:", url, err);
-            }
-        }
 
-        if (filePathsToDelete.length > 0) {
-            const { error: deleteError } = await supabase
-                .storage
+                // 1) download encrypted from vaulted
+                const oldBucket = "workspace.vaulted";
+                const encPath =
+                meta.path || derivePathFromUrl(meta.url, oldBucket);
+                if (!encPath) {
+                    console.warn("Could not derive vaulted path for meta:", meta);
+                    migrated.push(meta);           // keep original so we don't lose it
+                    migrationFailed = true;
+                    continue;
+                }
+
+                const { data: encFile, error: dlErr } = await supabase.storage
+                .from(oldBucket)
+                .download(encPath);
+                if (dlErr) {
+                    console.error("Download vaulted failed:", dlErr, encPath);
+                    migrated.push(meta);           // keep original
+                    migrationFailed = true;
+                    continue;
+                }
+
+                // 2) decrypt
+                let plainBlob;
+                try {
+                    const encBuf = await encFile.arrayBuffer();
+                    const mime = meta.type || "application/octet-stream";
+                    plainBlob = await decryptFile(encBuf, meta.iv, code, mime);
+                } catch (e2) {
+                    console.error("Decrypt vaulted file failed:", e2, meta);
+                    migrated.push(meta);           // keep original
+                    migrationFailed = true;
+                    continue;
+                }
+
+                // 3) upload plaintext to public
+                const newBucket = "workspace.public";
+                const newPath = `${activeWorkspaceId}/${Date.now()}-${sanitizeName(meta.name)}`;
+                const { error: upErr } = await supabase.storage
+                .from(newBucket)
+                .upload(newPath, plainBlob, { contentType: meta.type || "application/octet-stream", upsert: false });
+                if (upErr) {
+                    console.error("Upload public failed:", upErr, newPath);
+                    migrated.push(meta);           // keep original
+                    migrationFailed = true;
+                    continue;
+                }
+
+                // 4) public URL + new meta (no iv)
+                const { data: urlData } = await supabase.storage
+                .from(newBucket)
+                .getPublicUrl(newPath);
+                migrated.push({
+                    name: meta.name,
+                    type: meta.type || "application/octet-stream",
+                    url: urlData?.publicUrl || "",
+                    path: newPath,
+                    iv: "",        // cleared iv
+                });
+
+                // 5) remove old vaulted object (only after successful upload)
+                await supabase.storage.from(oldBucket).remove([encPath]).catch(() => {});
+            }
+
+            // If anything failed, don’t write a broken state. Bail out gracefully.
+            if (migrationFailed) {
+                setUploading(false);
+                setErrorMsg("Some files could not be migrated. Nothing was changed.");
+                return;
+            }
+
+            updatedFileMetas = migrated;
+        }
+        // -------- If staying Vaulted, migrate any remaining public files to vaulted --------
+        if (goingVaulted) {
+            const migrated = [];
+            const publicBucket = "workspace.public";
+            for (const meta of updatedFileMetas) {
+                // skip if already vaulted (has iv)
+                const alreadyVaulted = !!meta.iv || (meta.url || "").includes("workspace.vaulted");
+                if (alreadyVaulted) { migrated.push(meta); continue; }
+
+                const srcPath = meta.path || parsePathFromAnyUrl(meta.url, publicBucket);
+                if (!srcPath) { console.warn("No public path:", meta); continue; }
+
+                const { data: srcObj, error: dlErr } = await supabase.storage
+                .from(publicBucket).download(srcPath);
+                if (dlErr) { console.error("DL public→vaulted failed", dlErr, srcPath); continue; }
+
+                const buf = await srcObj.arrayBuffer();
+                const ivBytes = crypto.getRandomValues(new Uint8Array(12));
+                const { encryptedBlob, ivHex } = await encryptFile(
+                    new Blob([buf], { type: meta.type || "application/octet-stream" }),
+                    code,
+                    ivBytes
+                );
+
+                const newPath = `${activeWorkspaceId}/${Date.now()}-${sanitizeName(meta.name)}`;
+                const { error: upErr } = await supabase.storage
                 .from("workspace.vaulted")
-                .remove(filePathsToDelete);
+                .upload(newPath, encryptedBlob, { contentType: meta.type || "application/octet-stream" });
+                if (upErr) { console.error("UP public→vaulted failed", upErr, meta); continue; }
 
-            if (deleteError) {
-                console.error("Storage deletion error:", deleteError);
-                setErrorMsg("Failed to delete one or more files from storage.");
+                migrated.push({ name: meta.name, type: meta.type, path: newPath, iv: ivHex, url: null });
+                // remove old public copy (best-effort)
+                await supabase.storage.from(publicBucket).remove([srcPath]).catch(() => {});
             }
-        }
+            updatedFileMetas = migrated;
+            }
 
-        // Exclude deleted files from updatedFileMetas
-        let updatedFileMetas = existingFiles.filter((f) => !filesToRemove.includes(f.url));
+        // -------- Upload any newly added files --------
         let noteIv = "";
-
-        // Upload new files
         for (const file of files) {
-            const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
-            const { encryptedBlob, ivHex } = await encryptFile(file, vaultCode, ivBytes);
+            const sanitized = sanitizeName(file.name);
+            const filePath = `${activeWorkspaceId}/${Date.now()}-${sanitized}`;
+            const bucket = isVaulted ? "workspace.vaulted" : "workspace.public";
 
-            const sanitizedName = file.name.replace(/[^\w.-]/g, "_");
-            const filePath = `${activeWorkspaceId}/${Date.now()}-${sanitizedName}`;
-            const bucket = isVaulted ? "workspace.vaulted" : "workspace.documents";
+            let ivHex = "";
+            let uploadErr;
 
-            // Upload file
-            const { error: uploadError } = await supabase.storage
-            .from(bucket)
-            .upload(filePath, isVaulted ? encryptedBlob : file, {
-                contentType: file.type,
-                metadata: {
-                user_id: user.id,
-                workspace_id: activeWorkspaceId,
-                },
-            });
+            if (isVaulted) {
+                const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
+                const { encryptedBlob, ivHex: hex } = await encryptFile(file, code, ivBytes);
+                ivHex = hex;
 
-            if (!uploadError) {
-                const { data: urlData } = await supabase.storage.from(bucket).getPublicUrl(filePath);
-            if (urlData?.publicUrl) {
-                updatedFileMetas.push({ name: file.name, url: urlData.publicUrl, iv: isVaulted ? ivHex : "", type: file.type });
+                ({ error: uploadErr } = await supabase.storage
+                    .from(bucket)
+                    .upload(filePath, encryptedBlob, {
+                    contentType: file.type,
+                    upsert: false,
+                    metadata: { user_id: user.id, workspace_id: activeWorkspaceId },
+                }));
+            } else {
+                ({ error: uploadErr } = await supabase.storage
+                    .from(bucket)
+                    .upload(filePath, file, {
+                    contentType: file.type,
+                    upsert: false,
+                    metadata: { user_id: user.id, workspace_id: activeWorkspaceId },
+                }));
             }
+
+            if (!uploadErr) {
+                const { data: urlData } = await supabase.storage.from(bucket).getPublicUrl(filePath);
+                if (urlData?.publicUrl) {
+                    updatedFileMetas.push({
+                    name: file.name,
+                    url: urlData.publicUrl,
+                    iv: isVaulted ? ivHex : "",
+                    type: file.type,
+                    path: filePath,
+                    });
+                }
+            } else {
+                console.error("Upload failed:", uploadErr);
             }
         }
 
-        // Encrypt private note if changed
+        // -------- Encrypt private note if needed --------
         let encryptedNote = "";
-        if (privateNote && privateNote !== "🔐 Encrypted") {
+        if (!goingPublic && isVaulted && privateNote && privateNote !== "🔐 Encrypted") {
             try {
-                const result = await encryptText(privateNote, vaultCode);
+                const result = await encryptText(privateNote, code);
                 encryptedNote = result.encryptedData;
                 noteIv = result.iv;
             } catch (err) {
@@ -302,16 +479,18 @@ export default function WorkspaceEditDoc() {
             }
         }
 
-        // Final DB update
+        // -------- Final DB update --------
+        const safeMetas = Array.isArray(updatedFileMetas) ? updatedFileMetas : [];
         const { error: updateError } = await supabase
             .from("workspace_vault_items")
             .update({
-            title,
-            tags,
-            notes,
-            encrypted_note: encryptedNote || undefined,
-            note_iv: noteIv || undefined,
-            file_metas: updatedFileMetas,
+                title,
+                tags,
+                notes,
+                is_vaulted: isVaulted,
+                encrypted_note: goingPublic ? null : (isVaulted ? (encryptedNote || undefined) : null),
+                note_iv: goingPublic ? null : (isVaulted ? (noteIv || undefined) : null),
+                file_metas: safeMetas,
             })
             .eq("id", id)
             .eq("workspace_id", activeWorkspaceId);
@@ -321,7 +500,7 @@ export default function WorkspaceEditDoc() {
             setErrorMsg("Failed to update document.");
         } else {
             setSuccessMsg("Document updated successfully!");
-            setFilesToRemove([]); // clear removed file list
+            setFilesToRemove([]);
             setHasUnsavedChanges(false);
             setTimeout(() => navigate("/workspace/vaults"), 1300);
         }
@@ -329,7 +508,6 @@ export default function WorkspaceEditDoc() {
         setUploading(false);
         setHasUnsavedChanges(false);
     };
-
 
     return (
         <Layout>
@@ -386,7 +564,7 @@ export default function WorkspaceEditDoc() {
                 <X size={20} />
             </button>
 
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">${title || "Untitled Document"}</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">{title || "Untitled Document"}</h2>
             <p className="text-xs text-blue-700 mt-1">
                 Supported: PDF, Word, Excel, PowerPoint, Text, CSV, JPG, PNG, GIF, ZIP, JSON
             </p>
@@ -461,12 +639,12 @@ export default function WorkspaceEditDoc() {
                     {/* Current Selected Files */}
                     {files.length > 0 && (
                     <div>
-                        <h4 className="text-sm font-medium text-blue-800 mb-1">Newly selected files:</h4>
+                        <h4 className="text-sm font-medium text-gray-800 mb-1">Newly selected files:</h4>
                         <ul className="space-y-1">
                         {files.map((file, index) => (
                             <li
                             key={index}
-                            className="flex items-center justify-between px-3 py-2 border border-gray-200 rounded text-sm text-blue-600 bg-gray-50"
+                            className="flex items-center justify-between px-3 py-2 border border-gray-200 rounded text-sm text-blue-800 bg-gray-50"
                             >
                             {file.name}
                             <button
@@ -485,6 +663,38 @@ export default function WorkspaceEditDoc() {
                     </div>
                 )}
 
+                {/* Public / Private toggle */}
+                <div className="mb-3 text-sm">
+                    <label className="mr-4 text-gray-800">Document Type:</label>
+                    <label className="mr-4 text-gray-800">
+                        <input
+                        type="radio"
+                        name="privacy"
+                        value="vaulted"
+                        checked={isVaulted}
+                        onChange={() => {
+                            setIsVaulted(true);
+                            setHasUnsavedChanges(true);
+                        }}
+                        />{" "}
+                        Vaulted (Encrypted)
+                    </label>
+                    <label className="text-gray-800">
+                        <input
+                        type="radio"
+                        name="privacy"
+                        value="public"
+                        checked={!isVaulted}
+                        onChange={() => {
+                            setIsVaulted(false);
+                            setHasUnsavedChanges(true);
+                        }}
+                        />{" "}
+                        Public
+                    </label>
+                    <h2 className="text-xs text-purple-500 mt-1">Switching to Public will permanently delete the Private note.</h2>
+                </div>
+
                 {/* Title */}
                 <div>
                     <label className="block text-sm font-medium mb-1 text-gray-800 mt-4">Edit title:</label>
@@ -494,7 +704,7 @@ export default function WorkspaceEditDoc() {
                             setTitle(e.target.value);
                             setHasUnsavedChanges(true);
                         }}
-                        className="w-full p-2 mb-1 border rounded text-gray-700 text-sm bg-gray-50 font-bold"
+                        className="w-full p-2 mb-1 border rounded text-gray-700 text-sm bg-gray-50"
                         placeholder="Enter document title (Public)"
                     />
                 </div>
@@ -506,10 +716,16 @@ export default function WorkspaceEditDoc() {
                         <input
                         value={newTag}
                         onChange={(e) => setNewTag(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                                e.preventDefault(); 
+                                handleTagAdd();
+                            }
+                        }}
                         className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
                         placeholder="Add a tag"
                         />
-                        <button onClick={handleTagAdd} className="btn-secondary">Add</button>
+                        <button type="button" onClick={handleTagAdd} className="btn-secondary">Add</button>
                     </div>
 
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -556,7 +772,7 @@ export default function WorkspaceEditDoc() {
                     <>            
                         {/* Private Note Section */}
                         <div>
-                            <p className="text-sm text-red-400 mb-1">
+                            <p className="text-sm text-red-500 mb-1">
                                 🔐 Private note will be encrypted using your saved Vault Code:
                             </p>
 

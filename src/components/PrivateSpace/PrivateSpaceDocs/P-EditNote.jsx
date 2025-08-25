@@ -403,6 +403,7 @@ export default function PrivateEditNote() {
             />{" "}
             Public
           </label>
+          <h2 className="text-xs text-purple-500 mt-1">Switching to Public will permanently delete the Private note.</h2>
         </div>
 
         {/* Public Note */}
@@ -461,7 +462,7 @@ export default function PrivateEditNote() {
         {/* Private Note (only when vaulted) */}
         {isVaulted && (
           <>
-            <p className="text-sm text-red-400 mb-1">
+            <p className="text-sm text-red-500 mb-1">
               🔐 Private note will be encrypted using your Vault Code:
             </p>
             <textarea
