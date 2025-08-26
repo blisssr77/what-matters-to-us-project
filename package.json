@@ -35,6 +35,7 @@
     "clsx": "^2.1.1",
     "crypto-js": "^4.2.0",
     "dayjs": "^1.11.13",
+    "dompurify": "^3.2.6",
     "file-saver": "^2.0.5",
     "framer-motion": "^12.23.12",
     "jszip": "^3.10.1",

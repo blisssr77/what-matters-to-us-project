@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 import { X, Search } from "lucide-react";
@@ -7,6 +7,9 @@ import Layout from "../../Layout/Layout";
 import bcrypt from "bcryptjs"; 
 import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
+import RichTextEditor from "../../../utils/RichTextEditor";
+import DOMPurify from "dompurify";
+import SaveTemplateModal from "../../common/SaveTemplateModal";
 
 const WorkspaceUploadNote = () => {
     const [title, setTitle] = useState("");
@@ -26,6 +29,63 @@ const WorkspaceUploadNote = () => {
     const { activeWorkspaceId, setActiveWorkspaceId } = useWorkspaceStore();
     const [wsName, setWsName] = useState("");
     const navigate = useNavigate();
+
+    // Rich text editor states
+    const [publicJson, setPublicJson] = useState()
+    const [publicHtml, setPublicHtml] = useState('')
+    const [privateJson, setPrivateJson] = useState()
+    const [privateHtml, setPrivateHtml] = useState('')
+    const [availableTemplates, setAvailableTemplates] = useState([])
+    const [publicTemplates, setPublicTemplates] = useState([])
+    const [loadingTemplates, setLoadingTemplates] = useState(false)
+    const [templateModalOpen, setTemplateModalOpen] = useState(false)
+    const [templateSource, setTemplateSource] = useState('public') 
+    const [savingTemplate, setSavingTemplate] = useState(false)
+
+    // Open the Save Template modal
+    const openSaveTemplateModal = (source = 'public') => {
+        setTemplateSource(source)
+        setTemplateModalOpen(true)
+    }
+
+    // Save template handler
+    const handleSubmitTemplate = async ({ name, visibility, source }) => {
+        try {
+            setSavingTemplate(true)
+
+            const { data: userData } = await supabase.auth.getUser()
+            const uid = userData?.user?.id
+            if (!uid || !activeWorkspaceId) {
+            setErrorMsg('Not signed in or no workspace.')
+            return
+            }
+
+            // choose which editor content to save
+            const content = source === 'private'
+            ? (privateJson || { type: 'doc', content: [{ type: 'paragraph' }] })
+            : (publicJson || { type: 'doc', content: [{ type: 'paragraph' }] })
+
+            const { error } = await supabase.from('note_templates').insert({
+            name,
+            content_json: content,     // TipTap JSON
+            visibility,                // 'private' | 'workspace'
+            owner_id: uid,
+            workspace_id: activeWorkspaceId,
+            })
+
+            if (error) {
+            console.error(error)
+            setErrorMsg('Failed to save template.')
+            } else {
+            setSuccessMsg('✅ Template saved')
+            // refresh the dropdown if you’re showing templates
+            if (typeof loadTemplates === 'function') await loadTemplates()
+            setTemplateModalOpen(false)
+            }
+        } finally {
+            setSavingTemplate(false)
+        }
+    }
 
     // ✅ Fetch and set active workspace on mount
     // 1) On mount, pick an active workspace ID for this user
@@ -121,80 +181,184 @@ const WorkspaceUploadNote = () => {
         setNewTag("");
     };
 
-    // ✅ Handle note upload
-    const handleCreate = async () => {
-        setLoading(true);
-        setSuccessMsg("");
-        setErrorMsg("");
+    // Load both workspace-shared and my private templates
+    const loadTemplates = useCallback(async () => {
+        if (!activeWorkspaceId) return
+        setLoadingTemplates(true)
 
-        // Authenticate user
-        const { data: userData } = await supabase.auth.getUser();
-        const user = userData?.user;
+        const { data: userData } = await supabase.auth.getUser()
+        const uid = userData?.user?.id
+        if (!uid) { setLoadingTemplates(false); return }
 
-        // Check if user is authenticated
-        if (!user?.id) {
-            setLoading(false);
-            setErrorMsg("User not authenticated.");
-            return;
-        }
+        const { data, error } = await supabase
+            .from('note_templates')
+            .select('id, name, content_json, visibility, owner_id, workspace_id')
+            .eq('workspace_id', activeWorkspaceId)
+            .or(`visibility.eq.workspace,owner_id.eq.${uid}`)
+            .order('name', { ascending: true })
 
-        // Check Vault Code if needed (Model A: per-user workspace code)
-        if (isVaulted) {
-            const code = (vaultCode || "").trim();
-            if (!code) {
-                setLoading(false);
-                setErrorMsg("Please enter your Vault Code.");
-                return;
-            }
+        if (!error) setPublicTemplates(data || [])
+        setLoadingTemplates(false)
+        }, [activeWorkspaceId])
 
-            const { data: ok, error } = await supabase.rpc("verify_workspace_code", {
-                p_workspace: activeWorkspaceId,
-                p_code: code,
-            });
+        useEffect(() => {
+        let mounted = true
+        ;(async () => { if (mounted) await loadTemplates() })()
+        return () => { mounted = false }
+    }, [loadTemplates])
 
-            if (error) {
-                setLoading(false);
-                setErrorMsg(error.message || "Verification failed.");
-                return;
-            }
-            if (!ok) {
-                setLoading(false);
-                setErrorMsg("Incorrect Vault Code.");
-                return;
-            }
-        }
+    async function saveCurrentAsTemplate({ source = 'public' } = {}) {
+        const { data: userData } = await supabase.auth.getUser()
+        const uid = userData?.user?.id
+        if (!uid || !activeWorkspaceId) { setErrorMsg('Not signed in.'); return }
 
-        // Encrypt note and insert to DB
-        try {
-            const { encryptedData, iv } = await encryptText(privateNote, vaultCode);
-            const { error } = await supabase.from("workspace_vault_items").insert({
-                user_id: user.id,
-                file_name: title || "Untitled Note",
-                title,
-                notes,
-                encrypted_note: encryptedData,
-                note_iv: iv,
-                tags,
-                workspace_id: activeWorkspaceId,
-                created_by: user.id,
-                is_vaulted: isVaulted,
-        });
+        // choose which editor’s JSON to save
+        const content = source === 'private'
+            ? (privateJson || { type: 'doc', content: [{ type: 'paragraph' }] })
+            : (publicJson  || { type: 'doc', content: [{ type: 'paragraph' }] })
+
+        const name = window.prompt('Template name?', 'New template')
+        if (!name) return
+
+        const share = window.confirm('Share with workspace? (OK = Yes, Cancel = Private)')
+        const visibility = share ? 'workspace' : 'private'
+
+        const { error } = await supabase.from('note_templates').insert({
+            name,
+            content_json: content,        // TipTap JSON
+            visibility,                   // 'workspace' | 'private'
+            owner_id: uid,
+            workspace_id: activeWorkspaceId,
+        })
 
         if (error) {
-            console.error(error);
-            setErrorMsg("Failed to create note.");
+            setErrorMsg('Failed to save template.')
         } else {
-            setSuccessMsg("✅ Note created successfully!");
-            setTimeout(() => navigate("/workspace/vaults"), 1300);
+            setSuccessMsg('✅ Template saved')
+            loadTemplates() // refresh dropdown
         }
-        } catch (err) {
-            console.error("Encryption failed:", err);
-            setErrorMsg("Encryption error.");
-        } finally {
-            setLoading(false);
-            setHasUnsavedChanges(false);
+    }
+
+    // Handle note upload-------------------------------------------
+    const handleCreate = async () => {
+        setLoading(true)
+        setSuccessMsg('')
+        setErrorMsg('')
+
+        // auth
+        const { data: userData } = await supabase.auth.getUser()
+        const user = userData?.user
+        if (!user?.id) {
+            setLoading(false)
+            setErrorMsg('User not authenticated.')
+            return
         }
-    };
+
+        // helpers
+        const stripHtmlToText = (html = '') => {
+            const el = document.createElement('div')
+            el.innerHTML = html
+            return (el.textContent || el.innerText || '').trim()
+        }
+
+        // collect editor values
+        const cleanPublicHtml = publicHtml ? DOMPurify.sanitize(publicHtml) : ''
+        const hasPublic = cleanPublicHtml && cleanPublicHtml.trim().length > 0
+
+        const hasPrivate = !!privateJson && JSON.stringify(privateJson).length > 20
+
+        if (!hasPublic && !(isVaulted && hasPrivate)) {
+            setLoading(false)
+            setErrorMsg('Nothing to save.')
+            return
+        }
+
+        // verify workspace code only if saving vaulted content
+        if (isVaulted && hasPrivate) {
+            const code = (vaultCode || '').trim()
+            if (!code) {
+            setLoading(false)
+            setErrorMsg('Please enter your Vault Code.')
+            return
+            }
+            const { data: ok, error } = await supabase.rpc('verify_workspace_code', {
+            p_workspace: activeWorkspaceId,
+            p_code: code,
+            })
+            if (error) {
+            setLoading(false)
+            setErrorMsg(error.message || 'Verification failed.')
+            return
+            }
+            if (!ok) {
+            setLoading(false)
+            setErrorMsg('Incorrect Vault Code.')
+            return
+            }
+        }
+
+        // encrypt private TipTap JSON if present
+        let private_note_ciphertext = null
+        let private_note_iv = null
+        try {
+            if (isVaulted && hasPrivate) {
+            const plaintext = JSON.stringify(privateJson) // TipTap JSON
+            const { encryptedData, iv } = await encryptText(plaintext, vaultCode) // base64 strings
+            private_note_ciphertext = encryptedData
+            private_note_iv = iv
+            }
+        } catch (e) {
+            console.error('Encryption failed:', e)
+            setLoading(false)
+            setErrorMsg('Encryption error.')
+            return
+        }
+
+        // derive plain text + optional summary from public note (for search)
+        const publicText = hasPublic ? stripHtmlToText(cleanPublicHtml) : null
+        const summary = hasPublic ? publicText.slice(0, 160) : null
+
+        // build payload to match your schema
+        const payload = {
+            user_id: user.id,
+            workspace_id: activeWorkspaceId,
+            created_by: user.id,
+
+            file_name: title || 'Untitled Note',
+            title: title || null,
+            tags: Array.isArray(tags) && tags.length ? tags : null,
+
+            // public fields
+            public_note_html: hasPublic ? cleanPublicHtml : null,
+            notes: hasPublic ? publicText : null,          // plain text for search/back-compat
+            summary: hasPublic ? summary : null,
+
+            // private fields
+            is_vaulted: !!(isVaulted && hasPrivate),
+            private_note_ciphertext: isVaulted && hasPrivate ? private_note_ciphertext : null,
+            private_note_iv: isVaulted && hasPrivate ? private_note_iv : null,
+            private_note_format: isVaulted && hasPrivate ? 'tiptap_json' : null,
+
+            // keep legacy encrypted_note/note_iv empty to avoid duplication
+            encrypted_note: null,
+            note_iv: null,
+        }
+
+        const { error: insertError } = await supabase
+            .from('workspace_vault_items')
+            .insert(payload)
+
+        if (insertError) {
+            console.error(insertError)
+            setErrorMsg('Failed to create note.')
+        } else {
+            setSuccessMsg('✅ Note created successfully!')
+            setHasUnsavedChanges(false)
+            setTimeout(() => navigate('/workspace/vaults'), 900)
+        }
+
+        setLoading(false)
+    }
 
     return (
         <Layout>
@@ -259,30 +423,42 @@ const WorkspaceUploadNote = () => {
                 />
 
                 {/* Notes */}
-                <div>
-                    <h className="text-sm font-medium mb-1 text-gray-800">Public note:</h>
-                    <textarea
-                        value={notes}
-                        onChange={(e) => {
-                            setNotes(e.target.value);
-                            setHasUnsavedChanges(true);
-                        }}
-                        placeholder="Public notes (Visible to shared contacts)"
-                        rows={2}
-                        className="w-full border bg-gray-50 border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
+                <div className="text-sm font-medium mb-4 text-gray-800">
+                    <div className="mb-1">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-baseline gap-2">
+                            <h2 className="text-sm font-medium text-gray-800 m-0">Public note:</h2>
+                            {loadingTemplates && (
+                                <span className="text-xs text-gray-500">Loading templates…</span>
+                            )}
+                            </div>
+
+                            <button
+                            type="button"
+                            onClick={() => openSaveTemplateModal('public')}
+                            className="text-xs px-2 py-1 rounded border hover:bg-gray-50"
+                            >
+                                Save current as template
+                            </button>
+                        </div>
+                    </div>
+                    <RichTextEditor
+                        valueJSON={publicJson}
+                        onChangeJSON={(json, html) => { setPublicJson(json); setPublicHtml(html); }}
+                        templates={publicTemplates}
                     />
                 </div>
 
                 {/* Tag Input Section */}
-                <div className="mb-4">
+                <div className="mb-5">
                     <label className="block text-sm mb-1 text-gray-800">Tags:</label>
                     <div className="flex gap-2">
-                    <input
-                        value={newTag}
-                        onChange={(e) => setNewTag(e.target.value)}
-                        className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
-                        placeholder="Add a tag"
-                    />
+                        <input
+                            value={newTag}
+                            onChange={(e) => setNewTag(e.target.value)}
+                            className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
+                            placeholder="Add a tag"
+                        />
                     <button onClick={handleTagAdd} className="btn-secondary">Add</button>
                     </div>
 
@@ -314,19 +490,15 @@ const WorkspaceUploadNote = () => {
                 {isVaulted && (
                     <>
                     {/* Private Note Section */}
-                    <p className="text-sm text-red-400 mb-1">
-                        🔐 Private note will be encrypted using your saved Vault Code:
+                    <p className="text-sm text-red-500 mb-1">
+                        🔐 Private note: will be encrypted using your saved Vault Code
                     </p>
-                    <textarea
-                        value={privateNote}
-                        onChange={(e) => {
-                            setPrivateNote(e.target.value);
-                            setHasUnsavedChanges(true);
-                        }}
-                        rows="6"
-                        className="w-full p-2 border bg-gray-50 rounded mb-3 text-gray-700 text-sm"
-                        placeholder="Write your note here.."
-                    />
+                    <div className="text-sm font-medium mb-4 text-gray-800">
+                        <RichTextEditor
+                        valueJSON={privateJson}
+                        onChangeJSON={(json, html) => { setPrivateJson(json); setPrivateHtml(html); }}
+                        />
+                    </div>
                     {/* Vault Code Section */}
                     <label className="block text-sm font-medium mb-1 text-gray-700">
                         Enter Private vault code to encrypt note:
@@ -357,6 +529,16 @@ const WorkspaceUploadNote = () => {
                     <p className="text-sm text-center mt-3 text-red-600">{errorMsg}</p>
                 )}
             </div>
+
+            {/* Save Template Modal */}
+            <SaveTemplateModal
+            open={templateModalOpen}
+            onClose={() => setTemplateModalOpen(false)}
+            onSubmit={handleSubmitTemplate}
+            source={templateSource}
+            defaultVisibility="private"
+            submitting={savingTemplate}
+            />
         </Layout>
     );
 };

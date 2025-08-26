@@ -20,6 +20,37 @@ body {
   }
 }
 
+/* Container */
+.wm-editor { border: 1px solid #e5e7eb; border-radius: 12px; background: white; overflow: hidden; }
+
+/* Toolbar */
+.wm-toolbar {
+  display: flex; align-items: center; gap: 4px;
+  padding: 8px; border-bottom: 1px solid #e5e7eb; background: #f9fafb;
+}
+.wm-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 8px;
+  border: 1px solid transparent; background: transparent; cursor: pointer;
+}
+.wm-btn:hover { background: #f3f4f6; }
+.wm-btn.is-active { background: #e5e7eb; border-color: #d1d5db; }
+.wm-sep { width: 1px; height: 24px; background: #e5e7eb; margin: 0 4px; }
+
+.wm-select {
+  border: 1px solid #d1d5db; border-radius: 8px; padding: 6px 10px; font-size: 0.875rem; background: white;
+}
+
+/* Content */
+.wm-content .ProseMirror { min-height: 160px; padding: 12px; outline: none; }
+.wm-content .ProseMirror p { margin: 0.5rem 0; }
+.wm-content .ProseMirror a { text-decoration: underline; color: #2563eb; }
+
+/* Ensure bullets & numbers show */
+.wm-content .ProseMirror ul { list-style-type: disc; padding-left: 1.25rem; margin: 0.5rem 0; }
+.wm-content .ProseMirror ol { list-style-type: decimal; padding-left: 1.25rem; margin: 0.5rem 0; }
+.wm-content .ProseMirror li { margin: 0.25rem 0; }
+
 .btn-main {
   @apply px-3 py-1.5 bg-gradient-to-r from-indigo-800 via-purple-800 to-violet-900 
           text-white rounded-xl shadow-lg 
