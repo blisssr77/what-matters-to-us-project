@@ -2,6 +2,7 @@ import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import clsx from "clsx";
 import { useEnsureAuthScopedStores } from "@/hooks/useEnsureAuthScopedStores";
+import { FullscreenProvider } from "./FullscreenProvider";
 
 const Layout = ({
   children,
@@ -19,13 +20,15 @@ const Layout = ({
         <Topbar />
         <main
           className={clsx(
-            "flex-1 overflow-y-auto",
+            "flex-1 overflow-y-auto overflow-x-hidden",
             noGutters ? "p-0" : "p-4",
             contentBg,
             contentClassName
           )}
         >
-          {children}
+          <FullscreenProvider>
+            {children}   {/* fullscreen context available to any page */}
+          </FullscreenProvider>
         </main>
       </div>
     </div>

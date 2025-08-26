@@ -9,7 +9,6 @@ import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 import RichTextEditor from "../../Editors/RichTextEditor";
 import DOMPurify from "dompurify";
-import SaveTemplateModal from "../../common/SaveTemplateModal";
 
 const WorkspaceUploadNote = () => {
     const [title, setTitle] = useState("");
@@ -35,97 +34,71 @@ const WorkspaceUploadNote = () => {
     const [publicHtml, setPublicHtml] = useState('')
     const [privateJson, setPrivateJson] = useState()
     const [privateHtml, setPrivateHtml] = useState('')
-    const [availableTemplates, setAvailableTemplates] = useState([])
-    const [publicTemplates, setPublicTemplates] = useState([])
-    const [loadingTemplates, setLoadingTemplates] = useState(false)
-    const [templateModalOpen, setTemplateModalOpen] = useState(false)
-    const [templateSource, setTemplateSource] = useState('public') 
-    const [savingTemplate, setSavingTemplate] = useState(false)
-
-    // Open the Save Template modal
-    const openSaveTemplateModal = (source = 'public') => {
-        setTemplateSource(source)
-        setTemplateModalOpen(true)
-    }
-
-    // Save template handler
-    const handleSubmitTemplate = async ({ name, visibility, source }) => {
-        try {
-            setSavingTemplate(true)
-
-            const { data: userData } = await supabase.auth.getUser()
-            const uid = userData?.user?.id
-            if (!uid || !activeWorkspaceId) {
-            setErrorMsg('Not signed in or no workspace.')
-            return
-            }
-
-            // choose which editor content to save
-            const content = source === 'private'
-            ? (privateJson || { type: 'doc', content: [{ type: 'paragraph' }] })
-            : (publicJson || { type: 'doc', content: [{ type: 'paragraph' }] })
-
-            const { error } = await supabase.from('note_templates').insert({
-            name,
-            content_json: content,     // TipTap JSON
-            visibility,                // 'private' | 'workspace'
-            owner_id: uid,
-            workspace_id: activeWorkspaceId,
-            })
-
-            if (error) {
-            console.error(error)
-            setErrorMsg('Failed to save template.')
-            } else {
-            setSuccessMsg('✅ Template saved')
-            // refresh the dropdown if you’re showing templates
-            if (typeof loadTemplates === 'function') await loadTemplates()
-            setTemplateModalOpen(false)
-            }
-        } finally {
-            setSavingTemplate(false)
-        }
-    }
 
     // ✅ Fetch and set active workspace on mount
     // 1) On mount, pick an active workspace ID for this user
     useEffect(() => {
         (async () => {
-        const { data: userData } = await supabase.auth.getUser();
-        const userId = userData?.user?.id;
-        if (!userId) return;
+            const { data: { user } = {} } = await supabase.auth.getUser();
+            if (!user?.id) return;
 
-        const { data: membership } = await supabase
-            .from("workspace_members")
-            .select("workspace_id")
-            .eq("user_id", userId)
+            const { data, error } = await supabase
+            .from('workspace_members')
+            .select('workspace_id, created_at, is_admin, sort_order')
+            .eq('user_id', user.id)                         // profiles.id == auth.users.id
+            .order('sort_order', { ascending: true, nullsLast: true })
+            .order('is_admin', { ascending: false, nullsLast: true })
+            .order('created_at', { ascending: false })
+            .limit(1)
             .maybeSingle();
 
-        if (membership?.workspace_id) {
-            setActiveWorkspaceId(membership.workspace_id);
-            console.log("Active Workspace ID:", membership.workspace_id);
-        } else {
-            console.warn("⚠️ No workspace found for user.");
-        }
+            if (error) {
+                console.error('membership check error:', error);
+                return;
+            }
+            if (data?.workspace_id) {
+                setActiveWorkspaceId(data.workspace_id);
+                console.log('Active Workspace ID:', data.workspace_id);
+            } else {
+                console.warn('⚠️ No workspace found for user.');
+            }
         })();
     }, [setActiveWorkspaceId]);
 
     // 2) Whenever the active ID changes, fetch its name
     useEffect(() => {
         if (!activeWorkspaceId) {
-        setWsName("");
-        return;
+            setWsName("");
+            return;
         }
         (async () => {
-        const { data, error } = await supabase
+            const { data, error } = await supabase
             .from("workspaces")
             .select("name")
             .eq("id", activeWorkspaceId)
             .single();
 
-        setWsName(error ? "" : data?.name ?? "");
+            setWsName(error ? "" : data?.name ?? "");
         })();
     }, [activeWorkspaceId]);
+
+    // 3) On mount, also fetch the user's default workspace (if any)
+    useEffect(() => {
+        (async () => {
+            const { data, error } = await supabase.rpc('get_default_workspace');
+            if (error) {
+                console.error('get_default_workspace error:', error);
+                return;
+            }
+                const row = data?.[0];
+            if (row?.workspace_id) {
+                setActiveWorkspaceId(row.workspace_id);
+                setWsName(row.name || '');
+            } else {
+                console.warn('⚠️ No workspace found for user.');
+            }
+        })();
+    }, [setActiveWorkspaceId]);
 
      // Message timeout for success/error
     useEffect(() => {
@@ -142,11 +115,11 @@ const WorkspaceUploadNote = () => {
     useEffect(() => {
         if (!activeWorkspaceId) return;
         const fetchTags = async () => {
-        const { data, error } = await supabase
+            const { data, error } = await supabase
             .from("vault_tags")
             .select("*")
             .eq("workspace_id", activeWorkspaceId);
-        if (!error) setAvailableTags(data.map((tag) => tag.name));
+            if (!error) setAvailableTags(data.map((tag) => tag.name));
         };
         fetchTags();
     }, [activeWorkspaceId]);
@@ -163,81 +136,23 @@ const WorkspaceUploadNote = () => {
 
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError || !user?.id) {
-        console.error("Unable to get user.");
-        return;
+            console.error("Unable to get user.");
+            return;
         }
 
         if (!availableTags.includes(newTag)) {
-        await supabase.from("vault_tags").insert({
+            await supabase.from("vault_tags").insert({
             name: newTag,
             section: "Workspace",
             user_id: user.id,
             workspace_id: activeWorkspaceId,
         });
-        setAvailableTags((prev) => [...prev, newTag]);
+            setAvailableTags((prev) => [...prev, newTag]);
         }
 
         if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
         setNewTag("");
     };
-
-    // Load both workspace-shared and my private templates
-    const loadTemplates = useCallback(async () => {
-        if (!activeWorkspaceId) return
-        setLoadingTemplates(true)
-
-        const { data: userData } = await supabase.auth.getUser()
-        const uid = userData?.user?.id
-        if (!uid) { setLoadingTemplates(false); return }
-
-        const { data, error } = await supabase
-            .from('note_templates')
-            .select('id, name, content_json, visibility, owner_id, workspace_id')
-            .eq('workspace_id', activeWorkspaceId)
-            .or(`visibility.eq.workspace,owner_id.eq.${uid}`)
-            .order('name', { ascending: true })
-
-        if (!error) setPublicTemplates(data || [])
-        setLoadingTemplates(false)
-        }, [activeWorkspaceId])
-
-        useEffect(() => {
-        let mounted = true
-        ;(async () => { if (mounted) await loadTemplates() })()
-        return () => { mounted = false }
-    }, [loadTemplates])
-
-    async function saveCurrentAsTemplate({ source = 'public' } = {}) {
-        const { data: userData } = await supabase.auth.getUser()
-        const uid = userData?.user?.id
-        if (!uid || !activeWorkspaceId) { setErrorMsg('Not signed in.'); return }
-
-        // choose which editor’s JSON to save
-        const content = source === 'private'
-            ? (privateJson || { type: 'doc', content: [{ type: 'paragraph' }] })
-            : (publicJson  || { type: 'doc', content: [{ type: 'paragraph' }] })
-
-        const name = window.prompt('Template name?', 'New template')
-        if (!name) return
-
-        const share = window.confirm('Share with workspace? (OK = Yes, Cancel = Private)')
-        const visibility = share ? 'workspace' : 'private'
-
-        const { error } = await supabase.from('note_templates').insert({
-            name,
-            content_json: content,        // TipTap JSON
-            visibility,                   // 'workspace' | 'private'
-            owner_id: uid,
-            workspace_id: activeWorkspaceId,
-        })
-
-        if (error) {
-            setErrorMsg('Failed to save template.')
-        } else {
-            setSuccessMsg('✅ Template saved')
-            loadTemplates() // refresh dropdown
-        }
-    }
 
     // Handle note upload-------------------------------------------
     const handleCreate = async () => {
@@ -428,24 +343,12 @@ const WorkspaceUploadNote = () => {
                         <div className="flex items-center justify-between">
                             <div className="flex items-baseline gap-2">
                             <h2 className="text-sm font-medium text-gray-800 m-0">Public note:</h2>
-                            {/* {loadingTemplates && (
-                                <span className="text-xs text-gray-500">Loading templates…</span>
-                            )} */}
                             </div>
-
-                            {/* <button
-                            type="button"
-                            onClick={() => openSaveTemplateModal('public')}
-                            className="text-xs px-2 py-1 rounded border hover:bg-gray-50"
-                            >
-                                Save current as template
-                            </button> */}
                         </div>
                     </div>
                     <RichTextEditor
                         valueJSON={publicJson}
                         onChangeJSON={(json, html) => { setPublicJson(json); setPublicHtml(html); }}
-                        templates={publicTemplates}
                     />
                 </div>
 
@@ -501,7 +404,7 @@ const WorkspaceUploadNote = () => {
                     </div>
                     {/* Vault Code Section */}
                     <label className="block text-sm font-medium mb-1 text-gray-700">
-                        Enter Private vault code to encrypt note:
+                        Enter Workspace vault code to encrypt note:
                     </label>
                     <input
                         type="password"
@@ -529,16 +432,6 @@ const WorkspaceUploadNote = () => {
                     <p className="text-sm text-center mt-3 text-red-600">{errorMsg}</p>
                 )}
             </div>
-
-            {/* Save Template Modal */}
-            <SaveTemplateModal
-            open={templateModalOpen}
-            onClose={() => setTemplateModalOpen(false)}
-            onSubmit={handleSubmitTemplate}
-            source={templateSource}
-            defaultVisibility="private"
-            submitting={savingTemplate}
-            />
         </Layout>
     );
 };

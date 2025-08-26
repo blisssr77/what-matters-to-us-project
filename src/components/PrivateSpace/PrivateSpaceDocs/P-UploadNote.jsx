@@ -6,6 +6,8 @@ import { encryptText } from "../../../lib/encryption";
 import Layout from "../../Layout/Layout";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
+import DOMPurify from "dompurify";
+import RichTextEditor from "@/components/Editors/RichTextEditor";
 
 export default function PrivateUploadNote() {
   const navigate = useNavigate();
@@ -35,6 +37,11 @@ export default function PrivateUploadNote() {
 
   // optional (for logging/heading)
   const [spaceName, setSpaceName] = useState("");
+
+  // DEBUG: see which space this page is using
+  const [publicJson, setPublicJson]   = useState()
+  const [publicHtml, setPublicHtml]   = useState('')
+  const [privateJson, setPrivateJson] = useState()
 
   // If no active space is set in the store, pick the first one for this user
   useEffect(() => {
@@ -78,7 +85,7 @@ export default function PrivateUploadNote() {
     console.log("Private UploadNote — activeSpaceId:", activeSpaceId, "name:", spaceName);
   }, [activeSpaceId, spaceName]);
 
-  // 🚩 Fetch tags = UNION of (a) user-level Private tags (NULL space) + (b) space-scoped
+  // Fetch tags = UNION of (a) user-level Private tags (NULL space) + (b) space-scoped
   useEffect(() => {
     (async () => {
       if (!activeSpaceId) { setAvailableTags([]); return; }
@@ -156,80 +163,128 @@ export default function PrivateUploadNote() {
   // Create note (public or vaulted)
   const handleCreate = async () => {
     setLoading(true);
-    setSuccessMsg("");
-    setErrorMsg("");
+    setSuccessMsg('');
+    setErrorMsg('');
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      // 0) auth + active space
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      if (!user?.id) { setErrorMsg('Missing user session.'); return; }
+      if (!activeSpaceId) { setErrorMsg('No active private space selected.'); return; }
 
-      if (!user) {
-        setErrorMsg("Missing user session.");
+      // 1) derive public values from editor
+      const cleanPublicHtml = publicHtml ? DOMPurify.sanitize(publicHtml) : '';
+      const hasPublic  = !!cleanPublicHtml && cleanPublicHtml.trim().length > 0;
+      const hasPrivate = !!privateJson && JSON.stringify(privateJson).length > 20;
+
+      if (!hasPublic && !hasPrivate) {
+        setErrorMsg('Nothing to save.');
         return;
       }
-      if (!activeSpaceId) {
-        setErrorMsg("No active private space selected.");
-        return;
+
+      // 2) verify account vault code only when saving private content
+      let code = '';
+      if (hasPrivate) {
+        code = (vaultCode || '').trim();
+        if (!code) { setErrorMsg('Please enter your Private vault code.'); return; }
+
+        const { data: ok, error: vErr } = await supabase.rpc('verify_user_private_code', { p_code: code });
+        if (vErr) { setErrorMsg(vErr.message || 'Failed to verify Vault Code.'); return; }
+        if (!ok)  { setErrorMsg('Incorrect Vault Code.'); return; }
       }
 
-      // Public vs Vaulted flow
-      let encrypted_note = null;
-      let note_iv = null;
-
-      if (isVaulted) {
-        if (!vaultCode.trim()) {
-          setErrorMsg("Please enter your Private vault code.");
-          return;
-        }
-        // Verify vault code via RPC (server-side hash check)
-        const { data: ok, error: vErr } = await supabase.rpc("verify_user_private_code", {
-          p_code: vaultCode.trim(),
-        });
-        if (vErr) {
-          setErrorMsg(vErr.message || "Failed to verify Vault Code.");
-          return;
-        }
-        if (!ok) {
-          setErrorMsg("Incorrect Vault Code.");
-          return;
-        }
-
-        // Encrypt the private note
-        const enc = await encryptText(privateNote || "", vaultCode.trim());
-        encrypted_note = enc.encryptedData;
-        note_iv = enc.iv;
+      // 3) encrypt private TipTap JSON (if any)
+      let private_note_ciphertext = null;
+      let private_note_iv = null;
+      if (hasPrivate) {
+        const plaintext = JSON.stringify(privateJson);
+        const { encryptedData, iv } = await encryptText(plaintext, code); // base64 strings
+        private_note_ciphertext = encryptedData;
+        private_note_iv = iv;
+        sessionStorage.setItem('vaultCode', code); // remember for this tab
       }
 
-      // Make sure tags exist
+      // 4) public plain text + summary (for search/back-compat)
+      const stripHtmlToText = (html = '') => {
+        const el = document.createElement('div');
+        el.innerHTML = html;
+        return (el.textContent || el.innerText || '').trim();
+      };
+      const publicText = hasPublic ? stripHtmlToText(cleanPublicHtml) : null;
+      const summary    = publicText ? publicText.slice(0, 160) : null;
+
+      // 5) ensure tags exist (your helper)
       await ensureTagsExist(user.id);
 
-      // Insert row
-      const { error } = await supabase.from("private_vault_items").insert({
+      // 6) attempt MODERN payload first (if your table has these columns)
+      const modernPayload = {
         created_by: user.id,
-        user_id: user.id, // legacy/compat
+        user_id: user.id,
         private_space_id: activeSpaceId,
-        file_name: title || "Untitled Note",
-        title: title || "Untitled Note",
-        tags,
-        notes: notes || null,          // public note (for both; up to you)
-        encrypted_note,                // only set when vaulted
-        note_iv,                       // only set when vaulted
-        is_vaulted: !!isVaulted,
-        created_at: new Date().toISOString(),
-      });
 
-      if (error) {
-        console.error(error);
-        setErrorMsg("Failed to create note.");
+        file_name: title || 'Untitled Note',
+        title: title || 'Untitled Note',
+        tags: Array.isArray(tags) && tags.length ? tags : null,
+
+        // public
+        public_note_html: hasPublic ? cleanPublicHtml : null,
+        notes: hasPublic ? publicText : null,
+        summary: hasPublic ? summary : null,
+
+        // private
+        is_vaulted: !!hasPrivate,
+        private_note_ciphertext: hasPrivate ? private_note_ciphertext : null,
+        private_note_iv: hasPrivate ? private_note_iv : null,
+        private_note_format: hasPrivate ? 'tiptap_json' : null,
+
+        // keep legacy empty to avoid duplication
+        encrypted_note: null,
+        note_iv: null,
+        created_at: new Date().toISOString(),
+      };
+
+      let insertError = null;
+
+      // try modern columns
+      let res = await supabase.from('private_vault_items').insert(modernPayload);
+      insertError = res.error;
+
+      // 7) fallback to LEGACY schema if modern columns don’t exist
+      if (insertError && /column .* does not exist|42703/i.test(insertError.message || '')) {
+        const legacyPayload = {
+          created_by: user.id,
+          user_id: user.id,
+          private_space_id: activeSpaceId,
+
+          file_name: title || 'Untitled Note',
+          title: title || 'Untitled Note',
+          tags,
+
+          // store public as plain text (legacy)
+          notes: publicText,
+
+          // store private in legacy columns
+          is_vaulted: !!hasPrivate,
+          encrypted_note: hasPrivate ? private_note_ciphertext : null,
+          note_iv: hasPrivate ? private_note_iv : null,
+
+          created_at: new Date().toISOString(),
+        };
+        res = await supabase.from('private_vault_items').insert(legacyPayload);
+        insertError = res.error;
+      }
+
+      if (insertError) {
+        console.error(insertError);
+        setErrorMsg('Failed to create note.');
       } else {
-        setSuccessMsg("✅ Note created successfully!");
+        setSuccessMsg('✅ Note created successfully!');
         setHasUnsavedChanges(false);
-        setTimeout(() => navigate("/privatespace/vaults"), 1200);
+        setTimeout(() => navigate('/privatespace/vaults'), 1200);
       }
     } catch (e) {
-      console.error("❌ Create note failed:", e);
-      setErrorMsg("Something went wrong.");
+      console.error('❌ Create note failed:', e);
+      setErrorMsg('Something went wrong.');
     } finally {
       setLoading(false);
     }
@@ -292,9 +347,26 @@ export default function PrivateUploadNote() {
           placeholder="Enter note title"
         />
 
+        {/* Public note */}
+        <div className="text-sm font-medium mb-4 text-gray-800">
+          <div className="mb-1 flex items-center justify-between">
+            <h2 className="text-sm font-medium text-gray-800 m-0">Public note:</h2>
+          </div>
+
+          <RichTextEditor
+            key="ps-public"
+            valueJSON={publicJson}
+            onChangeJSON={(json, html) => {
+              setPublicJson(json);
+              setPublicHtml(html);
+              setHasUnsavedChanges(true);
+            }}
+          />
+        </div>
+
         {/* Public Note (always available, saved in `notes`) */}
         {/* Tags */}
-        <div className="mb-4">
+        <div className="mb-5">
           <label className="block text-sm mb-1 text-gray-800">Tags:</label>
           <div className="flex gap-2">
             <input
@@ -334,19 +406,23 @@ export default function PrivateUploadNote() {
         {/* Private Note + Vault Code (only when vaulted) */}
         {isVaulted && (
           <>
-            <p className="text-sm text-red-400 mb-1">
-              🔐 Private note will be encrypted using your Private vault code:
-            </p>
-            <textarea
-              value={privateNote}
-              onChange={(e) => { setPrivateNote(e.target.value); setHasUnsavedChanges(true); }}
-              rows="6"
-              className="w-full p-2 border bg-gray-50 rounded mb-3 text-gray-700 text-sm"
-              placeholder="Write your private note here.."
-            />
+            <div className="text-sm font-medium mb-4 text-gray-800">
+              <p className="text-sm text-red-500 mb-1">
+                🔐 This private note will be encrypted with your Private vault code.
+              </p>
+
+              <RichTextEditor
+                key="ps-private"
+                valueJSON={privateJson}
+                onChangeJSON={(json) => {
+                  setPrivateJson(json);
+                  setHasUnsavedChanges(true);
+                }}
+              />
+            </div>
 
             <label className="block text-sm font-medium mb-1 text-gray-700">
-              Enter Private vault code:
+              Enter Private vault code to encrypt note:
             </label>
             <input
               type="password"

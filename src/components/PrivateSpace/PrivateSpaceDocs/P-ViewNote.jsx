@@ -1,10 +1,15 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
 import { decryptText } from "../../../lib/encryption";
 import Layout from "../../Layout/Layout";
 import { X, Copy, Edit2, Trash2 } from "lucide-react";
 import dayjs from "dayjs";
+import DOMPurify from 'dompurify'
+import { generateJSON } from '@tiptap/html'
+import StarterKit from '@tiptap/starter-kit'
+import TextAlign from '@tiptap/extension-text-align'
+import ReadOnlyViewer from '@/components/Editors/ReadOnlyViewer'
 
 export default function PrivateViewNote() {
     const { id } = useParams();
@@ -13,6 +18,7 @@ export default function PrivateViewNote() {
     const [vaultCode, setVaultCode] = useState("");
     const [noteData, setNoteData] = useState(null);
     const [decryptedNote, setDecryptedNote] = useState("");
+    const [decryptErr, setDecryptErr] = useState('')
     const [errorMsg, setErrorMsg] = useState("");
     const [loading, setLoading] = useState(false);
     const [codeEntered, setCodeEntered] = useState(false);
@@ -25,6 +31,11 @@ export default function PrivateViewNote() {
   
     // 15-minute TTL in ms
     const FIFTEEN_MIN = 15 * 60 * 1000;
+
+    // TipTap viewer states
+    const [publicJson, setPublicJson]   = useState(null)
+    const [privateJson, setPrivateJson] = useState(null)
+    const [privateHtml, setPrivateHtml] = useState('')
 
     // --- expiring storage helpers ---
     const setExpiringItem = (key, value, ttlMs) => {
@@ -71,72 +82,143 @@ export default function PrivateViewNote() {
         })();
     }, [noteData, storageKey]); // eslint-disable-line
 
-    // Load note
+    // ======================================== Load note ========================================
     useEffect(() => {
         (async () => {
-        const { data, error } = await supabase
-            .from("private_vault_items")
-            .select("*")
-            .eq("id", id)
-            .single();
+            if (!id) return
+            const { data, error } = await supabase
+            .from('private_vault_items')
+            .select('*')
+            .eq('id', id)
+            .single()
 
-        if (error) {
-            console.error("Error fetching note:", error);
-        } else {
-            setNoteData(data);
-        }
-        })();
-    }, [id]);
+            if (error) {
+            console.error('❌ Error fetching note:', error)
+            setErrorMsg('Note not found or access denied.')
+            return
+            }
 
-    // Handle decryption
+            setNoteData(data)
+
+            // reset private view state on load
+            setPrivateJson(null)
+            setPrivateHtml('')
+            setDecryptErr?.('')          // remove this if you don't have decryptErr state
+            setCodeEntered(false)
+
+            // Non-vaulted → viewable right away
+            if (!data.is_vaulted) {
+            setCodeEntered(true)
+            }
+
+            // PUBLIC viewer (prefer HTML column)
+            if (data.public_note_html) {
+            try {
+                const json = generateJSON(data.public_note_html, [
+                StarterKit,
+                TextAlign.configure({ types: ['heading', 'paragraph'] }),
+                ])
+                setPublicJson(json)
+            } catch {
+                setPublicJson(null) // fall back to legacy `notes` in JSX
+            }
+            } else {
+            setPublicJson(null)
+            }
+        })()
+    }, [id])
+
+    const isVaulted = Boolean(noteData?.is_vaulted);
+
+    // ======================================== Handle decryption ========================================
     const handleDecrypt = async (maybeCode, isFromRememberedStorage = false) => {
-        const code = String(maybeCode ?? vaultCode ?? "").trim();
-        if (!noteData?.is_vaulted) { setDecryptedNote(""); setCodeEntered(true); return; }
-        if (!code) { setErrorMsg("Please enter your Vault Code."); return; }
+        const code = String(maybeCode ?? vaultCode ?? '').trim()
 
-        setLoading(true); setErrorMsg("");
+        if (!noteData?.is_vaulted) { setCodeEntered(true); return }
+        if (!code) { setErrorMsg('Please enter your Vault Code.'); return }
 
-        const { data: ok, error: vErr } = await supabase.rpc("verify_user_private_code", { p_code: code });
-        if (vErr) { setErrorMsg(vErr.message || "Failed to verify Vault Code."); setLoading(false); return; }
-        if (!ok)  { setErrorMsg("Incorrect Vault Code."); setLoading(false); return; }
+        setLoading(true)
+        setErrorMsg('')
+        setDecryptErr('')
+        setPrivateJson(null)
+        setPrivateHtml('')
 
-        if (!noteData.note_iv || !noteData.encrypted_note) {
-            setErrorMsg("This note has no encrypted content to decrypt.");
-            setCodeEntered(true); setLoading(false); return;
+        const { data: ok, error: vErr } = await supabase.rpc('verify_user_private_code', { p_code: code })
+        if (vErr) { setErrorMsg(vErr.message || 'Failed to verify Vault Code.'); setLoading(false); return }
+        if (!ok)  { setErrorMsg('Incorrect Vault Code.'); setLoading(false); return }
+
+        const ciphertext =
+            noteData?.private_note_ciphertext ||
+            noteData?.encrypted_note ||
+            null
+
+        const ivToUse =
+            noteData?.private_note_iv ||
+            noteData?.note_iv ||
+            noteData?.iv ||
+            null
+
+        const fmt = noteData?.private_note_format || 'tiptap_json'
+
+        if (!ciphertext || !ivToUse) {
+            setErrorMsg('This note has no encrypted content to decrypt.')
+            setCodeEntered(true)
+            setLoading(false)
+            return
+        }
+
+        const tryDecryptBoth = async () => {
+            try { return await decryptText(ciphertext, code, ivToUse) }
+            catch { return await decryptText(ciphertext, ivToUse, code) }
         }
 
         try {
-            const dec = await decryptText(noteData.encrypted_note, noteData.note_iv, code);
-            setDecryptedNote(dec || "");
-            setCodeEntered(true);
-            // refresh/save TTL without accidentally deleting an existing memory
-            const alreadyRemembered = !!getExpiringItem(storageKey);
-            if (isFromRememberedStorage) {
-                // came from storage → refresh TTL
-                setExpiringItem(storageKey, code, FIFTEEN_MIN);
-            } else if (rememberCode) {
-                // user opted in → save/refresh
-                setExpiringItem(storageKey, code, FIFTEEN_MIN);
-            } else if (alreadyRemembered) {
-                // keep existing memory alive even if box is unchecked
-                setExpiringItem(storageKey, code, FIFTEEN_MIN);
+            const plaintext = await tryDecryptBoth()
+
+            if (fmt === 'tiptap_json') {
+            try {
+                const parsed = JSON.parse(plaintext)
+                setPrivateJson(parsed)
+                setPrivateHtml('')
+                setDecryptedNote('[Encrypted TipTap content]') // ← so handleCopy has something
+            } catch {
+                const clean = DOMPurify.sanitize(plaintext)
+                setPrivateJson(null)
+                setPrivateHtml(clean)
+                setDecryptedNote(clean)
             }
-            // if you want a real “Forget” action, add a dedicated button that calls removeExpiringItem(storageKey)
-            sessionStorage.setItem("vaultCode", code);
+            } else {
+                const clean = DOMPurify.sanitize(plaintext)
+                setPrivateJson(null)
+                setPrivateHtml(clean)
+                setDecryptedNote(clean)
+            }
+
+            setCodeEntered(true)
+            sessionStorage.setItem('vaultCode', code)
         } catch (e) {
-            console.error("Decryption failed:", e);
-            setErrorMsg("Decryption failed. Please confirm your code and try again.");
+            console.error('Decryption failed:', e)
+            setErrorMsg('Decryption failed. Please confirm your code and try again.')
+            setDecryptErr('Decryption failed. Please confirm your code and try again.')
         } finally {
-            setLoading(false);
+            setLoading(false)
         }
-    };
+    }
 
     // Handle remembering the vault code
     const handleCopy = async () => {
-        if (decryptedNote) {
-        await navigator.clipboard.writeText(decryptedNote);
+        const textToCopy = privateHtml
+            ? (() => {
+                const el = document.createElement('div')
+                el.innerHTML = privateHtml
+                return (el.textContent || el.innerText || '').trim()
+            })()
+            : (decryptedNote || '')
+
+        if (textToCopy) {
+            await navigator.clipboard.writeText(textToCopy)
         }
-    };
+    }
 
     // Handle delete confirmation
     const handleDelete = async () => {
@@ -145,8 +227,8 @@ export default function PrivateViewNote() {
         navigate("/privatespace/vaults");
     };
 
-    // If the note is not vaulted, we can show the content directly
-    const isVaulted = !!noteData?.is_vaulted;
+    // derived states
+    const loadingNote = noteData === null
 
     return (
         <Layout>
@@ -181,136 +263,156 @@ export default function PrivateViewNote() {
             >
                 <X size={20} />
             </button>
-            {/* Title */}
-            {noteData?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{noteData.title}</h2>}
-            {/* Tags */}
-                {noteData?.tags?.length > 0 && (
-                <div className="mb-3 text-sm text-gray-700 font-medium">
-                    Tags:{" "}
-                    {noteData.tags.map((tag, index) => (
-                    <React.Fragment key={tag}>
-                        <span className="bg-yellow-50 px-1 rounded">{tag}</span>
-                        {index < noteData.tags.length - 1 && ", "}
-                    </React.Fragment>
-                    ))}
+            
+            {/* --- LOADING SKELETON WHILE FETCHING --- */}
+            {loadingNote ? (
+                <div className="animate-pulse space-y-3">
+                    <div className="h-6 w-1/3 bg-gray-200 rounded" />
+                    <div className="h-4 w-full bg-gray-200 rounded" />
+                    <div className="h-4 w-5/6 bg-gray-200 rounded" />
+                    <div className="h-24 w-full bg-gray-200 rounded" />
                 </div>
-            )}
-            {/* Notes */}
-            <h2 className="text-sm mb-1 text-gray-700">Notes:</h2>
-            {noteData?.notes && <p className="text-sm text-gray-800 mb-4">{noteData.notes}</p>}
-            {/* Tags */}
-            {noteData?.tags?.length > 0 && (
-                <div className="mb-3 text-sm text-gray-900 font-medium">
-                    Tags:{" "}
-                    {noteData.tags.map((tag, index) => (
-                    <React.Fragment key={tag}>
-                        <span className="bg-yellow-50 px-1 rounded">{tag}</span>
-                        {index < noteData.tags.length - 1 && ", "}
-                    </React.Fragment>
-                    ))}
-                </div>
-            )}
-
-            {/* If not vaulted, show content without requiring code */}
-            {!isVaulted ? (
-            <>
-                <div className="mb-1 text-xs text-gray-400">
-                    Created: {noteData?.created_at ? dayjs(noteData.created_at).format("MMM D, YYYY h:mm A") : "—"}
-                </div>
-                <div className="mb-3 text-xs text-gray-400">
-                    Updated: {noteData?.updated_at ? dayjs(noteData.updated_at).format("MMM D, YYYY h:mm A") : "—"}
-                </div>
-
-                <div className="flex gap-4 text-sm">
-                <button
-                    onClick={() => navigate(`/privatespace/vaults/note-edit/${id}`)}
-                    className="flex items-center gap-1 text-blue-600 hover:underline"
-                >
-                    <Edit2 size={16} /> Edit
-                </button>
-                <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="flex items-center gap-1 text-red-600 hover:underline"
-                >
-                    <Trash2 size={16} /> Delete
-                </button>
-                </div>
-
-                <div className="mt-4 text-xs text-gray-400">
-                Last viewed just now · Private log only. Team audit history coming soon.
-                </div>
-            </>
-            ) : (
-            // Vaulted flow (needs code to decrypt)
-            <>
-                {!codeEntered ? (
-                <>
-                    <label className="block text-sm font-medium mb-1 mt-6 text-gray-600">
-                    Enter Private Vault Code to Decrypt Note:
-                    </label>
-                    {/* Vault code input */}
-                    <div className="mt-2 flex items-center gap-3">
-                        <input
-                            type="password"
-                            value={vaultCode}
-                            onChange={(e) => setVaultCode(e.target.value)}
-                            className="w-full p-2 border rounded text-sm text-gray-700"
-                            placeholder="Vault Code"
-                            autoComplete="current-password"
-                        />
-                        {/* Remember option for 15 minutes */}
-                        <label className="flex items-center gap-2 text-xs text-gray-600">
-                            <input
-                            type="checkbox"
-                            checked={rememberCode}
-                            onChange={(e) => setRememberCode(e.target.checked)}
-                            />
-                            Remember code for 15 min
-                        </label>
-                        <button onClick={() => handleDecrypt()} disabled={loading} className="btn-secondary text-sm">
-                            {loading ? "Decrypting..." : "Decrypt"}
-                        </button>
-                    </div>
-                    
-                    {errorMsg && <p className="text-sm text-red-500 mt-2">{errorMsg}</p>}
-                </>
                 ) : (
-                <>
+                    <>
 
-                    <div className="text-gray-900 mb-1 text-sm font-medium">Private note:</div>
-                    <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
-                        {decryptedNote !== "" ? decryptedNote : "⚠️ Decryption returned nothing."}
-                    </div>
-
-                    <div className="flex gap-4 text-sm mb-4">
-                        {/* <button onClick={async () => { if (decryptedNote) await navigator.clipboard.writeText(decryptedNote); }} className="flex items-center gap-1 text-purple-600 hover:underline">
-                            <Copy size={16} /> Copy
-                        </button> */}
-                        <button onClick={() => navigate(`/privatespace/vaults/note-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
-                            <Edit2 size={16} /> Edit
-                        </button>
-                        <button onClick={() => setShowDeleteConfirm(true)} className="flex items-center gap-1 text-red-600 hover:underline">
-                            <Trash2 size={16} /> Delete
-                        </button>
-                    </div>
-
-                    {noteData?.created_at && (
-                        <div className="mb-1 text-xs text-gray-400">
-                            Created: {dayjs(noteData.created_at).format("MMM D, YYYY h:mm A")}
+                    {/* Title */}
+                    {noteData?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{noteData.title}</h2>}
+                    {/* Tags */}
+                    {noteData?.tags?.length > 0 && (
+                        <div className="mb-3 text-sm text-gray-800 font-medium">
+                            Tags:{" "}
+                            {noteData.tags.map((tag, index) => (
+                            <React.Fragment key={tag}>
+                                <span className="bg-yellow-50 px-1 rounded">{tag}</span>
+                                {index < noteData.tags.length - 1 && ", "}
+                            </React.Fragment>
+                            ))}
                         </div>
                     )}
-                    {noteData?.updated_at && (
-                        <div className="mb-3 text-xs text-gray-400">
-                            Updated: {dayjs(noteData.updated_at).format("MMM D, YYYY h:mm A")}
-                        </div>
-                    )}
+                    
+                    {/* Public note */}
+                    <div className="mb-4">
+                        <h2 className="text-sm font-medium text-gray-800 m-0 mb-1">Notes:</h2>
 
-                    <div className="mt-4 text-xs text-gray-400">
-                        Last viewed just now · Private log only. Team audit history coming soon.
+                        {publicJson ? (
+                            <ReadOnlyViewer
+                            json={publicJson}
+                            className="wm-content text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4"
+                            />
+                        ) : noteData?.public_note_html ? (
+                            <ReadOnlyViewer
+                            html={noteData.public_note_html}
+                            className="wm-content prose max-w-none text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4
+                                        [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_li]:my-1"
+                            />
+                        ) : noteData?.notes ? (
+                            <p className="text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4">
+                            {noteData.notes}
+                            </p>
+                        ) : (
+                            <p className="text-sm text-gray-500 mb-4">No public note</p>
+                        )}
+                    </div>
+
+                    {/* If not vaulted, show content without requiring code */}
+                    <div>
+                        {noteData?.is_vaulted && !codeEntered ? (
+                            <>
+                            <label className="block text-sm font-medium mb-1 mt-6 text-gray-800">
+                                Enter Private Vault Code to Decrypt Note:
+                            </label>
+
+                            <div className="mt-2 flex items-center gap-3">
+                                <input
+                                type="password"
+                                value={vaultCode}
+                                onChange={(e) => setVaultCode(e.target.value)}
+                                className="w-full p-2 border rounded text-sm text-gray-700"
+                                placeholder="Vault Code"
+                                autoComplete="current-password"
+                                />
+                                <label className="flex items-center gap-2 text-xs text-gray-600">
+                                    <input
+                                    type="checkbox"
+                                    checked={rememberCode}
+                                    onChange={(e) => setRememberCode(e.target.checked)}
+                                    />
+                                    Remember code for 15 min
+                                </label>
+                                <button
+                                onClick={() => handleDecrypt()}
+                                disabled={loading}
+                                className="btn-secondary text-sm"
+                                >
+                                    {loading ? 'Decrypting...' : 'Decrypt'}
+                                </button>
+                            </div>
+
+                            {errorMsg && <p className="text-sm text-red-500 mt-2">{errorMsg}</p>}
+                            </>
+                        ) : (
+                            <>
+                            {/* Private (vaulted) note */}
+                            {noteData?.is_vaulted && (
+                                <div className="mt-2 mb-4">
+                                    <div className="text-gray-900 mb-1 text-sm font-medium">Private note:</div>
+
+                                    {decryptErr ? (
+                                        <div className="text-xs text-red-600 mb-2">{decryptErr}</div>
+                                    ) : (privateJson || privateHtml) ? (
+                                        <ReadOnlyViewer
+                                        json={privateJson}
+                                        html={privateHtml}
+                                        className="wm-content text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3"
+                                        />
+                                    ) : (typeof decryptedNote === 'string' && decryptedNote !== '') ? (
+                                        <div className="wm-content text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3">
+                                        {decryptedNote}
+                                        </div>
+                                    ) : (
+                                        <div className="text-sm text-gray-600 bg-purple-50 border border-purple-200 rounded p-3">
+                                        Decrypting…
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Action buttons */}
+                            <div className="flex items-center justify-end gap-4 text-sm mb-4">
+                                <button
+                                onClick={() => navigate(`/privatespace/vaults/note-edit/${id}`)}
+                                className="flex items-center gap-1 text-blue-600 hover:underline"
+                                >
+                                    <Edit2 size={16} />
+                                    Edit
+                                </button>
+                                <button
+                                onClick={() => setShowDeleteConfirm(true)}
+                                className="flex items-center gap-1 text-red-600 hover:underline"
+                                >
+                                    <Trash2 size={16} />
+                                    Delete
+                                </button>
+                            </div>
+
+                            {noteData?.created_at && (
+                                <div className="mb-1 text-xs text-gray-400">
+                                Created: {dayjs(noteData.created_at).format('MMM D, YYYY h:mm A')}
+                                </div>
+                            )}
+                            {noteData?.updated_at && (
+                                <div className="mb-3 text-xs text-gray-400">
+                                Updated: {dayjs(noteData.updated_at).format('MMM D, YYYY h:mm A')}
+                                </div>
+                            )}
+
+                            <div className="mt-4 text-xs text-gray-400">
+                                Last viewed just now · Private log only. Team audit history coming soon.
+                            </div>
+                            </>
+                        )}
                     </div>
                 </>
-                )}
-            </>
             )}
         </div>
         </Layout>

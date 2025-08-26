@@ -353,6 +353,8 @@ export default function WorkspaceViewDoc() {
     });
   };
 
+  // derived states
+  const loadingDoc = doc === null
 
   return (
     <Layout>
@@ -393,130 +395,23 @@ export default function WorkspaceViewDoc() {
           <X size={20} />
         </button>
 
-        {doc?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{doc.title}</h2>}
-        <h2 className="text-sm mb-1 text-gray-700">Notes:</h2>
-        {doc?.notes && <p className="text-sm text-gray-800 mb-4">{doc.notes}</p>}
-        {/* Tags */}
-        {doc?.tags?.length > 0 && (
-          <div className="mb-4 text-sm text-gray-700">
-            Tags:{" "}
-            {doc.tags.map((tag, index) => (
-              <React.Fragment key={tag}>
-                <span className="bg-yellow-50 px-1 rounded">{tag}</span>
-                {index < doc.tags.length - 1 && ", "}
-              </React.Fragment>
-            ))}
+        {/* --- LOADING SKELETON WHILE FETCHING --- */}
+        {loadingDoc ? (
+          <div className="animate-pulse space-y-3">
+            <div className="h-6 w-1/3 bg-gray-200 rounded" />
+            <div className="h-4 w-full bg-gray-200 rounded" />
+            <div className="h-4 w-5/6 bg-gray-200 rounded" />
+            <div className="h-24 w-full bg-gray-200 rounded" />
           </div>
-        )}
-
-        {/* Display decrypted note if available */}
-        {entered && decryptedNote && (
-          <>
-            <div className="text-gray-700 mb-1 font-bold text-sm">Private note:</div>
-            <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
-              {decryptedNote}
-            </div>
-          </>
-        )}
-
-        {doc?.file_metas?.length > 0 && (
-          <ul className="text-sm text-blue-500 space-y-1 mb-3">
-            {doc.file_metas.map((file, index) => (
-              <li key={index}>📄 {file.name}</li>
-            ))}
-          </ul>
-        )}
-
-        {/* 🔐 Vaulted logic */}
-        {doc?.is_vaulted ? (
-          !entered ? (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-              Enter Vault Code to Decrypt Document:
-            </label>
-
-            {/* Vault code input */}
-            <div className="mt-2 flex items-center gap-3">
-                <input
-                    type="password"
-                    value={vaultCode}
-                    onChange={(e) => setVaultCode(e.target.value)}
-                    className="w-full p-2 border rounded text-sm text-gray-700"
-                    placeholder="Vault Code"
-                    autoComplete="current-password"
-                />
-                {/* Remember option for 15 minutes */}
-                <label className="flex items-center gap-2 text-xs text-gray-600">
-                    <input
-                    type="checkbox"
-                    checked={rememberCode}
-                    onChange={(e) => setRememberCode(e.target.checked)}
-                    />
-                    Remember code for 15 min
-                </label>
-
-                <button onClick={() => handleDecrypt()} disabled={loading} className="btn-secondary text-sm">
-                    {loading ? "Decrypting..." : "Decrypt"}
-                </button>
-            </div>
-
-              {errorMsg && <p className="text-sm text-red-600 mt-2">{errorMsg}</p>}
-            </div>
-          ) : loading ? (
-            <p className="text-sm text-gray-500">🔐 Decrypting document...</p>
           ) : (
             <>
-              {/* Action buttons */}
-              <div className="flex gap-4 text-sm mb-4">
-                {/* <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
-                  <Copy size={16} /> Copy
-                </button> */}
-                <button onClick={() => navigate(`/workspace/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
-                  <Edit2 size={16} /> Edit
-                </button>
-                <button onClick={() => setShowConfirmPopup(true)} className="flex items-center gap-1 text-red-600 hover:underline">
-                  <Trash2 size={16} /> Delete
-                </button>
-              </div>
-
-              {/* File viewer + Download */}
-              {renderFileViewer()}
-              {decryptedBlob && (
-                <button
-                  onClick={() => {
-                    const extension = mimeToExtension[decryptedFileType] || "";
-                    const fallbackName = doc?.title?.replace(/\s+/g, "_").toLowerCase() || "document";
-                    const filename = fallbackName + extension;
-                    saveAs(decryptedBlob, filename);
-                  }}
-                  className="mt-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                >
-                  ⬇️ Download File
-                </button>
-              )}
-
-              <div className="mt-4 text-xs text-gray-400">
-                Last viewed just now · Private log only. Team audit history coming soon.
-              </div>
-            </>
-          )
-        ) : (
-          // 🌐 Public document
-          <>
-            {/* Public controls */}
-            <div className="flex gap-4 text-sm mb-4">
-              <button onClick={() => navigate(`/workspace/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
-                <Edit2 size={16} /> Edit
-              </button>
-              <button onClick={() => setShowConfirmPopup(true)} className="flex items-center gap-1 text-red-600 hover:underline">
-                <Trash2 size={16} /> Delete
-              </button>
-            </div>
-
-            {renderFileViewer()}
-
+            {/* ---------------------- LOADED -------------------- */}
+            {/* Document title */}
+            {doc?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{doc.title}</h2>}
+            <h2 className="text-sm mb-1 text-gray-700">Notes:</h2>
+            {doc?.notes && <p className="text-sm text-gray-800 mb-4">{doc.notes}</p>}
             {/* Tags */}
-            {/* {doc?.tags?.length > 0 && (
+            {doc?.tags?.length > 0 && (
               <div className="mb-4 text-sm text-gray-700">
                 Tags:{" "}
                 {doc.tags.map((tag, index) => (
@@ -526,11 +421,118 @@ export default function WorkspaceViewDoc() {
                   </React.Fragment>
                 ))}
               </div>
-            )} */}
-            <div className="mt-4 text-xs text-gray-400">
-              Last viewed just now · Private log only. Team audit history coming soon.
-            </div>
-            
+            )}
+
+            {/* Display decrypted note if available */}
+            {entered && decryptedNote && (
+              <>
+                <div className="text-gray-700 mb-1 font-bold text-sm">Private note:</div>
+                <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
+                  {decryptedNote}
+                </div>
+              </>
+            )}
+
+            {doc?.file_metas?.length > 0 && (
+              <ul className="text-sm text-blue-500 space-y-1 mb-3">
+                {doc.file_metas.map((file, index) => (
+                  <li key={index}>📄 {file.name}</li>
+                ))}
+              </ul>
+            )}
+
+            {/* 🔐 Vaulted logic */}
+            {doc?.is_vaulted ? (
+              !entered ? (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Enter Vault Code to Decrypt Document:
+                </label>
+
+                {/* Vault code input */}
+                <div className="mt-2 flex items-center gap-3">
+                  <input
+                  type="password"
+                  value={vaultCode}
+                  onChange={(e) => setVaultCode(e.target.value)}
+                  className="w-full p-2 border rounded text-sm text-gray-700"
+                  placeholder="Vault Code"
+                  autoComplete="current-password"
+                  />
+                  {/* Remember option for 15 minutes */}
+                  <label className="flex items-center gap-2 text-xs text-gray-600">
+                    <input
+                    type="checkbox"
+                    checked={rememberCode}
+                    onChange={(e) => setRememberCode(e.target.checked)}
+                    />
+                    Remember code for 15 min
+                  </label>
+
+                  <button onClick={() => handleDecrypt()} disabled={loading} className="btn-secondary text-sm">
+                    {loading ? "Decrypting..." : "Decrypt"}
+                  </button>
+                </div>
+
+                  {errorMsg && <p className="text-sm text-red-600 mt-2">{errorMsg}</p>}
+                </div>
+              ) : loading ? (
+                <p className="text-sm text-gray-500">🔐 Decrypting document...</p>
+              ) : (
+                <>
+                  {/* Action buttons */}
+                  <div className="flex gap-4 text-sm mb-4">
+                    {/* <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
+                      <Copy size={16} /> Copy
+                    </button> */}
+                    <button onClick={() => navigate(`/workspace/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
+                      <Edit2 size={16} /> Edit
+                    </button>
+                    <button onClick={() => setShowConfirmPopup(true)} className="flex items-center gap-1 text-red-600 hover:underline">
+                      <Trash2 size={16} /> Delete
+                    </button>
+                  </div>
+
+                  {/* File viewer + Download */}
+                  {renderFileViewer()}
+
+                  <div className="mt-4 text-xs text-gray-400">
+                    Last viewed just now · Private log only. Team audit history coming soon.
+                  </div>
+                </>
+              )
+              ) : (
+                // 🌐 Public document
+                <>
+                {/* Public controls */}
+                <div className="flex gap-4 text-sm mb-4">
+                  <button onClick={() => navigate(`/workspace/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
+                    <Edit2 size={16} /> Edit
+                  </button>
+                  <button onClick={() => setShowConfirmPopup(true)} className="flex items-center gap-1 text-red-600 hover:underline">
+                    <Trash2 size={16} /> Delete
+                  </button>
+                </div>
+
+                {renderFileViewer()}
+
+                {/* Tags */}
+                {/* {doc?.tags?.length > 0 && (
+                  <div className="mb-4 text-sm text-gray-700">
+                    Tags:{" "}
+                    {doc.tags.map((tag, index) => (
+                      <React.Fragment key={tag}>
+                        <span className="bg-yellow-50 px-1 rounded">{tag}</span>
+                        {index < doc.tags.length - 1 && ", "}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                )} */}
+                <div className="mt-4 text-xs text-gray-400">
+                  Last viewed just now · Private log only. Team audit history coming soon.
+                </div>                 
+                </>
+              )}
           </>
         )}
       </div>

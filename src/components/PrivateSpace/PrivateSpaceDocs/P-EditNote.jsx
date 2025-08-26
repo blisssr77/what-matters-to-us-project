@@ -5,6 +5,13 @@ import { decryptText, encryptText } from "../../../lib/encryption";
 import Layout from "../../Layout/Layout";
 import { X, Search } from "lucide-react";
 import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
+import RichTextEditor from "@/components/Editors/RichTextEditor";
+import DOMPurify from "dompurify";
+import { generateJSON } from "@tiptap/html";
+import StarterKit from "@tiptap/starter-kit";
+import TextAlign from "@tiptap/extension-text-align";
+import FullscreenCard from "@/components/Layout/FullscreenCard";
+import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 
 export default function PrivateEditNote() {
   const { id } = useParams();
@@ -43,7 +50,13 @@ export default function PrivateEditNote() {
   // Effective space this note belongs to (store wins; fallback to note’s space)
   const effectiveSpaceId = activeSpaceId || noteData?.private_space_id || null;
 
-  // Fetch note on mount
+  // TipTap editor state (public & private)
+  const [publicJson, setPublicJson] = useState();
+  const [publicHtml, setPublicHtml] = useState("");
+  const [privateJson, setPrivateJson] = useState();
+  const autoDecryptTriedRef = useRef(false);
+
+  // Fetch note on mount (PRIVATE)
   useEffect(() => {
     (async () => {
       if (!id) return;
@@ -62,16 +75,43 @@ export default function PrivateEditNote() {
 
       setNoteData(data);
       setEditedTitle(data.title || "");
-      setPublicNote(data.notes || "");
       setIsVaulted(!!data.is_vaulted);
       setTags(Array.isArray(data.tags) ? data.tags : []);
+
+      // Hydrate PUBLIC TipTap editor (prefer HTML column)
+      if (data.public_note_html) {
+        setPublicHtml(data.public_note_html);
+        try {
+          const json = generateJSON(data.public_note_html, [
+            StarterKit,
+            TextAlign.configure({ types: ["heading", "paragraph"] }),
+          ]);
+          setPublicJson(json);
+        } catch {
+          // If conversion fails, fallback to minimal doc
+          setPublicJson({ type: "doc", content: [{ type: "paragraph" }] });
+        }
+      } else if (data.notes) {
+        // Legacy plain text → minimal TipTap JSON
+        const paragraphs = String(data.notes)
+          .split("\n")
+          .map((line) =>
+            line
+              ? { type: "paragraph", content: [{ type: "text", text: line }] }
+              : { type: "paragraph" }
+          );
+        setPublicJson({ type: "doc", content: paragraphs });
+        setPublicHtml(DOMPurify.sanitize(data.notes.replace(/\n/g, "<br/>")));
+      } else {
+        setPublicJson({ type: "doc", content: [{ type: "paragraph" }] });
+        setPublicHtml("");
+      }
 
       // If store has no active space yet, sync it to this note's space id
       if (!activeSpaceId && data.private_space_id) {
         setActiveSpaceId(data.private_space_id);
       }
     })();
-    // NOTE: we do not depend on activeSpaceId here; we sync it from the note when missing
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -178,7 +218,6 @@ export default function PrivateEditNote() {
 
       try {
         const dec = await decryptText(noteData.encrypted_note, noteData.note_iv, stored);
-        setPrivateNote(dec);
         // optional: make it available to this tab only
         // setVaultCode(stored);
       } catch (e) {
@@ -189,11 +228,11 @@ export default function PrivateEditNote() {
     })();
   }, [noteData]);
 
-  // Private EditNote: explicit decrypt on user action (no autofill)
-  const handleDecrypt = async () => {
+  //  ------------------------------------- Explicit decrypt on user action (no autofill) -------------------------------------
+  const handleDecrypt = async (codeParam) => {
     if (!noteData?.is_vaulted) return;
 
-    const code = String(vaultCode || "").trim();
+    const code = String(codeParam ?? vaultCode ?? "").trim();
     if (!code) {
       setErrorMsg("Please enter your Vault Code.");
       return;
@@ -203,29 +242,78 @@ export default function PrivateEditNote() {
     setErrorMsg("");
 
     try {
-      // Verify the *private* code (user-level)
-      const { data: ok, error: vErr } = await supabase.rpc("verify_user_private_code", {
-        p_code: code,
-      });
+      // Verify the *private* (account-level) code
+      const { data: ok, error: vErr } = await supabase.rpc(
+        "verify_user_private_code",
+        { p_code: code }
+      );
       if (vErr) throw new Error(vErr.message || "Failed to verify Vault Code.");
       if (!ok) {
         setErrorMsg("Incorrect Vault Code.");
         return;
       }
 
-      // Decrypt note
-      const ivToUse = noteData?.note_iv || noteData?.iv;
-      if (!ivToUse || !noteData?.encrypted_note) {
+      // Choose ciphertext/iv/format (modern first, legacy fallback)
+      const ciphertext =
+        noteData?.private_note_ciphertext || noteData?.encrypted_note || null;
+      const ivToUse =
+        noteData?.private_note_iv ||
+        noteData?.note_iv ||
+        noteData?.iv ||
+        null;
+      const fmt = noteData?.private_note_format || "tiptap_json";
+
+      if (!ciphertext || !ivToUse) {
         setErrorMsg("Nothing to decrypt for this note.");
         return;
       }
 
-      const dec = await decryptText(noteData.encrypted_note, ivToUse, code);
-      setPrivateNote(dec);
+      // Try both common decrypt signatures (match your util)
+      const tryDecryptBoth = async () => {
+        try {
+          return await decryptText(ciphertext, code, ivToUse);
+        } catch {
+          return await decryptText(ciphertext, ivToUse, code);
+        }
+      };
 
-      // optional: make it available to this tab only
-      // sessionStorage.setItem("vaultCode", code);
+      const plaintext = await tryDecryptBoth(); // UTF-8
 
+      // Parse into TipTap JSON for private editor
+      if (fmt === "tiptap_json") {
+        try {
+          const parsed = JSON.parse(plaintext);
+          setPrivateJson(parsed);
+        } catch {
+          const json = generateJSON(plaintext, [
+            StarterKit,
+            TextAlign.configure({ types: ["heading", "paragraph"] }),
+          ]);
+          setPrivateJson(json);
+        }
+      } else if (fmt === "html") {
+        const json = generateJSON(plaintext, [
+          StarterKit,
+          TextAlign.configure({ types: ["heading", "paragraph"] }),
+        ]);
+        setPrivateJson(json);
+      } else {
+        // Unknown format → try JSON else wrap as text
+        try {
+          const parsed = JSON.parse(plaintext);
+          setPrivateJson(parsed);
+        } catch {
+          setPrivateJson({
+            type: "doc",
+            content: [
+              { type: "paragraph", content: [{ type: "text", text: plaintext }] },
+            ],
+          });
+        }
+      }
+
+      // Keep for this tab so Save can reuse without retyping
+      sessionStorage.setItem("vaultCode", code);
     } catch (err) {
       console.error("Decryption error:", err);
       setErrorMsg("Decryption failed.");
@@ -234,57 +322,118 @@ export default function PrivateEditNote() {
     }
   };
 
-  // Save updates
+  // Prevent double auto-decrypt in StrictMode
+  useEffect(() => {
+    if (!noteData?.id) return;
+    if (autoDecryptTriedRef.current) return;          // prevent double-run in StrictMode
+    if (!noteData?.is_vaulted) return;
+
+    const storedCode = sessionStorage.getItem('vaultCode') || '';
+
+    const hasNew = !!(noteData?.private_note_ciphertext && noteData?.private_note_iv);
+    const hasLegacy = !!(noteData?.encrypted_note && (noteData?.note_iv || noteData?.iv));
+
+    if (storedCode && (hasNew || hasLegacy)) {
+      autoDecryptTriedRef.current = true;
+
+      // setVaultCode(storedCode);
+      handleDecrypt(storedCode);
+    }
+  }, [noteData?.id]); // depend on id only to avoid loops
+
+  // ----------------------------------------------- Save updates -----------------------------------------------
   const handleSave = async () => {
     setSaving(true);
     setErrorMsg("");
-    try {
-      // Prepare fields
-      let updatePatch = {
-        title: editedTitle,
-        tags: tags.map((s) => s.trim()).filter(Boolean),
-        notes: publicNote,
-        is_vaulted: isVaulted,
-        updated_at: new Date().toISOString(),
-      };
+    setSuccessMsg("");
 
-      // If switching to public (non-vaulted): clear encrypted fields
-      if (!isVaulted) {
-        updatePatch.encrypted_note = null;
-        updatePatch.note_iv = null;
-      } else {
-        // Vaulted: need code + encrypt private note
-        const code = vaultCode.trim();
+    try {
+      const {
+        data: { user } = {},
+      } = await supabase.auth.getUser();
+      if (!user?.id) {
+        setErrorMsg("User not authenticated.");
+        setSaving(false);
+        return;
+      }
+
+      // PUBLIC — sanitize HTML + derive plain text & summary
+      const cleanPublicHtml = publicHtml ? DOMPurify.sanitize(publicHtml) : "";
+      const publicText = cleanPublicHtml
+        ? (() => {
+            const el = document.createElement("div");
+            el.innerHTML = cleanPublicHtml;
+            return (el.textContent || el.innerText || "").trim();
+          })()
+        : "";
+      const summary = publicText ? publicText.slice(0, 160) : null;
+
+      // PRIVATE — if saving vaulted, require a code & encrypt TipTap JSON
+      let private_note_ciphertext = null;
+      let private_note_iv = null;
+
+      if (isVaulted && privateJson) {
+        const sessionCode = sessionStorage.getItem("vaultCode") || "";
+        const code = String(vaultCode || sessionCode || "").trim();
         if (!code) {
+          setErrorMsg("Vault Code is required to save the private note.");
           setSaving(false);
-          setErrorMsg("Please enter your Vault Code to save a private note.");
           return;
         }
 
-        // verify code
-        const { data: ok, error: vErr } = await supabase.rpc("verify_user_private_code", {
-          p_code: code,
-        });
+        // verify private code
+        const { data: ok, error: vErr } = await supabase.rpc(
+          "verify_user_private_code",
+          { p_code: code }
+        );
         if (vErr) {
+          setErrorMsg(vErr.message || "Verification failed.");
           setSaving(false);
-          setErrorMsg(vErr.message || "Failed to verify Vault Code.");
           return;
         }
         if (!ok) {
-          setSaving(false);
           setErrorMsg("Incorrect Vault Code.");
+          setSaving(false);
           return;
         }
 
-        // if privateNote provided, (re)encrypt
-        const { encryptedData, iv } = await encryptText(privateNote || "", code);
-        updatePatch.encrypted_note = encryptedData;
-        updatePatch.note_iv = iv;
+        // encrypt TipTap JSON
+        const plaintext = JSON.stringify(privateJson);
+        const { encryptedData, iv } = await encryptText(plaintext, code); // base64 strings
+        private_note_ciphertext = encryptedData;
+        private_note_iv = iv;
+
+        // remember for this tab
+        sessionStorage.setItem("vaultCode", code);
       }
+
+      // Build payload (modern columns)
+      const payload = {
+        title: editedTitle || null,
+        tags: (tags || []).map((t) => t.trim()).filter(Boolean),
+
+        // PUBLIC
+        public_note_html: cleanPublicHtml || null,
+        notes: publicText || null, // plain text for search/back-compat
+        summary,
+
+        // PRIVATE
+        is_vaulted: !!(isVaulted && privateJson),
+        private_note_ciphertext:
+          isVaulted && privateJson ? private_note_ciphertext : null,
+        private_note_iv: isVaulted && privateJson ? private_note_iv : null,
+        private_note_format: isVaulted && privateJson ? "tiptap_json" : null,
+
+        // clear legacy fields to avoid duplication
+        encrypted_note: null,
+        note_iv: null,
+
+        updated_at: new Date().toISOString(),
+      };
 
       const { error: upErr } = await supabase
         .from("private_vault_items")
-        .update(updatePatch)
+        .update(payload)
         .eq("id", id);
 
       if (upErr) {
@@ -346,17 +495,9 @@ export default function PrivateEditNote() {
         </div>
       )}
 
-      <div className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
-        {/* Close */}
-        <button
-          onClick={() => {
-            if (hasUnsavedChanges) setShowUnsavedPopup(true);
-            else navigate("/privatespace/vaults");
-          }}
-          className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
-        >
-          <X size={20} />
-        </button>
+
+      <FullscreenCard className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
+        <CardHeaderActions onClose={() => navigate('/privatespace/vaults')} />
 
         <h2 className="text-xl font-semibold mb-1 text-gray-900">
           Edit Note {spaceName ? `in “${spaceName}”` : ""}
@@ -406,80 +547,42 @@ export default function PrivateEditNote() {
           <h2 className="text-xs text-red-400 mt-1">Switching to Public will permanently delete the Private note.</h2>
         </div>
 
-        {/* Public Note */}
-        <div className="mb-4">
-          <label className="text-sm font-medium text-gray-800 mb-1 block">Public note:</label>
-          <textarea
-            value={publicNote}
-            onChange={(e) => {
-              setPublicNote(e.target.value);
+        {/* Public note */}
+        <div className="text-sm font-medium mb-4 text-gray-800 wm-content max-w-full break-words overflow-x-hidden">
+          <label className="text-sm font-medium text-gray-800 mb-1 block">
+            Edit public note:
+          </label>
+          <RichTextEditor
+            key={`ps-pub-${id}`}
+            valueJSON={publicJson}
+            onChangeJSON={(json, html) => {
+              setPublicJson(json);
+              setPublicHtml(html);        // we sanitize at save time
               setHasUnsavedChanges(true);
             }}
-            rows={3}
-            className="w-full p-2 border rounded bg-gray-50 text-sm text-gray-800"
-            placeholder="Visible to you in PrivateSpace; not encrypted"
           />
         </div>
 
-        {/* Tags */}
-        <div className="mb-4">
-          <label className="block text-sm mb-1 text-gray-800">Tags:</label>
-          <div className="flex gap-2">
-            <input
-              value={newTag}
-              onChange={(e) => setNewTag(e.target.value)}
-              className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
-              placeholder="Add a tag"
-            />
-            <button onClick={handleTagAdd} className="btn-secondary">Add</button>
-          </div>
-
-          <div className="mt-2 flex flex-wrap gap-2">
-            {tagOptions.map((t) => {
-              const selected = tags.includes(t);
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() =>
-                    setTags((prev) =>
-                      selected ? prev.filter((x) => x !== t) : [...prev, t]
-                    )
-                  }
-                  className={`px-2 py-1 rounded text-xs border ${
-                    selected
-                      ? "bg-purple-100 border-purple-400 text-purple-700"
-                      : "bg-white border-gray-300 text-gray-700"
-                  }`}
-                >
-                  {t}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Private Note (only when vaulted) */}
+        {/* Private (encrypted) note section */}
         {isVaulted && (
-          <>
-            <p className="text-sm text-red-500 mb-1">
-              🔐 Private note will be encrypted using your Vault Code:
+          <div className="text-sm font-medium mb-4 text-gray-800 wm-content max-w-full break-words overflow-x-hidden">
+            <p className="text-sm text-red-500 mb-1 font-bold">
+              🔐 Private note: will be encrypted using your Private Vault Code.
             </p>
-            <textarea
-              value={privateNote}
-              onChange={(e) => {
-                setPrivateNote(e.target.value);
+
+            <RichTextEditor
+              key={`ps-priv-${id}-${privateJson ? 'ready' : 'locked'}`}
+              valueJSON={privateJson}
+              onChangeJSON={(json) => {
+                setPrivateJson(json);
                 setHasUnsavedChanges(true);
               }}
-              rows={6}
-              className="w-full p-3 border rounded bg-gray-50 text-sm font-medium text-gray-800 leading-relaxed mb-3"
-              placeholder="Private (encrypted) content"
             />
-          </>
+          </div>
         )}
 
         {/* Tags */}
-        <div className="mb-4">
+        <div className="mb-5">
           <label className="block text-sm mb-1 text-gray-800">Tags:</label>
           <div className="flex gap-2">
             <input
@@ -515,6 +618,7 @@ export default function PrivateEditNote() {
             })}
           </div>
         </div>
+
         {/* Private Note (only when vaulted) */}
         {isVaulted && (
           <>
@@ -555,7 +659,7 @@ export default function PrivateEditNote() {
         <br />
         {successMsg && <p className="text-sm text-green-600 text-center">{successMsg}</p>}
         {errorMsg && <p className="text-sm text-red-600 text-center">{errorMsg}</p>}
-      </div>
+      </FullscreenCard>
     </Layout>
   );
 }

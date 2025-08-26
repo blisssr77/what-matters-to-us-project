@@ -48,22 +48,29 @@ export default function WorkspaceUploadDoc() {
     // 1) On mount, pick an active workspace ID for this user
     useEffect(() => {
         (async () => {
-        const { data: userData } = await supabase.auth.getUser();
-        const userId = userData?.user?.id;
-        if (!userId) return;
+            const { data: userData } = await supabase.auth.getUser();
+            const userId = userData?.user?.id;
+            if (!userId) return;
 
-        const { data: membership } = await supabase
-            .from("workspace_members")
-            .select("workspace_id")
-            .eq("user_id", userId)
+            const { data, error } = await supabase
+            .from('workspace_members')
+            .select('workspace_id, created_at')  // minimal columns
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false }) // newest membership first
+            .limit(1)
             .maybeSingle();
 
-        if (membership?.workspace_id) {
-            setActiveWorkspaceId(membership.workspace_id);
-            console.log("Active Workspace ID:", membership.workspace_id);
-        } else {
-            console.warn("⚠️ No workspace found for user.");
-        }
+            if (error) {
+                console.error('membership check error:', error);
+                return;
+            }
+
+            if (data?.workspace_id) {
+                setActiveWorkspaceId(data.workspace_id);
+                console.log('Active Workspace ID:', data.workspace_id);
+            } else {
+                console.warn('⚠️ No workspace found for user.');
+            }
         })();
     }, [setActiveWorkspaceId]);
 
@@ -83,6 +90,25 @@ export default function WorkspaceUploadDoc() {
         setWsName(error ? "" : data?.name ?? "");
         })();
     }, [activeWorkspaceId]);
+
+    // On mount, fetch default workspace if none set
+    useEffect(() => {
+        (async () => {
+            const { data, error } = await supabase.rpc('get_default_workspace');
+            if (error) {
+                console.error('get_default_workspace error:', error);
+                return;
+            }
+                const row = data?.[0];
+                if (row?.workspace_id) {
+                setActiveWorkspaceId(row.workspace_id);
+                setWsName(row.name || '');
+            } else {
+                console.warn('⚠️ No workspace found for user.');
+            }
+        })();
+    }, [setActiveWorkspaceId]);
+
 
     // Fetch available tags on component mount
     useEffect(() => {

@@ -264,6 +264,8 @@ export default function WorkspaceViewNote() {
     ])
   }, [noteData?.public_note_html])
 
+// derived states
+  const loadingNote = noteData === null
 
   return (
     <Layout>
@@ -301,52 +303,63 @@ export default function WorkspaceViewNote() {
           >
               <X size={20} />
           </button>
-          {/* Note title */}
-          {noteData?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{noteData.title}</h2>}
-          {/* Display tags content */}
-          {Array.isArray(noteData?.tags) && noteData.tags.length > 0 && (
-              <div className="mb-3 text-sm text-gray-800">
-                  Tags:{" "}
-                  {noteData.tags.map((tag, index) => (
-                  <React.Fragment key={tag}>
-                      <span className="bg-yellow-50 px-1 rounded font-extralight">{tag}</span>
-                      {index < noteData.tags.length - 1 && ", "}
-                  </React.Fragment>
-                  ))}
-              </div>
-          )}
-          {/* Public note */}
-          <div className="mb-4">
-            <h2 className="text-sm font-medium text-gray-800 m-0 mb-1">Notes:</h2>
-
-            {publicJson ? (
-              <ReadOnlyViewer
-                json={publicJson}
-                className="wm-content text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4"
-              />
-            ) : noteData?.public_note_html ? (
-              <ReadOnlyViewer
-                html={noteData.public_note_html}
-                className="wm-content prose max-w-none text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4
-                          [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_li]:my-1"
-              />
-            ) : noteData?.notes ? (
-              <p className="text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4">
-                {noteData.notes}
-              </p>
+          {/* --- LOADING SKELETON WHILE FETCHING --- */}
+          {loadingNote ? (
+            <div className="animate-pulse space-y-3">
+                <div className="h-6 w-1/3 bg-gray-200 rounded" />
+                <div className="h-4 w-full bg-gray-200 rounded" />
+                <div className="h-4 w-5/6 bg-gray-200 rounded" />
+                <div className="h-24 w-full bg-gray-200 rounded" />
+            </div>
             ) : (
-              <p className="text-sm text-gray-500 mb-4">No public note</p>
-            )}
-          </div>
+              /* --- LOADED --- */
+                <>
+                {/* Note title */}
+                {noteData?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{noteData.title}</h2>}
+                {/* Display tags content */}
+                {Array.isArray(noteData?.tags) && noteData.tags.length > 0 && (
+                    <div className="mb-3 text-sm text-gray-800">
+                        Tags:{" "}
+                        {noteData.tags.map((tag, index) => (
+                        <React.Fragment key={tag}>
+                            <span className="bg-yellow-50 px-1 rounded font-extralight">{tag}</span>
+                            {index < noteData.tags.length - 1 && ", "}
+                        </React.Fragment>
+                        ))}
+                    </div>
+                )}
+                {/* Public note */}
+                <div className="mb-4">
+                  <h2 className="text-sm font-medium text-gray-800 m-0 mb-1">Notes:</h2>
 
-          <div>
-          {noteData?.is_vaulted && !codeEntered ? (
-              <>
-                  <label className="block text-sm font-medium mb-1 mt-6 text-gray-600">
-                  Enter Private Vault Code to Decrypt Note:
-                  </label>
-                  {/* Vault code input */}
-                  <div className="mt-2 flex items-center gap-3">
+                  {publicJson ? (
+                    <ReadOnlyViewer
+                      json={publicJson}
+                      className="wm-content text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4"
+                    />
+                  ) : noteData?.public_note_html ? (
+                    <ReadOnlyViewer
+                      html={noteData.public_note_html}
+                      className="wm-content prose max-w-none text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4
+                                [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_li]:my-1"
+                    />
+                  ) : noteData?.notes ? (
+                    <p className="text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4">
+                      {noteData.notes}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500 mb-4">No public note</p>
+                  )}
+                </div>
+
+                <div>
+                {noteData?.is_vaulted && !codeEntered ? (
+                    <>
+                    <label className="block text-sm font-medium mb-1 mt-6 text-gray-600">
+                      Enter Private Vault Code to Decrypt Note:
+                    </label>
+                    {/* Vault code input */}
+                    <div className="mt-2 flex items-center gap-3">
                       <input
                           type="password"
                           value={vaultCode}
@@ -362,88 +375,88 @@ export default function WorkspaceViewNote() {
                           checked={rememberCode}
                           onChange={(e) => setRememberCode(e.target.checked)}
                           />
-                          Remember code for 15 min
+                            Remember code for 15 min
                       </label>
                       <button onClick={() => handleDecrypt()} disabled={loading} className="btn-secondary text-sm">
                           {loading ? "Decrypting..." : "Decrypt"}
                       </button>
-                  </div>
+                    </div>
 
-                  {errorMsg && <p className="text-sm text-red-500 mt-2">{errorMsg}</p>}
-              </>
-          ) : (
-              <>
-
-              {/* Private (vaulted) note */}
-              {isVaulted && (
-                <div className="mt-2 mb-4">
-                  {codeEntered ? (
-                    <>
-                      <div className="text-gray-900 mb-1 text-sm font-medium">Private note:</div>
-
-                      {decryptErr ? (
-                        <div className="text-xs text-red-600 mb-2">{decryptErr}</div>
-                      ) : (privateJson || privateHtml) ? (
-                        <ReadOnlyViewer
-                          json={privateJson}
-                          html={privateHtml}
-                          className="wm-content text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3"
-                        />
-                      ) : (
-                        <div className="text-sm text-gray-600 bg-purple-50 border border-purple-200 rounded p-3">
-                          Decrypting…
-                        </div>
-                      )}
+                    {errorMsg && <p className="text-sm text-red-500 mt-2">{errorMsg}</p>}
                     </>
-                  ) : (
-                    <div className="text-xs text-gray-500">Enter your Vault Code to view the private note.</div>
+                ) : (
+                  <>
+                  {/* Private (vaulted) note */}
+                  {isVaulted && (
+                    <div className="mt-2 mb-4">
+                      {codeEntered ? (
+                        <>
+                          <div className="text-gray-900 mb-1 text-sm font-medium">Private note:</div>
+
+                          {decryptErr ? (
+                            <div className="text-xs text-red-600 mb-2">{decryptErr}</div>
+                          ) : (privateJson || privateHtml) ? (
+                            <ReadOnlyViewer
+                              json={privateJson}
+                              html={privateHtml}
+                              className="wm-content text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3"
+                            />
+                          ) : (
+                            <div className="text-sm text-gray-600 bg-purple-50 border border-purple-200 rounded p-3">
+                              Decrypting…
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="text-xs text-gray-500">Enter your Vault Code to view the private note.</div>
+                      )}
+                    </div>
                   )}
-                </div>
-              )}
 
-              {/* Action buttons */}
-              <div className="flex items-center justify-end gap-4 text-sm mb-4">
-                  {/* <button
-                      onClick={handleCopy}
-                      className="flex items-center gap-1 text-purple-600 hover:underline"
-                  >
-                      <Copy size={16} />
-                      Copy
-                  </button> */}
-                  <button
-                      onClick={() => navigate(`/workspace/vaults/note-edit/${id}`)}
-                      className="flex items-center gap-1 text-blue-600 hover:underline"
-                  >
-                      <Edit2 size={16} />
-                      Edit
-                  </button>
-                  <button
-                      onClick={() => setShowDeleteConfirm(true)}
-                      className="flex items-center gap-1 text-red-600 hover:underline"
-                  >
-                      <Trash2 size={16} />
-                      Delete
-                  </button>
-              </div>
-
-              {noteData?.created_at && (
-                  <div className="mb-1 text-xs text-gray-400">
-                      Created: {dayjs(noteData.created_at).format("MMM D, YYYY h:mm A")}
+                  {/* Action buttons */}
+                  <div className="flex items-center justify-end gap-4 text-sm mb-4">
+                      {/* <button
+                          onClick={handleCopy}
+                          className="flex items-center gap-1 text-purple-600 hover:underline"
+                      >
+                          <Copy size={16} />
+                          Copy
+                      </button> */}
+                      <button
+                          onClick={() => navigate(`/workspace/vaults/note-edit/${id}`)}
+                          className="flex items-center gap-1 text-blue-600 hover:underline"
+                      >
+                          <Edit2 size={16} />
+                          Edit
+                      </button>
+                      <button
+                          onClick={() => setShowDeleteConfirm(true)}
+                          className="flex items-center gap-1 text-red-600 hover:underline"
+                      >
+                          <Trash2 size={16} />
+                          Delete
+                      </button>
                   </div>
-              )}
-              {noteData?.updated_at && (
-                  <div className="mb-3 text-xs text-gray-400">
-                      Updated: {dayjs(noteData.updated_at).format("MMM D, YYYY h:mm A")}
-                  </div>
-              )}
 
-              <div className="mt-4 text-xs text-gray-400">
-                  Last viewed just now · Private log only. Team audit history coming soon.
+                  {noteData?.created_at && (
+                      <div className="mb-1 text-xs text-gray-400">
+                          Created: {dayjs(noteData.created_at).format("MMM D, YYYY h:mm A")}
+                      </div>
+                  )}
+                  {noteData?.updated_at && (
+                      <div className="mb-3 text-xs text-gray-400">
+                          Updated: {dayjs(noteData.updated_at).format("MMM D, YYYY h:mm A")}
+                      </div>
+                  )}
+
+                  <div className="mt-4 text-xs text-gray-400">
+                      Last viewed just now · Private log only. Team audit history coming soon.
+                  </div>
+                  </>
+                )}
               </div>
-              </>
+            </>
           )}
-          </div>
-
       </div>
     </Layout>
   );

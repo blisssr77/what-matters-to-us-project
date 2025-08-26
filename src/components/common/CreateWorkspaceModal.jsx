@@ -87,6 +87,7 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
         is_admin: true,
         created_at: new Date().toISOString(),
       });
+      
       if (memErr) {
         console.error("Failed to insert workspace_members:", memErr);
         // continue; read access still OK via created_by policy
@@ -94,7 +95,7 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
 
       // 4) set the workspace's own code (hashing done in RPC)
       const { error: codeErr } = await supabase.rpc("set_workspace_vault_code", {
-        p_workspace: ws.id,
+        p_workspace_id: ws.id,
         p_code: trimmedCode,
       });
       if (codeErr) {

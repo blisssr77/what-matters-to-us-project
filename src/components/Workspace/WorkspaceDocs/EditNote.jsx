@@ -80,9 +80,9 @@ export default function WorkspaceEditNote() {
             .single()
 
             if (error) {
-            console.error('Error fetching note:', error)
-            setErrorMsg('Failed to load note.')
-            return
+                console.error('Error fetching note:', error)
+                setErrorMsg('Failed to load note.')
+                return
             }
 
             console.log('Fetched note in Edit Page:', note)
@@ -94,21 +94,21 @@ export default function WorkspaceEditNote() {
             // hydrate PUBLIC editor immediately
             if (note.public_note_html) {
             setPublicHtml(note.public_note_html)
-            const json = generateJSON(note.public_note_html, [
-                StarterKit,
-                TextAlign.configure({ types: ['heading', 'paragraph'] }),
-            ])
-            setPublicJson(json)
+                const json = generateJSON(note.public_note_html, [
+                    StarterKit,
+                    TextAlign.configure({ types: ['heading', 'paragraph'] }),
+                ])
+                setPublicJson(json)
             } else if (note.notes) {
-            const paragraphs = String(note.notes).split('\n').map(line =>
-                line ? { type: 'paragraph', content: [{ type: 'text', text: line }] }
+                const paragraphs = String(note.notes).split('\n').map(line =>
+                    line ? { type: 'paragraph', content: [{ type: 'text', text: line }] }
                     : { type: 'paragraph' }
-            )
-            setPublicJson({ type: 'doc', content: paragraphs })
-            setPublicHtml(DOMPurify.sanitize(note.notes.replace(/\n/g, '<br/>')))
+                )
+                setPublicJson({ type: 'doc', content: paragraphs })
+                setPublicHtml(DOMPurify.sanitize(note.notes.replace(/\n/g, '<br/>')))
             } else {
-            setPublicJson({ type: 'doc', content: [{ type: 'paragraph' }] })
-            setPublicHtml('')
+                setPublicJson({ type: 'doc', content: [{ type: 'paragraph' }] })
+                setPublicHtml('')
             }
 
             // PRIVATE editor: set on this page only if you already decrypted it earlier

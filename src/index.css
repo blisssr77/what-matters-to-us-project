@@ -20,6 +20,17 @@ body {
   }
 }
 
+/* ProseMirror base styles */
+.ProseMirror {
+  max-width: 100%;
+  overflow-wrap: anywhere;  /* good for long URLs */
+  word-break: break-word;
+}
+.wm-fullscreen-open,
+.wm-fullscreen-open body {
+  overflow: hidden !important;     /* block background scroll on both axes */
+}
+
 /* Container */
 .wm-editor { border: 1px solid #e5e7eb; border-radius: 12px; background: white; overflow: hidden; }
 

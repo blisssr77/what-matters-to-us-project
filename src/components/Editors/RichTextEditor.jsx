@@ -45,15 +45,6 @@ export default function RichTextEditor({
     }
   }, [editor, valueJSON])
 
-  // const insertTemplate = (tpl) => editor.commands.insertContent(tpl)
-  // const setLink = () => {
-  //   const prev = editor.getAttributes('link').href || ''
-  //   const url = window.prompt('Enter URL', prev)
-  //   if (url === null) return
-  //   if (url === '') editor.chain().focus().extendMarkRange('link').unsetLink().run()
-  //   else editor.chain().focus().extendMarkRange('link').setLink({ href: url, target: '_blank' }).run()
-  // }
-
   const Btn = ({ onClick, active, title, children }) => (
     <button
       type="button"
@@ -68,9 +59,9 @@ export default function RichTextEditor({
   const Divider = () => <span className="wm-sep" />
 
   return (
-    <div className="wm-editor">
+    <div className="wm-content max-w-full break-words overflow-x-hidden min-w-0">
       {/* Toolbar */}
-      <div className="wm-toolbar">
+      <div className="wm-toolbar flex flex-wrap items-center gap-2 p-2 border-b bg-gray-50 w-full min-w-0">
         <Btn title="Bold"      active={editor.isActive('bold')}      onClick={() => editor.chain().focus().toggleBold().run()}><Bold size={16} /></Btn>
         <Btn title="Italic"    active={editor.isActive('italic')}    onClick={() => editor.chain().focus().toggleItalic().run()}><Italic size={16} /></Btn>
         <Btn title="Underline" active={editor.isActive('underline')} onClick={() => editor.chain().focus().toggleUnderline().run()}><UnderlineIcon size={16} /></Btn>
@@ -91,22 +82,6 @@ export default function RichTextEditor({
         {/* <Btn title="Insert link" onClick={setLink}><LinkIcon size={16} /></Btn> */}
         <Btn title="Undo" onClick={() => editor.chain().focus().undo().run()}><Undo size={16} /></Btn>
         <Btn title="Redo" onClick={() => editor.chain().focus().redo().run()}><Redo size={16} /></Btn>
-
-        {/* {templates && templates.length > 0 && (
-          <div className="ml-auto text-xs">
-            <select
-              className="wm-select"
-              onChange={(e) => {
-                const tpl = templates.find(t => t.id === e.target.value)
-                if (tpl) insertTemplate(tpl.contentJSON)
-                e.currentTarget.selectedIndex = 0
-              }}
-            >
-              <option>Insert template…</option>
-              {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          </div>
-        )} */}
       </div>
 
       {/* Editor */}
