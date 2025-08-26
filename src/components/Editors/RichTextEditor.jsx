@@ -1,8 +1,6 @@
-import React from 'react'
+import React, {useMemo, useEffect} from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import Underline from '@tiptap/extension-underline'
-import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import TextAlign from '@tiptap/extension-text-align'
 import {
@@ -17,17 +15,17 @@ export default function RichTextEditor({
   templates = [],              // pass [] or omit to hide dropdown
   placeholder = 'Write your note…',
 }) {
+  const extensions = useMemo(() => ([
+    StarterKit.configure({
+      bulletList: { keepMarks: true },
+      orderedList: { keepMarks: true },
+    }),
+    TextAlign.configure({ types: ['heading', 'paragraph'] }),
+    Placeholder.configure({ placeholder }),
+  ]), [placeholder])
+
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        bulletList: { keepMarks: true, keepAttributes: false },
-        orderedList: { keepMarks: true, keepAttributes: false },
-      }),
-      Underline,
-      Link.configure({ openOnClick: false, autolink: false, protocols: ['http', 'https', 'mailto'] }),
-      TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      Placeholder.configure({ placeholder }),
-    ],
+    extensions,
     content: valueJSON ?? { type: 'doc', content: [{ type: 'paragraph' }] },
     onUpdate({ editor }) {
       onChangeJSON(editor.getJSON(), editor.getHTML())
@@ -36,14 +34,25 @@ export default function RichTextEditor({
 
   if (!editor) return null
 
-  const insertTemplate = (tpl) => editor.commands.insertContent(tpl)
-  const setLink = () => {
-    const prev = editor.getAttributes('link').href || ''
-    const url = window.prompt('Enter URL', prev)
-    if (url === null) return
-    if (url === '') editor.chain().focus().extendMarkRange('link').unsetLink().run()
-    else editor.chain().focus().extendMarkRange('link').setLink({ href: url, target: '_blank' }).run()
-  }
+  // inside RichTextEditor component
+  useEffect(() => {
+    if (!editor) return
+    if (!valueJSON) { editor.commands.clearContent(); return }
+    const current = editor.getJSON()
+    const next = valueJSON
+    if (JSON.stringify(current) !== JSON.stringify(next)) {
+      editor.commands.setContent(next, false) // don't fire onUpdate again
+    }
+  }, [editor, valueJSON])
+
+  // const insertTemplate = (tpl) => editor.commands.insertContent(tpl)
+  // const setLink = () => {
+  //   const prev = editor.getAttributes('link').href || ''
+  //   const url = window.prompt('Enter URL', prev)
+  //   if (url === null) return
+  //   if (url === '') editor.chain().focus().extendMarkRange('link').unsetLink().run()
+  //   else editor.chain().focus().extendMarkRange('link').setLink({ href: url, target: '_blank' }).run()
+  // }
 
   const Btn = ({ onClick, active, title, children }) => (
     <button
@@ -83,7 +92,7 @@ export default function RichTextEditor({
         <Btn title="Undo" onClick={() => editor.chain().focus().undo().run()}><Undo size={16} /></Btn>
         <Btn title="Redo" onClick={() => editor.chain().focus().redo().run()}><Redo size={16} /></Btn>
 
-        {templates && templates.length > 0 && (
+        {/* {templates && templates.length > 0 && (
           <div className="ml-auto text-xs">
             <select
               className="wm-select"
@@ -97,7 +106,7 @@ export default function RichTextEditor({
               {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
-        )}
+        )} */}
       </div>
 
       {/* Editor */}

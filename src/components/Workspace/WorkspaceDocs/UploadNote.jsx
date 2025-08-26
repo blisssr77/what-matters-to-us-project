@@ -7,7 +7,7 @@ import Layout from "../../Layout/Layout";
 import bcrypt from "bcryptjs"; 
 import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
-import RichTextEditor from "../../../utils/RichTextEditor";
+import RichTextEditor from "../../Editors/RichTextEditor";
 import DOMPurify from "dompurify";
 import SaveTemplateModal from "../../common/SaveTemplateModal";
 
@@ -277,23 +277,23 @@ const WorkspaceUploadNote = () => {
         if (isVaulted && hasPrivate) {
             const code = (vaultCode || '').trim()
             if (!code) {
-            setLoading(false)
-            setErrorMsg('Please enter your Vault Code.')
-            return
+                setLoading(false)
+                setErrorMsg('Please enter your Vault Code.')
+                return
             }
             const { data: ok, error } = await supabase.rpc('verify_workspace_code', {
-            p_workspace: activeWorkspaceId,
-            p_code: code,
+                p_workspace: activeWorkspaceId,
+                p_code: code,
             })
             if (error) {
-            setLoading(false)
-            setErrorMsg(error.message || 'Verification failed.')
-            return
+                setLoading(false)
+                setErrorMsg(error.message || 'Verification failed.')
+                return
             }
             if (!ok) {
-            setLoading(false)
-            setErrorMsg('Incorrect Vault Code.')
-            return
+                setLoading(false)
+                setErrorMsg('Incorrect Vault Code.')
+                return
             }
         }
 
@@ -302,10 +302,10 @@ const WorkspaceUploadNote = () => {
         let private_note_iv = null
         try {
             if (isVaulted && hasPrivate) {
-            const plaintext = JSON.stringify(privateJson) // TipTap JSON
-            const { encryptedData, iv } = await encryptText(plaintext, vaultCode) // base64 strings
-            private_note_ciphertext = encryptedData
-            private_note_iv = iv
+                const plaintext = JSON.stringify(privateJson) // TipTap JSON
+                const { encryptedData, iv } = await encryptText(plaintext, vaultCode) // base64 strings
+                private_note_ciphertext = encryptedData
+                private_note_iv = iv
             }
         } catch (e) {
             console.error('Encryption failed:', e)
@@ -428,18 +428,18 @@ const WorkspaceUploadNote = () => {
                         <div className="flex items-center justify-between">
                             <div className="flex items-baseline gap-2">
                             <h2 className="text-sm font-medium text-gray-800 m-0">Public note:</h2>
-                            {loadingTemplates && (
+                            {/* {loadingTemplates && (
                                 <span className="text-xs text-gray-500">Loading templates…</span>
-                            )}
+                            )} */}
                             </div>
 
-                            <button
+                            {/* <button
                             type="button"
                             onClick={() => openSaveTemplateModal('public')}
                             className="text-xs px-2 py-1 rounded border hover:bg-gray-50"
                             >
                                 Save current as template
-                            </button>
+                            </button> */}
                         </div>
                     </div>
                     <RichTextEditor

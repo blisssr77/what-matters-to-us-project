@@ -181,8 +181,21 @@ export default function PrivateViewNote() {
             >
                 <X size={20} />
             </button>
-
+            {/* Title */}
             {noteData?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{noteData.title}</h2>}
+            {/* Tags */}
+                {noteData?.tags?.length > 0 && (
+                <div className="mb-3 text-sm text-gray-700 font-medium">
+                    Tags:{" "}
+                    {noteData.tags.map((tag, index) => (
+                    <React.Fragment key={tag}>
+                        <span className="bg-yellow-50 px-1 rounded">{tag}</span>
+                        {index < noteData.tags.length - 1 && ", "}
+                    </React.Fragment>
+                    ))}
+                </div>
+            )}
+            {/* Notes */}
             <h2 className="text-sm mb-1 text-gray-700">Notes:</h2>
             {noteData?.notes && <p className="text-sm text-gray-800 mb-4">{noteData.notes}</p>}
             {/* Tags */}
@@ -201,19 +214,6 @@ export default function PrivateViewNote() {
             {/* If not vaulted, show content without requiring code */}
             {!isVaulted ? (
             <>
-                {/* Tags */}
-                {noteData?.tags?.length > 0 && (
-                <div className="mb-3 text-sm text-gray-700 font-medium">
-                    Tags:{" "}
-                    {noteData.tags.map((tag, index) => (
-                    <React.Fragment key={tag}>
-                        <span className="bg-yellow-50 px-1 rounded">{tag}</span>
-                        {index < noteData.tags.length - 1 && ", "}
-                    </React.Fragment>
-                    ))}
-                </div>
-                )}
-
                 <div className="mb-1 text-xs text-gray-400">
                     Created: {noteData?.created_at ? dayjs(noteData.created_at).format("MMM D, YYYY h:mm A") : "—"}
                 </div>
@@ -276,22 +276,16 @@ export default function PrivateViewNote() {
                 </>
                 ) : (
                 <>
-                    <div className="mb-1 text-xs text-gray-400">
-                        Created: {dayjs(noteData.created_at).format("MMM D, YYYY h:mm A")}
-                    </div>
-                    <div className="mb-3 text-xs text-gray-400">
-                        Updated: {dayjs(noteData.updated_at).format("MMM D, YYYY h:mm A")}
-                    </div>
 
                     <div className="text-gray-900 mb-1 text-sm font-medium">Private note:</div>
                     <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
                         {decryptedNote !== "" ? decryptedNote : "⚠️ Decryption returned nothing."}
                     </div>
 
-                    <div className="flex gap-4 text-sm">
-                        <button onClick={async () => { if (decryptedNote) await navigator.clipboard.writeText(decryptedNote); }} className="flex items-center gap-1 text-purple-600 hover:underline">
+                    <div className="flex gap-4 text-sm mb-4">
+                        {/* <button onClick={async () => { if (decryptedNote) await navigator.clipboard.writeText(decryptedNote); }} className="flex items-center gap-1 text-purple-600 hover:underline">
                             <Copy size={16} /> Copy
-                        </button>
+                        </button> */}
                         <button onClick={() => navigate(`/privatespace/vaults/note-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
                             <Edit2 size={16} /> Edit
                         </button>
@@ -299,6 +293,17 @@ export default function PrivateViewNote() {
                             <Trash2 size={16} /> Delete
                         </button>
                     </div>
+
+                    {noteData?.created_at && (
+                        <div className="mb-1 text-xs text-gray-400">
+                            Created: {dayjs(noteData.created_at).format("MMM D, YYYY h:mm A")}
+                        </div>
+                    )}
+                    {noteData?.updated_at && (
+                        <div className="mb-3 text-xs text-gray-400">
+                            Updated: {dayjs(noteData.updated_at).format("MMM D, YYYY h:mm A")}
+                        </div>
+                    )}
 
                     <div className="mt-4 text-xs text-gray-400">
                         Last viewed just now · Private log only. Team audit history coming soon.

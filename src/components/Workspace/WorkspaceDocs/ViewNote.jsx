@@ -7,6 +7,11 @@ import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import Layout from "../../Layout/Layout";
 import { X, Copy, Edit2, Trash2 } from "lucide-react";
 import dayjs from "dayjs";
+import DOMPurify from "dompurify";
+import ReadOnlyViewer from "../../Editors/ReadOnlyViewer";
+import { generateJSON } from '@tiptap/html'
+import StarterKit from '@tiptap/starter-kit'
+import TextAlign from '@tiptap/extension-text-align'
 
 export default function WorkspaceViewNote() {
   const { id } = useParams();
@@ -20,6 +25,11 @@ export default function WorkspaceViewNote() {
   const [loading, setLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isVaulted, setIsVaulted] = useState(false);
+
+  // Private (vaulted) note state
+  const [privateJson, setPrivateJson] = useState(null)
+  const [privateHtml, setPrivateHtml] = useState('')
+  const [decryptErr, setDecryptErr] = useState('')
 
   // same flags as ViewDoc
   const [codeEntered, setCodeEntered] = useState(false);
@@ -76,78 +86,160 @@ export default function WorkspaceViewNote() {
     })();
   }, [noteData, storageKey]); // eslint-disable-line
 
-  // Load note
+  // ========================================== Load note ==========================================
   useEffect(() => {
     (async () => {
       if (!id || !activeWorkspaceId) return;
+
       const { data, error } = await supabase
-        .from("workspace_vault_items")
-        .select("*")
-        .eq("id", id)
-        .eq("workspace_id", activeWorkspaceId)
+        .from('workspace_vault_items')
+        .select('*')
+        .eq('id', id)
+        .eq('workspace_id', activeWorkspaceId)
         .single();
 
       if (error) {
-        console.error("❌ Error fetching note:", error);
-        setErrorMsg("Note not found or access denied.");
-      } else {
-        setNoteData(data);
-        setIsVaulted(!!data.is_vaulted);
-        if (!data.is_vaulted) {
-          setDecryptedNote(data.notes || "");
-          setCodeEntered(true);
-        }
+        console.error('❌ Error fetching note:', error);
+        setErrorMsg('Note not found or access denied.');
+        return;
+      }
+
+      setNoteData(data);
+      setIsVaulted(!!data.is_vaulted);
+
+      // reset private view state on load
+      setPrivateJson(null);
+      setPrivateHtml('');
+      setDecryptErr('');
+      setCodeEntered(false);
+
+      // For non-vaulted, show public content right away (back-compat with your UI)
+      if (!data.is_vaulted) {
+        // Prefer HTML column if present; else fallback to legacy plain text
+        const html = data.public_note_html || '';
+        const plain = data.notes || '';
+        const content = html
+          ? DOMPurify.sanitize(html)
+          : plain;
+
+        setDecryptedNote(content || '');
+        setCodeEntered(true);
       }
     })();
   }, [id, activeWorkspaceId]);
 
-  // Handle decryption
+  // ========================================== Handle decryption ================================================
   const handleDecrypt = async (maybeCode, isFromRememberedStorage = false) => {
-    const code = String(maybeCode ?? vaultCode ?? "").trim();
-    if (!noteData?.is_vaulted) { setDecryptedNote(noteData?.notes || ""); setCodeEntered(true); return; }
-    if (!code) { setErrorMsg("Please enter your Vault Code."); return; }
+    const code = String(maybeCode ?? vaultCode ?? '').trim();
+
+    // Non-vaulted: nothing to decrypt
+    if (!noteData?.is_vaulted) {
+      setDecryptedNote(noteData?.public_note_html || noteData?.notes || '');
+      setCodeEntered(true);
+      return;
+    }
+
+    if (!code) {
+      setErrorMsg('Please enter your Vault Code.');
+      return;
+    }
 
     setLoading(true);
-    setErrorMsg("");
+    setErrorMsg('');
+    setDecryptErr('');
+    setPrivateJson(null);
+    setPrivateHtml('');
 
     // 1) Verify workspace code
-    const { data: ok, error: vErr } = await supabase.rpc(
-      "verify_workspace_code",
-      { p_workspace: activeWorkspaceId, p_code: code }
-    );
-    if (vErr) { setErrorMsg(vErr.message || "Failed to verify Vault Code."); setLoading(false); return; }
-    if (!ok)  { setErrorMsg("Incorrect Vault Code."); setLoading(false); return; }
+    const { data: ok, error: vErr } = await supabase.rpc('verify_workspace_code', {
+      p_workspace: activeWorkspaceId,
+      p_code: code,
+    });
+    if (vErr) {
+      setErrorMsg(vErr.message || 'Failed to verify Vault Code.');
+      setLoading(false);
+      return;
+    }
+    if (!ok) {
+      setErrorMsg('Incorrect Vault Code.');
+      setLoading(false);
+      return;
+    }
 
-    // 2) Ensure there is encrypted content
-    const ivToUse = noteData?.note_iv || noteData?.iv;
-    if (!ivToUse || !noteData?.encrypted_note) {
-      setErrorMsg("This note has no encrypted content to decrypt.");
+    // 2) Choose ciphertext/iv and format (new columns first, legacy fallback)
+    const ciphertext =
+      noteData?.private_note_ciphertext ||
+      noteData?.encrypted_note ||
+      null;
+
+    const ivToUse =
+      noteData?.private_note_iv ||
+      noteData?.note_iv ||
+      noteData?.iv ||
+      null;
+
+    const fmt = noteData?.private_note_format || 'tiptap_json';
+
+    if (!ciphertext || !ivToUse) {
+      setErrorMsg('This note has no encrypted content to decrypt.');
       setCodeEntered(true);
       setLoading(false);
       return;
     }
 
+    // Helper: try both decryptText signatures to match your util
+    const tryDecryptBoth = async () => {
+      try {
+        // common signature we’ve used elsewhere
+        return await decryptText(ciphertext, code, ivToUse);
+      } catch (_) {
+        // your original signature from earlier code
+        return await decryptText(ciphertext, ivToUse, code);
+      }
+    };
+
     // 3) Decrypt
     try {
-      const dec = await decryptText(noteData.encrypted_note, ivToUse, code);
-      setDecryptedNote(dec || "");
+      const plaintext = await tryDecryptBoth(); // UTF-8 string
+
+      if (fmt === 'tiptap_json') {
+        try {
+          const parsed = JSON.parse(plaintext);
+          setPrivateJson(parsed);
+          // optional: keep decryptedNote for your old UI as plain text snapshot
+          setDecryptedNote('[Encrypted TipTap content]');
+        } catch {
+          // if JSON parse fails, treat as HTML/text
+          setPrivateHtml(DOMPurify.sanitize(plaintext));
+          setDecryptedNote(DOMPurify.sanitize(plaintext));
+        }
+      } else if (fmt === 'html') {
+        const clean = DOMPurify.sanitize(plaintext);
+        setPrivateHtml(clean);
+        setDecryptedNote(clean);
+      } else {
+        // unknown format, show safely
+        const clean = DOMPurify.sanitize(plaintext);
+        setPrivateHtml(clean);
+        setDecryptedNote(clean);
+      }
+
       setCodeEntered(true);
 
-      // 4) 15-min remember logic (same as PrivateViewNote)
+      // 4) remember-for-15-min (unchanged)
       const alreadyRemembered = !!getExpiringItem(storageKey);
       if (isFromRememberedStorage) {
-        setExpiringItem(storageKey, code, FIFTEEN_MIN); // refresh TTL
+        setExpiringItem(storageKey, code, FIFTEEN_MIN);
       } else if (rememberCode) {
-        setExpiringItem(storageKey, code, FIFTEEN_MIN); // save/refresh
+        setExpiringItem(storageKey, code, FIFTEEN_MIN);
       } else if (alreadyRemembered) {
-        setExpiringItem(storageKey, code, FIFTEEN_MIN); // keep alive
-      } // else: do nothing (don’t wipe silently)
-
-      // session copy for this tab
-      sessionStorage.setItem("vaultCode", code);
+        setExpiringItem(storageKey, code, FIFTEEN_MIN);
+      }
+      sessionStorage.setItem('vaultCode', code);
     } catch (e) {
-      console.error("Decryption failed:", e);
-      setErrorMsg("Decryption failed. Please confirm your code and try again.");
+      console.error('Decryption failed:', e);
+      setErrorMsg('Decryption failed. Please confirm your code and try again.');
+      setDecryptErr('Decryption failed. Please confirm your code and try again.');
     } finally {
       setLoading(false);
     }
@@ -162,6 +254,16 @@ export default function WorkspaceViewNote() {
     await supabase.from("workspace_vault_items").delete().eq("id", id);
     navigate("/workspace/vaults");
   };
+
+  // Utility to generate TipTap JSON from HTML (for privateJson fallback)
+  const publicJson = useMemo(() => {
+    if (!noteData?.public_note_html) return null
+    return generateJSON(noteData.public_note_html, [
+      StarterKit,
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+    ])
+  }, [noteData?.public_note_html])
+
 
   return (
     <Layout>
@@ -199,13 +301,11 @@ export default function WorkspaceViewNote() {
           >
               <X size={20} />
           </button>
-
+          {/* Note title */}
           {noteData?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{noteData.title}</h2>}
-          <h2 className="text-sm mb-1 text-gray-700">Notes:</h2>
-          {noteData?.notes && <p className="text-sm text-gray-800 mb-4">{noteData.notes}</p>}
           {/* Display tags content */}
           {Array.isArray(noteData?.tags) && noteData.tags.length > 0 && (
-              <div className="mb-3 text-sm text-gray-700 font-medium">
+              <div className="mb-3 text-sm text-gray-800">
                   Tags:{" "}
                   {noteData.tags.map((tag, index) => (
                   <React.Fragment key={tag}>
@@ -215,6 +315,29 @@ export default function WorkspaceViewNote() {
                   ))}
               </div>
           )}
+          {/* Public note */}
+          <div className="mb-4">
+            <h2 className="text-sm font-medium text-gray-800 m-0 mb-1">Notes:</h2>
+
+            {publicJson ? (
+              <ReadOnlyViewer
+                json={publicJson}
+                className="wm-content text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4"
+              />
+            ) : noteData?.public_note_html ? (
+              <ReadOnlyViewer
+                html={noteData.public_note_html}
+                className="wm-content prose max-w-none text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4
+                          [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_li]:my-1"
+              />
+            ) : noteData?.notes ? (
+              <p className="text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4">
+                {noteData.notes}
+              </p>
+            ) : (
+              <p className="text-sm text-gray-500 mb-4">No public note</p>
+            )}
+          </div>
 
           <div>
           {noteData?.is_vaulted && !codeEntered ? (
@@ -250,40 +373,43 @@ export default function WorkspaceViewNote() {
               </>
           ) : (
               <>
-              {noteData?.created_at && (
-                  <div className="mb-1 text-xs text-gray-400">
-                      Created: {dayjs(noteData.created_at).format("MMM D, YYYY h:mm A")}
-                  </div>
-              )}
-              {noteData?.updated_at && (
-                  <div className="mb-3 text-xs text-gray-400">
-                      Updated: {dayjs(noteData.updated_at).format("MMM D, YYYY h:mm A")}
-                  </div>
-              )}
 
+              {/* Private (vaulted) note */}
               {isVaulted && (
-                  <>
-                  {/* Display decrypted note content */}
-                  {codeEntered && noteData && (
-                      <>
-                          <div className="text-gray-900 mb-1 text-sm font-medium">Private note:</div>
-                          <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
-                              {noteData.is_vaulted ? decryptedNote : "⚠️ Decryption returned nothing."}
-                          </div>
-                      </>
+                <div className="mt-2 mb-4">
+                  {codeEntered ? (
+                    <>
+                      <div className="text-gray-900 mb-1 text-sm font-medium">Private note:</div>
+
+                      {decryptErr ? (
+                        <div className="text-xs text-red-600 mb-2">{decryptErr}</div>
+                      ) : (privateJson || privateHtml) ? (
+                        <ReadOnlyViewer
+                          json={privateJson}
+                          html={privateHtml}
+                          className="wm-content text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3"
+                        />
+                      ) : (
+                        <div className="text-sm text-gray-600 bg-purple-50 border border-purple-200 rounded p-3">
+                          Decrypting…
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-xs text-gray-500">Enter your Vault Code to view the private note.</div>
                   )}
-                  </>
+                </div>
               )}
 
               {/* Action buttons */}
-              <div className="flex gap-4 text-sm">
-                  <button
+              <div className="flex items-center justify-end gap-4 text-sm mb-4">
+                  {/* <button
                       onClick={handleCopy}
                       className="flex items-center gap-1 text-purple-600 hover:underline"
                   >
                       <Copy size={16} />
                       Copy
-                  </button>
+                  </button> */}
                   <button
                       onClick={() => navigate(`/workspace/vaults/note-edit/${id}`)}
                       className="flex items-center gap-1 text-blue-600 hover:underline"
@@ -299,6 +425,17 @@ export default function WorkspaceViewNote() {
                       Delete
                   </button>
               </div>
+
+              {noteData?.created_at && (
+                  <div className="mb-1 text-xs text-gray-400">
+                      Created: {dayjs(noteData.created_at).format("MMM D, YYYY h:mm A")}
+                  </div>
+              )}
+              {noteData?.updated_at && (
+                  <div className="mb-3 text-xs text-gray-400">
+                      Updated: {dayjs(noteData.updated_at).format("MMM D, YYYY h:mm A")}
+                  </div>
+              )}
 
               <div className="mt-4 text-xs text-gray-400">
                   Last viewed just now · Private log only. Team audit history coming soon.

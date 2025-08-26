@@ -28,6 +28,7 @@
     "@tiptap/extension-placeholder": "^3.3.0",
     "@tiptap/extension-text-align": "^3.3.0",
     "@tiptap/extension-underline": "^3.3.0",
+    "@tiptap/html": "^3.3.0",
     "@tiptap/react": "^3.3.0",
     "@tiptap/starter-kit": "^3.3.0",
     "bcryptjs": "^3.0.2",

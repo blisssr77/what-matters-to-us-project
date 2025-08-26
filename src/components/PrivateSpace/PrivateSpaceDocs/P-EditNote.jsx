@@ -403,7 +403,7 @@ export default function PrivateEditNote() {
             />{" "}
             Public
           </label>
-          <h2 className="text-xs text-purple-500 mt-1">Switching to Public will permanently delete the Private note.</h2>
+          <h2 className="text-xs text-red-400 mt-1">Switching to Public will permanently delete the Private note.</h2>
         </div>
 
         {/* Public Note */}
@@ -475,7 +475,49 @@ export default function PrivateEditNote() {
               className="w-full p-3 border rounded bg-gray-50 text-sm font-medium text-gray-800 leading-relaxed mb-3"
               placeholder="Private (encrypted) content"
             />
+          </>
+        )}
 
+        {/* Tags */}
+        <div className="mb-4">
+          <label className="block text-sm mb-1 text-gray-800">Tags:</label>
+          <div className="flex gap-2">
+            <input
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
+              placeholder="Add a tag"
+            />
+            <button onClick={handleTagAdd} className="btn-secondary">Add</button>
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-2">
+            {tagOptions.map((t) => {
+              const selected = tags.includes(t);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() =>
+                    setTags((prev) =>
+                      selected ? prev.filter((x) => x !== t) : [...prev, t]
+                    )
+                  }
+                  className={`px-2 py-1 rounded text-xs border ${
+                    selected
+                      ? "bg-purple-100 border-purple-400 text-purple-700"
+                      : "bg-white border-gray-300 text-gray-700"
+                  }`}
+                >
+                  {t}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {/* Private Note (only when vaulted) */}
+        {isVaulted && (
+          <>
             <div className="mb-3">
               <label className="block text-sm font-medium mb-1 text-gray-800">
                 Re-enter Private vault code:
