@@ -10,6 +10,7 @@ import PasswordField from "./PasswordField";
 import VaultCodeField from "./VaultCodeField";
 import VaultCodeChecklist, { buildCodeRules } from "./VaultCodeChecklist";
 import { rotateWorkspaceCodeClient } from "@/utils/rotateWorkspaceCodeClient";
+import { rotatePrivateCodeClient } from "@/utils/rotatePrivateCodeClient";
 
 
 export default function ManageAccount() {
@@ -126,7 +127,6 @@ export default function ManageAccount() {
 
         getCodes();
     }, []);
-
 
     /* ────────────────── Helper functions ────────────────── */
     // Password rule checks
@@ -317,6 +317,7 @@ export default function ManageAccount() {
 
 
     /* ────────────── CREATE PRIVATE CODE ────────────── */
+    /*   Verify old → rotate all privatespaces → set new hash */
     const createPrivateCode = async () => {
         if (!privateCode || !privateConfirm)
             return { ok: false, msg: "Enter code and confirmation" };
@@ -342,19 +343,33 @@ export default function ManageAccount() {
         if (privateCode !== privateConfirm)
             return { ok: false, msg: "New codes do not match" };
 
+        const oldCode = privateCurrent.trim();
+        const newCode = privateCode.trim();
+
+        // 1) verify current (user-level)
         const { data: ok, error: vErr } = await supabase.rpc("verify_user_private_code", {
-            p_code: privateCurrent.trim(),
+            p_code: oldCode,
         });
         if (vErr) return { ok: false, msg: vErr.message || "Verify failed" };
         if (!ok)  return { ok: false, msg: "Current code is incorrect." };
 
-        const { error } = await supabase.rpc("set_user_private_code", {
-            p_code: privateCode.trim(),
-        });
+        // 2) rotate ALL vaulted items across user's private spaces
+        try {
+            await rotatePrivateCodeClient(oldCode, newCode, (i, total) => {
+            // optional progress hook
+            // console.log(`Rotated private items ${i}/${total}`);
+            });
+        } catch (e) {
+            console.error("Private rotation failed:", e);
+            return { ok: false, msg: e.message || "Rotation failed. Please retry." };
+        }
+
+        // 3) set new private code hash once rotation succeeds
+        const { error } = await supabase.rpc("set_user_private_code", { p_code: newCode });
         if (error) return { ok: false, msg: error.message || "Update failed" };
 
         setPrivateCurrent(""); setPrivateCode(""); setPrivateConfirm("");
-        return { ok: true, msg: "Private code updated successfully ✅" };
+        return { ok: true, msg: "Private code updated & content rotated ✅" };
     };
 
     /* ────────────────── Password status & rules ────────────────── */
