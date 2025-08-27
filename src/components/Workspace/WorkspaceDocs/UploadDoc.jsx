@@ -7,6 +7,8 @@ import { encryptText, encryptFile } from "../../../lib/encryption";
 import bcrypt from "bcryptjs";
 import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
+import FullscreenCard from "@/components/Layout/FullscreenCard";
+import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 
 export default function WorkspaceUploadDoc() {
     const [files, setFiles] = useState([]);
@@ -381,19 +383,8 @@ export default function WorkspaceUploadDoc() {
                 message="You have unsaved changes. Are you sure you want to leave?"
             />
 
-            <div className="relative max-w-xl mx-auto mt-10 p-6 bg-white rounded shadow border border-gray-200">
-                <button
-                    onClick={() => {
-                        if (hasUnsavedChanges) {
-                        setShowUnsavedPopup(true);
-                        } else {
-                        navigate("/workspace/vaults");
-                        }
-                    }}
-                    className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
-                    >
-                    <X size={20} />
-                </button>
+            <FullscreenCard className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
+                <CardHeaderActions onClose={() => navigate('/workspace/vaults')} />
 
                 <h2 className="text-xl font-semibold text-gray-800 mb-4">📤 Upload to {wsName}</h2>
                 <p className="text-xs text-blue-700 mt-1">
@@ -591,7 +582,7 @@ export default function WorkspaceUploadDoc() {
                         />
                     )}
                 </form>
-            </div>
+            </FullscreenCard>
         </Layout>
     );
 }

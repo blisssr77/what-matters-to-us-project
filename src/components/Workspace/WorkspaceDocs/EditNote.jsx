@@ -12,6 +12,8 @@ import { generateJSON } from '@tiptap/html'
 import StarterKit from '@tiptap/starter-kit'
 import TextAlign from '@tiptap/extension-text-align'
 import RichTextEditor from '@/components/Editors/RichTextEditor'
+import FullscreenCard from "@/components/Layout/FullscreenCard";
+import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 
 export default function WorkspaceEditNote() {
     const { id } = useParams();
@@ -430,20 +432,8 @@ export default function WorkspaceEditNote() {
                 {toastMessage}
             </div>
 
-            <div className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
-                {/* Close button */}
-                <button
-                    onClick={() => {
-                        if (hasUnsavedChanges) {
-                        setShowUnsavedPopup(true);
-                        } else {
-                        navigate("/workspace/vaults");
-                        }
-                    }}
-                    className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
-                    >
-                    <X size={20} />
-                </button>
+           <FullscreenCard className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
+                <CardHeaderActions onClose={() => navigate('/workspace/vaults')} />
 
                 <h2 className="text-xl font-bold mb-5 text-gray-900">{editedTitle}</h2>
 
@@ -494,15 +484,17 @@ export default function WorkspaceEditNote() {
                 {/* Public Notes */}
                 <div className="text-sm font-medium mb-4 text-gray-800">
                     <label className="text-sm font-medium text-gray-800 mb-1 block">Edit public note:</label>
-                    <RichTextEditor
-                    key={`pub-${id}`}
-                    valueJSON={publicJson}
-                    onChangeJSON={(json, html) => {
-                        setPublicJson(json)
-                        setPublicHtml(html)              // sanitized on save
-                        setHasUnsavedChanges(true)
-                    }}
-                    />
+                    <div className="bg-white border border-gray-200 rounded p-3 mb-4">
+                        <RichTextEditor
+                        key={`pub-${id}`}
+                        valueJSON={publicJson}
+                        onChangeJSON={(json, html) => {
+                            setPublicJson(json)
+                            setPublicHtml(html)              // sanitized on save
+                            setHasUnsavedChanges(true)
+                        }}
+                        />
+                    </div>
                 </div>
 
                 {/* Vaulted Note Section */}
@@ -513,14 +505,16 @@ export default function WorkspaceEditNote() {
                         <p className="text-sm text-red-500 mb-1 font-bold">
                             🔐 Private note: will be encrypted using your Workspace Vault Code.
                         </p>
-                        <RichTextEditor
-                        key={`priv-${id}`}
-                        valueJSON={privateJson}
-                        onChangeJSON={(json) => {
-                            setPrivateJson(json)
-                            setHasUnsavedChanges(true)
-                        }}
-                        />
+                        <div className="bg-white border border-gray-200 rounded p-3 mb-4">
+                            <RichTextEditor
+                            key={`priv-${id}`}
+                            valueJSON={privateJson}
+                            onChangeJSON={(json) => {
+                                setPrivateJson(json)
+                                setHasUnsavedChanges(true)
+                            }}
+                            />
+                        </div>
                     </div>
                     </>
                 )}
@@ -595,7 +589,7 @@ export default function WorkspaceEditNote() {
                 {errorMsg && (
                     <p className="text-sm text-red-600 text-center">{errorMsg}</p>
                 )}
-            </div>
+            </FullscreenCard>
         </Layout>
     );
 }

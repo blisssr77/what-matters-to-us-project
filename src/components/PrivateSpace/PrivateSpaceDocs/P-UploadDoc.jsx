@@ -7,6 +7,8 @@ import { encryptText, encryptFile } from "../../../lib/encryption";
 import bcrypt from "bcryptjs";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
+import FullscreenCard from "@/components/Layout/FullscreenCard";
+import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 
 export default function PrivateSpaceUploadDoc() {
   const navigate = useNavigate();
@@ -378,16 +380,8 @@ export default function PrivateSpaceUploadDoc() {
         message="You have unsaved changes. Are you sure you want to leave?"
       />
 
-      <div className="relative max-w-xl mx-auto mt-10 p-6 bg-white rounded shadow border border-gray-200">
-        <button
-          onClick={() => {
-            if (hasUnsavedChanges) setShowUnsavedPopup(true);
-            else navigate("/privatespace/vaults");
-          }}
-          className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
-        >
-          <X size={20} />
-        </button>
+      <FullscreenCard className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
+        <CardHeaderActions onClose={() => navigate('/privatespace/vaults')} />
 
         <h2 className="text-xl font-semibold text-gray-800 mb-4">📤 Upload to {psName}</h2>
         <p className="text-xs text-blue-700 mt-1">
@@ -436,7 +430,7 @@ export default function PrivateSpaceUploadDoc() {
 
           {/* Privacy Section */}
           <div className="mb-4">
-            <label className="mr-4 font-semibold text-gray-800 text-sm">Upload Type:</label>
+            <label className="mr-4 font-bold text-gray-800 text-sm">Upload Type:</label>
             <label className="mr-4 text-gray-800 text-sm">
               <input
                 type="radio"
@@ -461,7 +455,7 @@ export default function PrivateSpaceUploadDoc() {
 
           {/* Document title input */}
           <div>
-            <label className="block text-sm font-medium mb-1 text-gray-800 mt-4">Document title:</label>
+            <label className="block text-sm font-bold mb-1 text-gray-800 mt-4">Document title:</label>
             <input
               value={title}
               onChange={(e) => {
@@ -475,7 +469,7 @@ export default function PrivateSpaceUploadDoc() {
 
           {/* Tag Input Section */}
           <div className="mb-4">
-            <label className="block text-sm mb-1 text-gray-800">Tags:</label>
+            <label className="block font-bold text-sm mb-1 text-gray-800">Tags:</label>
             <div className="flex gap-2">
               <input
                 value={newTag}
@@ -513,7 +507,7 @@ export default function PrivateSpaceUploadDoc() {
 
           {/* Notes */}
           <div>
-            <h className="text-sm font-medium mb-1 text-gray-800">Public note:</h>
+            <h className="text-sm font-bold mb-1 text-gray-800">Public note:</h>
             <textarea
               value={notes}
               onChange={(e) => {
@@ -530,7 +524,7 @@ export default function PrivateSpaceUploadDoc() {
           {isVaulted && (
             <>
               <div>
-                <p className="text-sm text-red-400 mb-1">
+                <p className="text-sm font-bold text-red-500 mb-1">
                   🔐 Private note will be encrypted using your saved Vault Code:
                 </p>
                 <textarea
@@ -547,7 +541,7 @@ export default function PrivateSpaceUploadDoc() {
 
               {/* Vault Code Section */}
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-500">
+                <label className="block text-sm font-bold mb-1 text-gray-800">
                   Enter Private vault code to encrypt document:
                 </label>
                 <input
@@ -583,7 +577,7 @@ export default function PrivateSpaceUploadDoc() {
             />
           )}
         </form>
-      </div>
+      </FullscreenCard>
     </Layout>
   );
 }

@@ -6,6 +6,8 @@ import Layout from "@/components/Layout/Layout";
 import { X, Copy, Edit2, Trash2 } from "lucide-react";
 import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
 import { usePrivateSpaceActions } from "@/hooks/usePrivateSpaceActions";
+import FullscreenCard from "@/components/Layout/FullscreenCard";
+import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 
 const mimeToExtension = {
   "application/pdf": ".pdf",
@@ -244,8 +246,18 @@ export default function PrivateViewDoc() {
   };
 
   const handleCopy = async () => {
-    if (decryptedNote) await navigator.clipboard.writeText(decryptedNote);
-  };
+    const textToCopy = privateHtml
+    ? (() => {
+      const el = document.createElement('div')
+      el.innerHTML = privateHtml
+      return (el.textContent || el.innerText || '').trim()
+    })()
+    : (decryptedNote || '')
+
+    if (textToCopy) {
+      await navigator.clipboard.writeText(textToCopy);
+    }
+  }
 
   // Render file viewer (works for both decrypted (vaulted) and public files)
   const renderFileViewer = () =>
@@ -329,14 +341,8 @@ export default function PrivateViewDoc() {
         </div>
       )}
 
-      <div className="relative max-w-4xl mx-auto p-6 mt-10 bg-white rounded shadow border border-gray-200">
-        <button
-          onClick={() => navigate("/privatespace/vaults")}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl"
-          aria-label="Close"
-        >
-          <X size={20} />
-        </button>
+      <FullscreenCard className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
+        <CardHeaderActions onClose={() => navigate('/privatespace/vaults')} />
 
         {/* --- LOADING SKELETON WHILE FETCHING --- */}
           {loadingDoc ? (
@@ -351,18 +357,20 @@ export default function PrivateViewDoc() {
               {/* ---------------------- LOADED -------------------- */}
               {/* Document title */}
               {doc?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{doc.title}</h2>}
-              <h2 className="text-sm mb-1 text-gray-700">Notes:</h2>
+              <h2 className="text-sm mb-1 font-bold text-gray-700">Notes:</h2>
               {doc?.notes && <p className="text-sm text-gray-800 mb-4">{doc.notes}</p>}
               {/* Tags */}
               {doc?.tags?.length > 0 && (
-                <div className="mb-4 text-sm text-gray-700">
+                <div className="mb-4 text-sm font-bold text-gray-700">
                   Tags:{" "}
-                  {doc.tags.map((tag, i) => (
-                    <React.Fragment key={tag}>
-                      <span className="bg-yellow-50 px-1 rounded">{tag}</span>
-                      {i < doc.tags.length - 1 && ", "}
-                    </React.Fragment>
-                  ))}
+                  <div className="font-normal inline">
+                    {doc.tags.map((tag, i) => (
+                      <React.Fragment key={tag}>
+                        <span className="bg-yellow-50 px-1 rounded">{tag}</span>
+                        {i < doc.tags.length - 1 && ", "}
+                      </React.Fragment>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -385,7 +393,7 @@ export default function PrivateViewDoc() {
               {/* Vault code prompt (only for vaulted docs) */}
               {doc?.is_vaulted && !entered ? (
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-bold text-gray-700 mb-1">
                     Enter Vault Code to Decrypt Document:
                   </label>
 
@@ -422,7 +430,7 @@ export default function PrivateViewDoc() {
                 <>
 
                 {/* Actions */}
-                <div className="flex gap-4 text-sm mb-4">
+                <div className="flex items-center justify-end gap-4 text-xs mb-4">
                   {decryptedNote && (
                     <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
                       <Copy size={16} /> Copy
@@ -466,7 +474,7 @@ export default function PrivateViewDoc() {
             )}
           </>
         )}
-      </div>
+      </FullscreenCard>
     </Layout>
   );
 }

@@ -8,6 +8,8 @@ import { X, Copy, Edit2, Trash2 } from "lucide-react";
 import { saveAs } from "file-saver";
 import bcrypt from "bcryptjs";
 import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
+import FullscreenCard from "@/components/Layout/FullscreenCard";
+import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 
 const mimeToExtension = {
   "application/pdf": ".pdf",
@@ -386,14 +388,8 @@ export default function WorkspaceViewDoc() {
         </div>
       )}
 
-      <div className="relative max-w-4xl mx-auto p-6 mt-10 bg-white rounded shadow border border-gray-200">
-        <button
-          onClick={() => navigate("/workspace/vaults")}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl"
-          aria-label="Close"
-        >
-          <X size={20} />
-        </button>
+      <FullscreenCard className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
+        <CardHeaderActions onClose={() => navigate('/workspace/vaults')} />
 
         {/* --- LOADING SKELETON WHILE FETCHING --- */}
         {loadingDoc ? (
@@ -481,7 +477,7 @@ export default function WorkspaceViewDoc() {
               ) : (
                 <>
                   {/* Action buttons */}
-                  <div className="flex gap-4 text-sm mb-4">
+                  <div className="flex items-center justify-end gap-4 text-xs mb-4">
                     {/* <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
                       <Copy size={16} /> Copy
                     </button> */}
@@ -505,7 +501,7 @@ export default function WorkspaceViewDoc() {
                 // 🌐 Public document
                 <>
                 {/* Public controls */}
-                <div className="flex gap-4 text-sm mb-4">
+                <div className="flex items-center justify-end gap-4 text-xs mb-4">
                   <button onClick={() => navigate(`/workspace/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
                     <Edit2 size={16} /> Edit
                   </button>
@@ -535,7 +531,7 @@ export default function WorkspaceViewDoc() {
               )}
           </>
         )}
-      </div>
+      </FullscreenCard>
     </Layout>
   );
 }

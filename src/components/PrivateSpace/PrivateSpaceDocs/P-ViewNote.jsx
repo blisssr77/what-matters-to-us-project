@@ -10,6 +10,8 @@ import { generateJSON } from '@tiptap/html'
 import StarterKit from '@tiptap/starter-kit'
 import TextAlign from '@tiptap/extension-text-align'
 import ReadOnlyViewer from '@/components/Editors/ReadOnlyViewer'
+import FullscreenCard from "@/components/Layout/FullscreenCard";
+import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 
 export default function PrivateViewNote() {
     const { id } = useParams();
@@ -230,6 +232,7 @@ export default function PrivateViewNote() {
     // derived states
     const loadingNote = noteData === null
 
+    // ======================================================== RENDER ========================================================
     return (
         <Layout>
         {/* Delete confirmation */}
@@ -255,14 +258,8 @@ export default function PrivateViewNote() {
             </div>
         )}
 
-        <div className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
-            <button
-            onClick={() => navigate("/privatespace/vaults")}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl"
-            aria-label="Close"
-            >
-                <X size={20} />
-            </button>
+        <FullscreenCard className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
+            <CardHeaderActions onClose={() => navigate('/privatespace/vaults')} />
             
             {/* --- LOADING SKELETON WHILE FETCHING --- */}
             {loadingNote ? (
@@ -279,20 +276,22 @@ export default function PrivateViewNote() {
                     {noteData?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{noteData.title}</h2>}
                     {/* Tags */}
                     {noteData?.tags?.length > 0 && (
-                        <div className="mb-3 text-sm text-gray-800 font-medium">
+                        <div className="mb-3 text-sm text-gray-800 font-bold">
                             Tags:{" "}
-                            {noteData.tags.map((tag, index) => (
-                            <React.Fragment key={tag}>
-                                <span className="bg-yellow-50 px-1 rounded">{tag}</span>
-                                {index < noteData.tags.length - 1 && ", "}
-                            </React.Fragment>
-                            ))}
+                            <div className="font-normal inline">
+                                {noteData.tags.map((tag, index) => (
+                                <React.Fragment key={tag}>
+                                    <span className="bg-yellow-50 px-1 rounded">{tag}</span>
+                                    {index < noteData.tags.length - 1 && ", "}
+                                </React.Fragment>
+                                ))}
+                            </div>
                         </div>
                     )}
                     
                     {/* Public note */}
                     <div className="mb-4">
-                        <h2 className="text-sm font-medium text-gray-800 m-0 mb-1">Notes:</h2>
+                        <h2 className="text-sm font-bold text-gray-800 m-0 mb-1">Notes:</h2>
 
                         {publicJson ? (
                             <ReadOnlyViewer
@@ -318,7 +317,7 @@ export default function PrivateViewNote() {
                     <div>
                         {noteData?.is_vaulted && !codeEntered ? (
                             <>
-                            <label className="block text-sm font-medium mb-1 mt-6 text-gray-800">
+                            <label className="block text-sm font-bold mb-1 mt-6 text-gray-800">
                                 Enter Private Vault Code to Decrypt Note:
                             </label>
 
@@ -355,7 +354,7 @@ export default function PrivateViewNote() {
                             {/* Private (vaulted) note */}
                             {noteData?.is_vaulted && (
                                 <div className="mt-2 mb-4">
-                                    <div className="text-gray-900 mb-1 text-sm font-medium">Private note:</div>
+                                    <div className="text-gray-900 mb-1 text-sm font-bold">Private note:</div>
 
                                     {decryptErr ? (
                                         <div className="text-xs text-red-600 mb-2">{decryptErr}</div>
@@ -378,7 +377,12 @@ export default function PrivateViewNote() {
                             )}
 
                             {/* Action buttons */}
-                            <div className="flex items-center justify-end gap-4 text-sm mb-4">
+                            <div className="flex items-center justify-end gap-4 text-xs mb-4">
+                                {decryptedNote && (
+                                    <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
+                                        <Copy size={16} /> Copy
+                                    </button>
+                                )}
                                 <button
                                 onClick={() => navigate(`/privatespace/vaults/note-edit/${id}`)}
                                 className="flex items-center gap-1 text-blue-600 hover:underline"
@@ -414,7 +418,7 @@ export default function PrivateViewNote() {
                     </div>
                 </>
             )}
-        </div>
+        </FullscreenCard>
         </Layout>
     );
 }

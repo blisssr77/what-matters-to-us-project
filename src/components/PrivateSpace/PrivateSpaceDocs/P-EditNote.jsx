@@ -495,16 +495,15 @@ export default function PrivateEditNote() {
         </div>
       )}
 
-
       <FullscreenCard className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
         <CardHeaderActions onClose={() => navigate('/privatespace/vaults')} />
 
-        <h2 className="text-xl font-semibold mb-1 text-gray-900">
+        <h2 className="text-xl font-semibold mb-5 text-gray-900">
           Edit Note {spaceName ? `in “${spaceName}”` : ""}
         </h2>
 
         {/* Title */}
-        <label className="text-sm text-gray-800 mb-1 block">Note title:</label>
+        <label className="text-sm font-bold text-gray-800 mb-1 block">Note title:</label>
         <input
           value={editedTitle}
           onChange={(e) => {
@@ -517,7 +516,7 @@ export default function PrivateEditNote() {
 
         {/* Public / Private toggle */}
         <div className="mb-3 text-sm">
-          <label className="mr-4 text-gray-800">Note Type:</label>
+          <label className="mr-4 font-bold text-gray-800">Note Type:</label>
           <label className="mr-4 text-gray-800">
             <input
               type="radio"
@@ -548,42 +547,47 @@ export default function PrivateEditNote() {
         </div>
 
         {/* Public note */}
-        <div className="text-sm font-medium mb-4 text-gray-800 wm-content max-w-full break-words overflow-x-hidden">
-          <label className="text-sm font-medium text-gray-800 mb-1 block">
+        <div className="text-sm mb-4 text-gray-800 wm-content max-w-full break-words overflow-x-hidden">
+          <label className="text-sm font-bold text-gray-800 mb-1 block">
             Edit public note:
           </label>
-          <RichTextEditor
-            key={`ps-pub-${id}`}
-            valueJSON={publicJson}
-            onChangeJSON={(json, html) => {
-              setPublicJson(json);
-              setPublicHtml(html);        // we sanitize at save time
-              setHasUnsavedChanges(true);
-            }}
-          />
+          <div className="bg-white border border-gray-200 rounded p-3 mb-4">
+            <RichTextEditor
+              key={`ps-pub-${id}`}
+              valueJSON={publicJson}
+              onChangeJSON={(json, html) => {
+                setPublicJson(json);
+                setPublicHtml(html);        // we sanitize at save time
+                setHasUnsavedChanges(true);
+              }}
+            />
+          </div>
+
         </div>
 
         {/* Private (encrypted) note section */}
         {isVaulted && (
-          <div className="text-sm font-medium mb-4 text-gray-800 wm-content max-w-full break-words overflow-x-hidden">
+          <div className="text-sm mb-4 text-gray-800 wm-content max-w-full break-words overflow-x-hidden">
             <p className="text-sm text-red-500 mb-1 font-bold">
               🔐 Private note: will be encrypted using your Private Vault Code.
             </p>
 
-            <RichTextEditor
-              key={`ps-priv-${id}-${privateJson ? 'ready' : 'locked'}`}
-              valueJSON={privateJson}
-              onChangeJSON={(json) => {
-                setPrivateJson(json);
-                setHasUnsavedChanges(true);
-              }}
-            />
+            <div className="bg-white border border-gray-200 rounded p-3 mb-4">
+              <RichTextEditor
+                key={`ps-priv-${id}-${privateJson ? 'ready' : 'locked'}`}
+                valueJSON={privateJson}
+                onChangeJSON={(json) => {
+                  setPrivateJson(json);
+                  setHasUnsavedChanges(true);
+                }}
+              />
+            </div>
           </div>
         )}
 
         {/* Tags */}
         <div className="mb-5">
-          <label className="block text-sm mb-1 text-gray-800">Tags:</label>
+          <label className="block text-sm font-bold mb-1 text-gray-800">Tags:</label>
           <div className="flex gap-2">
             <input
               value={newTag}
@@ -623,7 +627,7 @@ export default function PrivateEditNote() {
         {isVaulted && (
           <>
             <div className="mb-3">
-              <label className="block text-sm font-medium mb-1 text-gray-800">
+              <label className="block text-sm font-bold mb-1 text-gray-800">
                 Re-enter Private vault code:
               </label>
               <div className="flex gap-2">

@@ -8,6 +8,8 @@ import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
 import DOMPurify from "dompurify";
 import RichTextEditor from "@/components/Editors/RichTextEditor";
+import FullscreenCard from "@/components/Layout/FullscreenCard";
+import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 
 export default function PrivateUploadNote() {
   const navigate = useNavigate();
@@ -300,22 +302,14 @@ export default function PrivateUploadNote() {
         message="You have unsaved changes. Are you sure you want to leave?"
       />
 
-      <div className="relative max-w-xl mx-auto mt-10 p-6 bg-white rounded shadow border border-gray-200">
-        <button
-          onClick={() => {
-            if (hasUnsavedChanges) setShowUnsavedPopup(true);
-            else navigate("/privatespace/vaults");
-          }}
-          className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
-        >
-          <X size={20} />
-        </button>
+      <FullscreenCard className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
+        <CardHeaderActions onClose={() => navigate('/privatespace/vaults')} />
 
         <h2 className="text-xl font-bold mb-4 text-gray-800">📝 Upload to {spaceName || "My Private Vault"}</h2>
 
         {/* Upload Type */}
         <div className="mb-4 text-sm">
-          <label className="mr-4 font-semibold text-gray-800">Upload Type:</label>
+          <label className="mr-4 font-bold text-gray-800">Upload Type:</label>
           <label className="mr-4 text-gray-800">
             <input
               type="radio"
@@ -339,7 +333,7 @@ export default function PrivateUploadNote() {
         </div>
 
         {/* Title */}
-        <label className="block text-sm font-medium mb-1 text-gray-700">Note title:</label>
+        <label className="block text-sm font-bold mb-1 text-gray-800">Note title:</label>
         <input
           value={title}
           onChange={(e) => { setTitle(e.target.value); setHasUnsavedChanges(true); }}
@@ -348,26 +342,28 @@ export default function PrivateUploadNote() {
         />
 
         {/* Public note */}
-        <div className="text-sm font-medium mb-4 text-gray-800">
+        <div className="text-sm mb-4 text-gray-800">
           <div className="mb-1 flex items-center justify-between">
-            <h2 className="text-sm font-medium text-gray-800 m-0">Public note:</h2>
+            <h2 className="text-sm font-bold text-gray-800 m-0">Public note:</h2>
           </div>
 
-          <RichTextEditor
-            key="ps-public"
-            valueJSON={publicJson}
-            onChangeJSON={(json, html) => {
-              setPublicJson(json);
-              setPublicHtml(html);
-              setHasUnsavedChanges(true);
-            }}
-          />
+          <div className="bg-white border font-normal border-gray-200 rounded p-3 mb-4">
+            <RichTextEditor
+              key="ps-public"
+              valueJSON={publicJson}
+              onChangeJSON={(json, html) => {
+                setPublicJson(json);
+                setPublicHtml(html);
+                setHasUnsavedChanges(true);
+              }}
+            />
+          </div>
         </div>
 
         {/* Public Note (always available, saved in `notes`) */}
         {/* Tags */}
         <div className="mb-5">
-          <label className="block text-sm mb-1 text-gray-800">Tags:</label>
+          <label className="block text-sm font-bold mb-1 text-gray-800">Tags:</label>
           <div className="flex gap-2">
             <input
               value={newTag}
@@ -406,22 +402,24 @@ export default function PrivateUploadNote() {
         {/* Private Note + Vault Code (only when vaulted) */}
         {isVaulted && (
           <>
-            <div className="text-sm font-medium mb-4 text-gray-800">
-              <p className="text-sm text-red-500 mb-1">
+            <div className="text-sm mb-4 text-gray-800">
+              <p className="text-sm font-bold text-red-500 mb-1">
                 🔐 This private note will be encrypted with your Private vault code.
               </p>
 
-              <RichTextEditor
-                key="ps-private"
-                valueJSON={privateJson}
-                onChangeJSON={(json) => {
-                  setPrivateJson(json);
-                  setHasUnsavedChanges(true);
-                }}
-              />
+              <div className="bg-white border border-gray-200 rounded p-3 mb-4">
+                <RichTextEditor
+                  key="ps-private"
+                  valueJSON={privateJson}
+                  onChangeJSON={(json) => {
+                    setPrivateJson(json);
+                    setHasUnsavedChanges(true);
+                  }}
+                />
+              </div>
             </div>
 
-            <label className="block text-sm font-medium mb-1 text-gray-700">
+            <label className="block text-sm font-bold mb-1 text-gray-800">
               Enter Private vault code to encrypt note:
             </label>
             <input
@@ -442,7 +440,7 @@ export default function PrivateUploadNote() {
         <br />
         {successMsg && <p className="text-sm text-center mt-3 text-green-600">{successMsg}</p>}
         {errorMsg && <p className="text-sm text-center mt-3 text-red-600">{errorMsg}</p>}
-      </div>
+      </FullscreenCard>
     </Layout>
   );
 };

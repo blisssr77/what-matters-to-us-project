@@ -9,6 +9,8 @@ import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 import RichTextEditor from "../../Editors/RichTextEditor";
 import DOMPurify from "dompurify";
+import FullscreenCard from "@/components/Layout/FullscreenCard";
+import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 
 const WorkspaceUploadNote = () => {
     const [title, setTitle] = useState("");
@@ -285,19 +287,8 @@ const WorkspaceUploadNote = () => {
                 message="You have unsaved changes. Are you sure you want to leave?"
             />
 
-            <div className="relative max-w-xl mx-auto mt-10 p-6 bg-white rounded shadow border border-gray-200">
-                <button
-                    onClick={() => {
-                        if (hasUnsavedChanges) {
-                        setShowUnsavedPopup(true);
-                        } else {
-                        navigate("/workspace/vaults");
-                        }
-                    }}
-                    className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
-                    >
-                    <X size={20} />
-                </button>
+            <FullscreenCard className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
+                <CardHeaderActions onClose={() => navigate('/workspace/vaults')} />
 
                 <h2 className="text-xl font-bold mb-4 text-gray-800">📝 Upload to {wsName}</h2>
 
@@ -346,10 +337,12 @@ const WorkspaceUploadNote = () => {
                             </div>
                         </div>
                     </div>
-                    <RichTextEditor
-                        valueJSON={publicJson}
-                        onChangeJSON={(json, html) => { setPublicJson(json); setPublicHtml(html); }}
-                    />
+                    <div className="bg-white border border-gray-200 rounded p-3 mb-4">
+                        <RichTextEditor
+                            valueJSON={publicJson}
+                            onChangeJSON={(json, html) => { setPublicJson(json); setPublicHtml(html); }}
+                        />
+                    </div>
                 </div>
 
                 {/* Tag Input Section */}
@@ -393,14 +386,16 @@ const WorkspaceUploadNote = () => {
                 {isVaulted && (
                     <>
                     {/* Private Note Section */}
-                    <p className="text-sm text-red-500 mb-1">
-                        🔐 Private note: will be encrypted using your saved Vault Code
-                    </p>
                     <div className="text-sm font-medium mb-4 text-gray-800">
-                        <RichTextEditor
-                        valueJSON={privateJson}
-                        onChangeJSON={(json, html) => { setPrivateJson(json); setPrivateHtml(html); }}
-                        />
+                        <p className="text-sm text-red-500 mb-1">
+                            🔐 Private note: will be encrypted using your saved Vault Code
+                        </p>
+                        <div className="bg-white border border-gray-200 rounded p-3 mb-4">
+                            <RichTextEditor
+                            valueJSON={privateJson}
+                            onChangeJSON={(json, html) => { setPrivateJson(json); setPrivateHtml(html); }}
+                            />
+                        </div>
                     </div>
                     {/* Vault Code Section */}
                     <label className="block text-sm font-medium mb-1 text-gray-700">
@@ -431,7 +426,7 @@ const WorkspaceUploadNote = () => {
                 {errorMsg && (
                     <p className="text-sm text-center mt-3 text-red-600">{errorMsg}</p>
                 )}
-            </div>
+            </FullscreenCard>
         </Layout>
     );
 };
