@@ -55,7 +55,7 @@ export default function SaveTemplateModal({
 
           <div className="p-4 space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Template name</label>
+              <label className="block text-xs font-medium text-gray-800 mb-1">Template name</label>
               <input
                 type="text"
                 value={name}
@@ -66,9 +66,9 @@ export default function SaveTemplateModal({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Visibility</label>
+              <label className="block text-xs font-medium text-gray-800 mb-1">Visibility</label>
               <div className="flex items-center gap-3">
-                <label className="text-gray-700 inline-flex items-center gap-2 text-sm">
+                <label className="text-gray-800 inline-flex items-center gap-2 text-sm">
                   <input
                     type="radio"
                     name="visibility"
@@ -78,7 +78,7 @@ export default function SaveTemplateModal({
                   />
                   Private
                 </label>
-                <label className="text-gray-700 inline-flex items-center gap-2 text-sm">
+                <label className="text-gray-800 inline-flex items-center gap-2 text-sm">
                   <input
                     type="radio"
                     name="visibility"

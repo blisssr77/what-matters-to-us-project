@@ -315,8 +315,9 @@ export default function WorkspaceViewNote() {
                 {noteData?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{noteData.title}</h2>}
                 {/* Display tags content */}
                 {Array.isArray(noteData?.tags) && noteData.tags.length > 0 && (
-                    <div className="mb-3 text-sm text-gray-800">
+                    <div className="mb-3 text-sm font-bold text-gray-900">
                         Tags:{" "}
+                        <div className="inline-block font-normal" />
                         {noteData.tags.map((tag, index) => (
                         <React.Fragment key={tag}>
                             <span className="bg-yellow-50 px-1 rounded font-extralight">{tag}</span>
@@ -327,7 +328,7 @@ export default function WorkspaceViewNote() {
                 )}
                 {/* Public note */}
                 <div className="mb-4">
-                  <h2 className="text-sm font-medium text-gray-800 m-0 mb-1">Notes:</h2>
+                  <h2 className="text-sm font-bold text-gray-900 m-0 mb-1">Notes:</h2>
 
                   {publicJson ? (
                     <ReadOnlyViewer
@@ -352,16 +353,16 @@ export default function WorkspaceViewNote() {
                 <div>
                 {noteData?.is_vaulted && !codeEntered ? (
                     <>
-                    <label className="block text-sm font-medium mb-1 mt-6 text-gray-600">
+                    <label className="block text-sm font-bold mt-6 text-gray-900">
                       Enter Private Vault Code to Decrypt Note:
                     </label>
                     {/* Vault code input */}
-                    <div className="mt-2 flex items-center gap-3">
+                    <div className="mt-1 flex items-center gap-3">
                       <input
                           type="password"
                           value={vaultCode}
                           onChange={(e) => setVaultCode(e.target.value)}
-                          className="w-full p-2 border rounded text-sm text-gray-700"
+                          className="w-full p-2 border rounded text-sm text-gray-800"
                           placeholder="Vault Code"
                           autoComplete="current-password"
                       />
@@ -388,7 +389,7 @@ export default function WorkspaceViewNote() {
                     <div className="mt-2 mb-4">
                       {codeEntered ? (
                         <>
-                          <div className="text-gray-900 mb-1 text-sm font-medium">Private note:</div>
+                          <div className="text-gray-900 mb-1 text-sm font-bold">Private note:</div>
 
                           {decryptErr ? (
                             <div className="text-xs text-red-600 mb-2">{decryptErr}</div>
@@ -396,7 +397,7 @@ export default function WorkspaceViewNote() {
                             <ReadOnlyViewer
                               json={privateJson}
                               html={privateHtml}
-                              className="wm-content text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3"
+                              className="wm-content text-sm text-gray-800 bg-gray-100 border border-purple-200 rounded p-3"
                             />
                           ) : (
                             <div className="text-sm text-gray-600 bg-purple-50 border border-purple-200 rounded p-3">

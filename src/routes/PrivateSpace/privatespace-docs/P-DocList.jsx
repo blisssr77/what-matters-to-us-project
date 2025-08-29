@@ -318,13 +318,13 @@ export default function PrivateDocList() {
             </button>
 
             {showTagFilter && (
-              <div className="absolute z-30 mt-2 w-full max-h-60 bg-white border border-gray-300 rounded-lg shadow p-3 text-gray-700">
+              <div className="absolute z-30 mt-2 w-full max-h-60 bg-white border border-gray-300 rounded-lg shadow p-3 text-gray-800">
                 <input
                   type="text"
                   placeholder="Filter tags..."
                   value={tagSearchTerm}
                   onChange={(e) => setTagSearchTerm(e.target.value)}
-                  className="w-full p-2 mb-2 border border-gray-300 rounded text-sm text-gray-700 hover:border-gray-500"
+                  className="w-full p-2 mb-2 border border-gray-300 rounded text-sm text-gray-800 hover:border-gray-500"
                 />
                 <div className="max-h-40 overflow-y-auto mb-1">
                   {allTags
@@ -423,7 +423,7 @@ export default function PrivateDocList() {
                 {canShowMore && (
                   <button
                     onClick={(e) => toggleExpand(e, doc.id)}
-                    className="mt-1 inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border border-gray-300 text-gray-700 hover:border-purple-500 hover:text-purple-600 transition mb-2 font-semibold"
+                    className="mt-1 inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border border-gray-300 text-gray-800 hover:border-purple-500 hover:text-purple-600 transition mb-2 font-semibold"
                   >
                     {isExpanded ? "Show less" : "Show more"}
                   </button>

@@ -83,7 +83,7 @@ export default function Topbar() {
              initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute right-0 mt-3 w-64 rounded-xl overflow-hidden bg-gray-900/90 border border-gray-700 backdrop-blur-lg shadow-xl"
+            className="absolute right-0 mt-3 w-64 rounded-xl overflow-hidden bg-gray-900/90 border border-gray-800 backdrop-blur-lg shadow-xl"
             >
               {/* Top profile preview */}
               <div className="px-4 py-3 border-b border-gray-800">

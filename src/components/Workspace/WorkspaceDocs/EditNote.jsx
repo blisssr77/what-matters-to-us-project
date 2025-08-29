@@ -14,6 +14,7 @@ import TextAlign from '@tiptap/extension-text-align'
 import RichTextEditor from '@/components/Editors/RichTextEditor'
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
+import { addWorkspaceTag } from "@/lib/tagsApi";
 
 export default function WorkspaceEditNote() {
     const { id } = useParams();
@@ -392,31 +393,29 @@ export default function WorkspaceEditNote() {
         setSaving(false)
     }
 
-    // Handle tag addition
+    // ✅ Add tag (Workspace scope, deduped server-side)
     const handleTagAdd = async () => {
-        if (!newTag.trim()) return;
+        const raw = String(newTag || '').trim()
+        if (!raw) return
 
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        if (userError || !user?.id) {
-            console.error("Unable to get user.");
-            return;
-        }
+        const { data: { user } = {} } = await supabase.auth.getUser()
+        if (!user?.id) { console.error('Not signed in'); return }
+        if (!activeWorkspaceId) { console.error('No activeWorkspaceId'); return }
 
-        // Insert only if not already in DB
-        if (!availableTags.includes(newTag)) {
-            await supabase.from("vault_tags").insert({
-                name: newTag,
-                section: "Workspace",
-                user_id: user.id,
-                workspace_id: activeWorkspaceId,
-            });
-            setAvailableTags((prev) => [...prev, newTag]);
-        }
+        const { data: row, error } = await addWorkspaceTag(supabase, {
+            name: raw,
+            workspaceId: activeWorkspaceId,
+            userId: user.id,
+        })
+        if (error) { console.error(error); return }
 
-        // Add to local tag list if not already added
-        if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
-        setNewTag("");
-    };
+        const existsCI = (arr, val) =>
+            arr.some(t => String(t).toLowerCase() === String(val).toLowerCase())
+
+        setAvailableTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
+        setTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
+        setNewTag('')
+    }
 
     return (
         <Layout>
@@ -439,7 +438,7 @@ export default function WorkspaceEditNote() {
 
                 {/* Public / Private toggle */}
                 <div className="mb-3 text-sm">
-                    <label className="mr-4 text-gray-800">Note Type:</label>
+                    <label className="mr-4 font-bold text-gray-800">Note Type:</label>
                     <label className="mr-4 text-gray-800">
                         <input
                         type="radio"
@@ -482,8 +481,8 @@ export default function WorkspaceEditNote() {
                 />
 
                 {/* Public Notes */}
-                <div className="text-sm font-medium mb-4 text-gray-800">
-                    <label className="text-sm font-medium text-gray-800 mb-1 block">Edit public note:</label>
+                <div className="text-sm mb-4 text-gray-800">
+                    <label className="text-sm font-bold text-gray-800 mb-1 block">Edit public note:</label>
                     <div className="bg-white border border-gray-200 rounded p-3 mb-4">
                         <RichTextEditor
                         key={`pub-${id}`}
@@ -521,12 +520,12 @@ export default function WorkspaceEditNote() {
 
                 {/* Tag Input Section */}
                 <div className="mb-5">
-                    <label className="block text-sm mb-1 text-gray-800">Tags:</label>
+                    <label className="block text-sm font-bold mb-1 text-gray-800">Tags:</label>
                     <div className="flex gap-2">
                         <input
                         value={newTag}
                         onChange={(e) => setNewTag(e.target.value)}
-                        className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
+                        className="border bg-gray-50 rounded px-2 py-1 text-sm flex-1 text-gray-800"
                         placeholder="Add a tag"
                         />
                         <button onClick={handleTagAdd} className="btn-secondary">Add</button>
@@ -547,7 +546,7 @@ export default function WorkspaceEditNote() {
                             className={`px-2 py-1 rounded text-xs border ${
                                 selected
                                 ? "bg-purple-100 border-purple-400 text-purple-700"
-                                : "bg-white border-gray-300 text-gray-700"
+                                : "bg-white border-gray-300 text-gray-800"
                             }`}
                             >
                             {t}
@@ -561,7 +560,7 @@ export default function WorkspaceEditNote() {
                 {isVaulted && (
                 <>
                     <div>
-                        <label className="block text-sm font-medium mb-1 text-gray-800">
+                        <label className="block text-sm font-bold mb-1 text-gray-800">
                             Re-enter Workspace vault code to encrypt:
                         </label>
                         <input

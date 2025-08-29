@@ -133,13 +133,13 @@ export default function WorkspaceVaultList() {
 
             {/* Tag Filter Dropdown */}
             {showTagFilter && (
-              <div className="absolute z-30 mt-2 w-full max-h-60 bg-white border border-gray-300 rounded-lg shadow p-3 text-gray-700">
+              <div className="absolute z-30 mt-2 w-full max-h-60 bg-white border border-gray-300 rounded-lg shadow p-3 text-gray-800">
                 <input
                   type="text"
                   placeholder="Filter tags..."
                   value={tagSearchTerm}
                   onChange={(e) => setTagSearchTerm(e.target.value)}
-                  className="w-full p-2 mb-2 border border-gray-300 rounded text-sm text-gray-700"
+                  className="w-full p-2 mb-2 border border-gray-300 rounded text-sm text-gray-800"
                 />
 
                 {/* Display filtered tags */}
@@ -201,7 +201,7 @@ export default function WorkspaceVaultList() {
                 </div>
 
                 {doc.tags?.length > 0 && (
-                  <div className="mb-2 text-xs text-gray-700">
+                  <div className="mb-2 text-xs text-gray-800">
                     Tags:{" "}
                     {/* Map over each tag to apply individual styling */}
                     {doc.tags.map((tag, index) => (

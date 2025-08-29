@@ -297,11 +297,11 @@ export default function WorkspaceViewDoc() {
         <div key={i} className="mb-6 mt-6 p-4 bg-gray-100 rounded shadow-sm border border-gray-200">
           {/* File name and Download button */}
           <div className="flex items-center justify-between mb-2">
-            <span className="font-medium text-gray-800">{name}</span>
+            <span className="font-medium text-xs text-gray-800">{name}</span>
             <a
               href={url}
               download={name}
-              className="text-sm text-blue-600 hover:underline"
+              className="text-xs text-blue-600 hover:underline"
             >
               ⬇ Download
             </a>
@@ -403,13 +403,14 @@ export default function WorkspaceViewDoc() {
             <>
             {/* ---------------------- LOADED -------------------- */}
             {/* Document title */}
-            {doc?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{doc.title}</h2>}
-            <h2 className="text-sm mb-1 text-gray-700">Notes:</h2>
+            {doc?.title && <h2 className="text-xl text-gray-900 font-bold mb-4">{doc.title}</h2>}
+            <h2 className="text-sm mb-1 font-bold text-gray-900">Notes:</h2>
             {doc?.notes && <p className="text-sm text-gray-800 mb-4">{doc.notes}</p>}
             {/* Tags */}
             {doc?.tags?.length > 0 && (
-              <div className="mb-4 text-sm text-gray-700">
+              <div className="mb-4 text-sm font-bold text-gray-800">
                 Tags:{" "}
+                <div className="inline-block font-normal" />
                 {doc.tags.map((tag, index) => (
                   <React.Fragment key={tag}>
                     <span className="bg-yellow-50 px-1 rounded">{tag}</span>
@@ -422,8 +423,8 @@ export default function WorkspaceViewDoc() {
             {/* Display decrypted note if available */}
             {entered && decryptedNote && (
               <>
-                <div className="text-gray-700 mb-1 font-bold text-sm">Private note:</div>
-                <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
+                <div className="text-gray-900 mb-1 font-bold text-sm">Private note:</div>
+                <div className="text-sm text-gray-800 bg-gray-100 border border-purple-200 rounded p-3 mb-4">
                   {decryptedNote}
                 </div>
               </>
@@ -441,17 +442,17 @@ export default function WorkspaceViewDoc() {
             {doc?.is_vaulted ? (
               !entered ? (
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Enter Vault Code to Decrypt Document:
+                  <label className="block text-sm font-bold text-gray-900">
+                  Enter Workspace Vault Code to Decrypt Document:
                 </label>
 
                 {/* Vault code input */}
-                <div className="mt-2 flex items-center gap-3">
+                <div className="mt-1 flex items-center gap-3">
                   <input
                   type="password"
                   value={vaultCode}
                   onChange={(e) => setVaultCode(e.target.value)}
-                  className="w-full p-2 border rounded text-sm text-gray-700"
+                  className="w-full p-2 border rounded text-sm text-gray-800"
                   placeholder="Vault Code"
                   autoComplete="current-password"
                   />
@@ -514,7 +515,7 @@ export default function WorkspaceViewDoc() {
 
                 {/* Tags */}
                 {/* {doc?.tags?.length > 0 && (
-                  <div className="mb-4 text-sm text-gray-700">
+                  <div className="mb-4 text-sm text-gray-800">
                     Tags:{" "}
                     {doc.tags.map((tag, index) => (
                       <React.Fragment key={tag}>

@@ -12,6 +12,7 @@ import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
+import { addPrivateTag } from "@/lib/tagsApi";
 
 export default function PrivateEditNote() {
   const { id } = useParams();
@@ -166,34 +167,29 @@ export default function PrivateEditNote() {
     [availableTags, tags]
   );
 
-  // Add tag (insert if missing) — space-scoped going forward
-  const handleTagAdd = useCallback(async () => {
-    const t = newTag.trim();
-    if (!t) return;
+  // ✅ Add tag (Private scope, space-scoped, deduped server-side)
+  const handleTagAdd = async () => {
+    const raw = String(newTag || '').trim()
+    if (!raw) return
 
-    const { data: { user } = {}, error: uErr } = await supabase.auth.getUser();
-    if (uErr || !user?.id) {
-      console.error("Unable to get user.");
-      return;
-    }
-    if (!effectiveSpaceId) {
-      setErrorMsg("No active private space selected.");
-      return;
-    }
+    const { data: { user } = {} } = await supabase.auth.getUser()
+    if (!user?.id) { console.error('Not signed in'); return }
+    if (!effectiveSpaceId) { setErrorMsg('No active private space selected.'); return }
 
-    if (!availableTags.includes(t)) {
-      const { error } = await supabase.from("vault_tags").insert({
-        name: t,
-        section: "Private",
-        user_id: user.id,
-        private_space_id: effectiveSpaceId, // ← scope to this space
-      });
-      if (!error) setAvailableTags((prev) => [...prev, t]);
-    }
+    const { data: row, error } = await addPrivateTag(supabase, {
+      name: raw,
+      privateSpaceId: effectiveSpaceId,
+      userId: user.id,
+    })
+    if (error) { console.error(error); return }
 
-    if (!tags.includes(t)) setTags((prev) => [...prev, t]);
-    setNewTag("");
-  }, [newTag, availableTags, tags, effectiveSpaceId]);
+    const existsCI = (arr, val) =>
+      arr.some(t => String(t).toLowerCase() === String(val).toLowerCase())
+
+    setAvailableTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
+    setTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
+    setNewTag('')
+  }
 
   // Try auto-decrypt with stored vault code (only if vaulted + encrypted fields present)
   useEffect(() => {
@@ -592,7 +588,7 @@ export default function PrivateEditNote() {
             <input
               value={newTag}
               onChange={(e) => setNewTag(e.target.value)}
-              className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
+              className="border rounded px-2 py-1 text-sm flex-1 text-gray-800 bg-gray-50"
               placeholder="Add a tag"
             />
             <button onClick={handleTagAdd} className="btn-secondary">Add</button>
@@ -613,7 +609,7 @@ export default function PrivateEditNote() {
                   className={`px-2 py-1 rounded text-xs border ${
                     selected
                       ? "bg-purple-100 border-purple-400 text-purple-700"
-                      : "bg-white border-gray-300 text-gray-700"
+                      : "bg-white border-gray-300 text-gray-800"
                   }`}
                 >
                   {t}

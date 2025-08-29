@@ -272,8 +272,8 @@ export default function PrivateViewDoc() {
       return (
         <div key={i} className="mb-6 mt-6 p-4 bg-gray-100 rounded shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-2">
-            <span className="font-medium text-gray-800">{name}</span>
-            <a href={url} download={name} className="text-sm text-blue-600 hover:underline">
+            <span className="font-medium text-xs text-gray-800">{name}</span>
+            <a href={url} download={name} className="text-xs text-blue-600 hover:underline">
               ⬇ Download
             </a>
           </div>
@@ -357,11 +357,11 @@ export default function PrivateViewDoc() {
               {/* ---------------------- LOADED -------------------- */}
               {/* Document title */}
               {doc?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{doc.title}</h2>}
-              <h2 className="text-sm mb-1 font-bold text-gray-700">Notes:</h2>
+              <h2 className="text-sm mb-1 font-bold text-gray-800">Notes:</h2>
               {doc?.notes && <p className="text-sm text-gray-800 mb-4">{doc.notes}</p>}
               {/* Tags */}
               {doc?.tags?.length > 0 && (
-                <div className="mb-4 text-sm font-bold text-gray-700">
+                <div className="mb-4 text-sm font-bold text-gray-800">
                   Tags:{" "}
                   <div className="font-normal inline">
                     {doc.tags.map((tag, i) => (
@@ -376,9 +376,12 @@ export default function PrivateViewDoc() {
 
               {/* Decrypted private note */}
               {entered && decryptedNote && (
-                <div className="text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3 mb-4">
-                  {decryptedNote}
-                </div>
+                <>
+                  <div className="text-gray-800 mb-1 text-sm font-bold">Private note:</div>
+                  <div className="text-sm text-gray-900 bg-gray-100 border border-purple-200 rounded p-3 mb-4">
+                    {decryptedNote}
+                  </div>
+                </>
               )}
 
               {/* File list (names) */}
@@ -393,7 +396,7 @@ export default function PrivateViewDoc() {
               {/* Vault code prompt (only for vaulted docs) */}
               {doc?.is_vaulted && !entered ? (
                 <div className="mb-4">
-                  <label className="block text-sm font-bold text-gray-700 mb-1">
+                  <label className="block text-sm font-bold text-gray-800 mb-1">
                     Enter Vault Code to Decrypt Document:
                   </label>
 
@@ -403,7 +406,7 @@ export default function PrivateViewDoc() {
                       type="password"
                       value={vaultCode}
                       onChange={(e) => setVaultCode(e.target.value)}
-                      className="w-full p-2 border rounded text-sm text-gray-700"
+                      className="w-full p-2 border rounded text-sm text-gray-800"
                       placeholder="Vault Code"
                       autoComplete="current-password"
                     />

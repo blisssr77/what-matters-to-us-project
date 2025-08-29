@@ -202,7 +202,7 @@ export default function PrivateSpaceSettingsModal({
                   </AlertDialogHeader>
 
                   <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-800 mb-1">
                       Enter your Private Vault Code to confirm
                     </label>
                     <input

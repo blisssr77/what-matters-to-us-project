@@ -189,7 +189,7 @@ export default function InviteModal({ onClose, workspaceId }) {
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm">
             <h3 className="text-lg font-semibold mb-4 text-gray-800">🎉 Invitation Sent!</h3>
-            <p className="text-sm text-gray-700 mb-4">{successMsg}</p>
+            <p className="text-sm text-gray-800 mb-4">{successMsg}</p>
             <button
               onClick={() => {
                 setShowSuccessModal(false);

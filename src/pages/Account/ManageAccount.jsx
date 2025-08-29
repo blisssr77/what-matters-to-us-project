@@ -548,7 +548,7 @@ export default function ManageAccount() {
             Vault codes
             
         </h2>
-        <p className="text-sm text-gray-700 mb-4">
+        <p className="text-sm text-gray-800 mb-4">
             Vault Codes are like personal encryption passwords used to lock or unlock your secure notes and files.
         <span className="block text-red-400 mt-1 font-medium">
             This cannot be recovered if forgotten. Make sure it’s memorable or saved securely.

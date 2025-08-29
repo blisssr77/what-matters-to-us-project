@@ -103,7 +103,7 @@ export default function WorkspaceTabs({
 
       <div
         ref={scrollerRef}
-        className="relative flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent"
+        className="relative flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent"
         onScroll={updateScrollState}
       >
         <div className="flex items-end gap-1 min-h-[36px]">
@@ -124,7 +124,7 @@ export default function WorkspaceTabs({
                   className={clsx(
                     "px-3 py-1.5 text-xs font-medium whitespace-nowrap rounded-t-md border transition-colors select-none",
                     active
-                      ? "bg-[#1b1e24] text-white border-gray-700 border-b-transparent"
+                      ? "bg-[#1b1e24] text-white border-gray-800 border-b-transparent"
                       : "bg-[#15181d] text-gray-300 border-transparent hover:bg-[#1a1d22] hover:text-gray-100"
                   )}
                 >

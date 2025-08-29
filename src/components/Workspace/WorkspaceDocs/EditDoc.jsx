@@ -9,6 +9,7 @@ import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
+import { addWorkspaceTag } from "@/lib/tagsApi";
 
 export default function WorkspaceEditDoc() {
     const { id } = useParams();
@@ -136,31 +137,29 @@ export default function WorkspaceEditDoc() {
         });
     };
 
-    // Handle tags addition
+    // ✅ Add tag (Workspace scope, deduped server-side)
     const handleTagAdd = async () => {
-        if (!newTag.trim()) return;
+        const raw = String(newTag || '').trim()
+        if (!raw) return
 
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        if (userError || !user?.id) {
-            console.error("Unable to get user.");
-            return;
-        }
+        const { data: { user } = {} } = await supabase.auth.getUser()
+        if (!user?.id) { console.error('Not signed in'); return }
+        if (!activeWorkspaceId) { console.error('No activeWorkspaceId'); return }
 
-        // Insert only if not already in DB
-        if (!availableTags.includes(newTag)) {
-            await supabase.from("vault_tags").insert({
-                name: newTag,
-                section: "Workspace",
-                user_id: user.id,
-                workspace_id: activeWorkspaceId,
-            });
-            setAvailableTags((prev) => [...prev, newTag]);
-        }
+        const { data: row, error } = await addWorkspaceTag(supabase, {
+            name: raw,
+            workspaceId: activeWorkspaceId,
+            userId: user.id,
+        })
+        if (error) { console.error(error); return }
 
-        // Add to local tag list if not already added
-        if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
-        setNewTag("");
-    };
+        const existsCI = (arr, val) =>
+            arr.some(t => String(t).toLowerCase() === String(val).toLowerCase())
+
+        setAvailableTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
+        setTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
+        setNewTag('')
+    }
 
     // Parse storage path from any URL ------- HELPER function
     const parsePathFromAnyUrl = (url, bucket) => {
@@ -602,7 +601,7 @@ export default function WorkspaceEditDoc() {
                     {/* Existing Files */}
                     {existingFiles.length > 0 && (
                         <div>
-                            <h4 className="text-sm font-medium text-gray-800 mb-1">Previously uploaded files:</h4>
+                            <h4 className="text-sm font-bold text-gray-800 mb-1">Previously uploaded files:</h4>
                             <ul className="space-y-1">
                             {existingFiles.map((file, index) => (
                                 <li
@@ -630,7 +629,7 @@ export default function WorkspaceEditDoc() {
                         {/* Current Selected Files */}
                         {files.length > 0 && (
                         <div>
-                            <h4 className="text-sm font-medium text-gray-800 mb-1">Newly selected files:</h4>
+                            <h4 className="text-sm font-bold text-gray-800 mb-1">Newly selected files:</h4>
                             <ul className="space-y-1">
                             {files.map((file, index) => (
                                 <li
@@ -656,7 +655,7 @@ export default function WorkspaceEditDoc() {
 
                     {/* Public / Private toggle */}
                     <div className="mb-3 text-sm">
-                        <label className="mr-4 text-gray-800">Document Type:</label>
+                        <label className="mr-4 text-gray-800 font-bold">Document Type:</label>
                         <label className="mr-4 text-gray-800">
                             <input
                             type="radio"
@@ -688,21 +687,21 @@ export default function WorkspaceEditDoc() {
 
                     {/* Title */}
                     <div>
-                        <label className="block text-sm font-medium mb-1 text-gray-800 mt-4">Edit title:</label>
+                        <label className="block text-sm font-bold mb-1 text-gray-800 mt-4">Edit title:</label>
                         <input
                             value={title}
                             onChange={(e) => {
                                 setTitle(e.target.value);
                                 setHasUnsavedChanges(true);
                             }}
-                            className="w-full p-2 mb-1 border rounded text-gray-700 text-sm bg-gray-50"
+                            className="w-full p-2 mb-1 border rounded text-gray-800 text-sm bg-gray-50"
                             placeholder="Enter document title (Public)"
                         />
                     </div>
 
                     {/* Tag Input Section */}
                     <div className="mb-4">
-                        <label className="block text-sm mb-1 text-gray-800">Tags:</label>
+                        <label className="block text-sm font-boldmb-1 mb-1 text-gray-800">Tags:</label>
                         <div className="flex gap-2">
                             <input
                             value={newTag}
@@ -713,7 +712,7 @@ export default function WorkspaceEditDoc() {
                                     handleTagAdd();
                                 }
                             }}
-                            className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
+                            className="border rounded px-2 py-1 text-sm flex-1 text-gray-800 bg-gray-50"
                             placeholder="Add a tag"
                             />
                             <button type="button" onClick={handleTagAdd} className="btn-secondary">Add</button>
@@ -734,7 +733,7 @@ export default function WorkspaceEditDoc() {
                                 className={`px-2 py-1 rounded text-xs border ${
                                     selected
                                     ? "bg-purple-100 border-purple-400 text-purple-700"
-                                    : "bg-white border-gray-300 text-gray-700"
+                                    : "bg-white border-gray-300 text-gray-800"
                                 }`}
                                 >
                                 {t}
@@ -746,7 +745,7 @@ export default function WorkspaceEditDoc() {
 
                     {/* Public Notes */}
                     <div>
-                        <label className="text-sm font-medium text-gray-800 mb-1 block">Edit public note:</label>
+                        <label className="text-sm font-bold text-gray-800 mb-1 block">Edit public note:</label>
                         <textarea
                             value={notes}
                             onChange={(e) => {
@@ -755,7 +754,7 @@ export default function WorkspaceEditDoc() {
                             }}
                             placeholder="Public notes (Visible to shared contacts)"
                             rows={2}
-                            className="w-full border bg-gray-50 border-gray-300 p-2 rounded font-medium text-gray-800 placeholder-gray-400 text-sm"
+                            className="w-full border bg-gray-50 border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
                         />
                     </div>
 
@@ -763,7 +762,7 @@ export default function WorkspaceEditDoc() {
                         <>            
                             {/* Private Note Section */}
                             <div>
-                                <p className="text-sm text-red-500 mb-1">
+                                <p className="text-sm font-bold text-red-500 mb-1">
                                     🔐 Private note will be encrypted using your saved Vault Code:
                                 </p>
 
@@ -776,13 +775,13 @@ export default function WorkspaceEditDoc() {
                                     }}
                                     placeholder="Private notes (For your eyes only)"
                                     rows={2}
-                                    className="bg-gray-50 w-full border border-gray-300 p-2 rounded text-gray-800 font-medium placeholder-gray-400 text-sm"
+                                    className="bg-gray-50 w-full border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
                                 />
                             </div>
 
                             {/* Vault Code */}
                             <div>
-                                <label className="block text-sm font-medium mb-1 text-gray-800">
+                                <label className="block text-sm font-bold mb-1 text-gray-800">
                                     Re-enter Private vault code to encrypt:
                                 </label>
                                 <input

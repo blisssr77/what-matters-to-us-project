@@ -326,7 +326,7 @@ export default function PrivateViewNote() {
                                 type="password"
                                 value={vaultCode}
                                 onChange={(e) => setVaultCode(e.target.value)}
-                                className="w-full p-2 border rounded text-sm text-gray-700"
+                                className="w-full p-2 border rounded text-sm text-gray-800"
                                 placeholder="Vault Code"
                                 autoComplete="current-password"
                                 />
@@ -354,7 +354,7 @@ export default function PrivateViewNote() {
                             {/* Private (vaulted) note */}
                             {noteData?.is_vaulted && (
                                 <div className="mt-2 mb-4">
-                                    <div className="text-gray-900 mb-1 text-sm font-bold">Private note:</div>
+                                    <div className="text-gray-800 mb-1 text-sm font-bold">Private note:</div>
 
                                     {decryptErr ? (
                                         <div className="text-xs text-red-600 mb-2">{decryptErr}</div>
@@ -362,14 +362,14 @@ export default function PrivateViewNote() {
                                         <ReadOnlyViewer
                                         json={privateJson}
                                         html={privateHtml}
-                                        className="wm-content text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3"
+                                        className="wm-content text-sm text-gray-900 bg-gray-100 border border-purple-200 rounded p-3"
                                         />
                                     ) : (typeof decryptedNote === 'string' && decryptedNote !== '') ? (
-                                        <div className="wm-content text-sm text-gray-900 bg-purple-50 border border-purple-200 rounded p-3">
+                                        <div className="wm-content text-sm text-gray-900 bg-gray-100 border border-purple-200 rounded p-3">
                                         {decryptedNote}
                                         </div>
                                     ) : (
-                                        <div className="text-sm text-gray-600 bg-purple-50 border border-purple-200 rounded p-3">
+                                        <div className="text-sm text-gray-600 bg-gray-100 border border-purple-200 rounded p-3">
                                         Decrypting…
                                         </div>
                                     )}

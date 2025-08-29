@@ -132,7 +132,7 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
 
         {/* Body */}
         <div className="px-4 py-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Workspace name</label>
+          <label className="block text-sm font-medium text-gray-800 mb-1">Workspace name</label>
           <input
             type="text"
             value={name}
@@ -144,7 +144,7 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
 
         {/* Vault Code field */}
         <div className="px-4 py-3">
-          <label className="block text-sm font-medium text-gray-700 mt-3 mb-1">
+          <label className="block text-sm font-medium text-gray-800 mt-3 mb-1">
             Enter your Workspace Vault Code to confirm
           </label>
           <input
@@ -163,7 +163,7 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
         <div className="flex justify-end gap-2 border-t px-4 py-3">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-xl border border-gray-300 text-sm text-gray-700 hover:bg-gray-100"
+            className="px-3 py-1.5 rounded-xl border border-gray-300 text-sm text-gray-800 hover:bg-gray-100"
             disabled={loading}
           >
             Cancel

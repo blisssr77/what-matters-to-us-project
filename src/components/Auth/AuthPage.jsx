@@ -176,7 +176,7 @@ export default function AuthPage() {
             placeholder="Email"
             value={formData.email}
             onChange={handleChange}
-            className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-50 text-gray-700 focus:outline-none focus:ring-0 focus:ring-gray-500"
+            className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-50 text-gray-800 focus:outline-none focus:ring-0 focus:ring-gray-500"
             required
           />
 
@@ -187,7 +187,7 @@ export default function AuthPage() {
               placeholder="Password"
               value={formData.password}
               onChange={handleChange}
-              className="w-full px-4 py-3 pr-10 rounded-lg border border-gray-300 bg-gray-50 text-gray-700 focus:outline-none focus:ring-0 focus:ring-gray-500"
+              className="w-full px-4 py-3 pr-10 rounded-lg border border-gray-300 bg-gray-50 text-gray-800 focus:outline-none focus:ring-0 focus:ring-gray-500"
               required
             />
             <button
@@ -207,7 +207,7 @@ export default function AuthPage() {
               placeholder="Confirm Password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-50 text-gray-700 focus:outline-none focus:ring-0 focus:ring-gray-500"
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-50 text-gray-800 focus:outline-none focus:ring-0 focus:ring-gray-500"
               required
             />
             <button
@@ -270,7 +270,7 @@ export default function AuthPage() {
             alt="Google"
             className="w-5 h-5"
           />
-          <span className="text-gray-700">Google</span>
+          <span className="text-gray-800">Google</span>
         </button>
       </div>
     </div>

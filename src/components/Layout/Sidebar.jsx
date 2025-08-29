@@ -67,7 +67,7 @@ export default function Sidebar() {
               <Users size={18} className="text-purple-400" />
               {!collapsed && (
                 <span className="bg-gradient-to-r from-purple-400 via-indigo-400 to-blue-400 bg-clip-text text-transparent animate-pulse-slow">
-                  Workspace Vault
+                  My Workspace
                 </span>
               )}
             </div>
@@ -79,6 +79,7 @@ export default function Sidebar() {
               ))}
           </li>
 
+          {/* Workspace Vault Submenu */}
           <AnimatePresence>
             {workspaceOpen && !collapsed && (
               <motion.ul
@@ -90,8 +91,9 @@ export default function Sidebar() {
                 {navLink("Projects Planner", <FolderKanban size={16} />, "/workspace/projects", "text-xs")}
                 {navLink("Messenger", <MessageCircle size={16} />, "/workspace/messenger", "text-xs")}
                 {navLink("Calendar", <CalendarDays size={16} />, "/workspace/calendar", "text-xs")}
-                {navLink("Documents", <FileText size={16} />, "/workspace/documents", "text-xs")}
-                {navLink("Vaulted Documents", <Lock size={16} />, "/workspace/vaults", "text-xs")}
+                {navLink("Docs", <Lock size={16} />, "/workspace/vaults", "text-xs")}
+                {navLink("Tags", <FileText size={16} />, "/workspace/vaults/tags", "text-xs")}
+
               </motion.ul>
             )}
           </AnimatePresence>
@@ -107,7 +109,7 @@ export default function Sidebar() {
               <Lock size={18} className="text-purple-400" />
               {!collapsed && (
                 <span className="bg-gradient-to-r from-purple-400 via-indigo-400 to-blue-400 bg-clip-text text-transparent animate-pulse-slow">
-                  My Private Vault
+                  My Private Space
                 </span>
               )}
             </div>
@@ -119,6 +121,7 @@ export default function Sidebar() {
               ))}
           </li>
 
+          {/* Private Vault Submenu */}
           <AnimatePresence>
             {privateOpen && !collapsed && (
               <motion.ul
@@ -130,8 +133,8 @@ export default function Sidebar() {
                 {navLink("Projects Planner", <FolderKanban size={16} />, "/privatespace/projects", "text-xs")}
                 {navLink("Messenger", <MessageCircle size={16} />, "/privatespace/messenger", "text-xs")}
                 {navLink("Calendar", <CalendarDays size={16} />, "/privatespace/calendar", "text-xs")}
-                {navLink("Documents", <FileText size={16} />, "/privatespace/documents", "text-xs")}
-                {navLink("Vaulted Documents", <Lock size={16} />, "/privatespace/vaults", "text-xs")}
+                {/* {navLink("Documents", <FileText size={16} />, "/privatespace/documents", "text-xs")} */}
+                {navLink("Docs", <Lock size={16} />, "/privatespace/vaults", "text-xs")}
               </motion.ul>
             )}
           </AnimatePresence>

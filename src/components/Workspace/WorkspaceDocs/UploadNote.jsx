@@ -11,6 +11,7 @@ import RichTextEditor from "../../Editors/RichTextEditor";
 import DOMPurify from "dompurify";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
+import { addWorkspaceTag } from "@/lib/tagsApi";
 
 const WorkspaceUploadNote = () => {
     const [title, setTitle] = useState("");
@@ -132,29 +133,29 @@ const WorkspaceUploadNote = () => {
         [availableTags, tags]
     );
 
-    // ✅ Handle tag addition
+    // ✅ Add tag (Workspace scope, deduped server-side)
     const handleTagAdd = async () => {
-        if (!newTag.trim()) return;
+        const raw = String(newTag || '').trim()
+        if (!raw) return
 
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        if (userError || !user?.id) {
-            console.error("Unable to get user.");
-            return;
-        }
+        const { data: { user } = {} } = await supabase.auth.getUser()
+        if (!user?.id) { console.error('Not signed in'); return }
+        if (!activeWorkspaceId) { console.error('No activeWorkspaceId'); return }
 
-        if (!availableTags.includes(newTag)) {
-            await supabase.from("vault_tags").insert({
-            name: newTag,
-            section: "Workspace",
-            user_id: user.id,
-            workspace_id: activeWorkspaceId,
-        });
-            setAvailableTags((prev) => [...prev, newTag]);
-        }
+        const { data: row, error } = await addWorkspaceTag(supabase, {
+            name: raw,
+            workspaceId: activeWorkspaceId,
+            userId: user.id,
+        })
+        if (error) { console.error(error); return }
 
-        if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
-        setNewTag("");
-    };
+        const existsCI = (arr, val) =>
+            arr.some(t => String(t).toLowerCase() === String(val).toLowerCase())
+
+        setAvailableTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
+        setTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
+        setNewTag('')
+    }
 
     // Handle note upload-------------------------------------------
     const handleCreate = async () => {
@@ -294,7 +295,7 @@ const WorkspaceUploadNote = () => {
 
                 {/* Privacy Section */}
                 <div className="mb-4">
-                    <label className="mr-4 font-semibold text-gray-800 text-sm">Upload Type:</label>
+                    <label className="mr-4 font-bold text-gray-800 text-sm">Upload Type:</label>
                     <label className="mr-4 text-gray-800 text-sm">
                         <input
                         type="radio"
@@ -317,23 +318,23 @@ const WorkspaceUploadNote = () => {
                     </label>
                 </div>
 
-                <label className="block text-sm font-medium mb-1 text-gray-700">Note title:</label>
+                <label className="block text-sm font-bold mb-1 text-gray-800">Note title:</label>
                 <input
                     value={title}
                     onChange={(e) => {
                         setTitle(e.target.value);
                         setHasUnsavedChanges(true);
                     }}
-                    className="w-full p-2 mb-4 border rounded text-gray-700 text-sm bg-gray-50"
+                    className="w-full p-2 mb-4 border rounded text-gray-800 text-sm bg-gray-50"
                     placeholder="Enter note title (Public)"
                 />
 
                 {/* Notes */}
-                <div className="text-sm font-medium mb-4 text-gray-800">
+                <div className="text-sm mb-4 text-gray-800">
                     <div className="mb-1">
                         <div className="flex items-center justify-between">
                             <div className="flex items-baseline gap-2">
-                            <h2 className="text-sm font-medium text-gray-800 m-0">Public note:</h2>
+                            <h2 className="text-sm font-bold m-0">Public note:</h2>
                             </div>
                         </div>
                     </div>
@@ -347,12 +348,12 @@ const WorkspaceUploadNote = () => {
 
                 {/* Tag Input Section */}
                 <div className="mb-5">
-                    <label className="block text-sm mb-1 text-gray-800">Tags:</label>
+                    <label className="block text-sm mb-1 font-bold text-gray-800">Tags:</label>
                     <div className="flex gap-2">
                         <input
                             value={newTag}
                             onChange={(e) => setNewTag(e.target.value)}
-                            className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
+                            className="border rounded px-2 py-1 text-sm flex-1 text-gray-800"
                             placeholder="Add a tag"
                         />
                     <button onClick={handleTagAdd} className="btn-secondary">Add</button>
@@ -373,7 +374,7 @@ const WorkspaceUploadNote = () => {
                             className={`px-2 py-1 rounded text-xs border ${
                             selected
                                 ? "bg-purple-100 border-purple-400 text-purple-700"
-                                : "bg-white border-gray-300 text-gray-700"
+                                : "bg-white border-gray-300 text-gray-800"
                             }`}
                         >
                             {t}
@@ -387,7 +388,7 @@ const WorkspaceUploadNote = () => {
                     <>
                     {/* Private Note Section */}
                     <div className="text-sm font-medium mb-4 text-gray-800">
-                        <p className="text-sm text-red-500 mb-1">
+                        <p className="text-sm font-bold text-red-500 mb-1">
                             🔐 Private note: will be encrypted using your saved Vault Code
                         </p>
                         <div className="bg-white border border-gray-200 rounded p-3 mb-4">
@@ -398,7 +399,7 @@ const WorkspaceUploadNote = () => {
                         </div>
                     </div>
                     {/* Vault Code Section */}
-                    <label className="block text-sm font-medium mb-1 text-gray-700">
+                    <label className="block text-sm font-bold mb-1 text-gray-800">
                         Enter Workspace vault code to encrypt note:
                     </label>
                     <input

@@ -9,6 +9,7 @@ import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
+import { addWorkspaceTag } from "@/lib/tagsApi";
 
 export default function WorkspaceUploadDoc() {
     const [files, setFiles] = useState([]);
@@ -136,36 +137,29 @@ export default function WorkspaceUploadDoc() {
         [availableTags, tags]
     );
 
-    // Handle tags selection
+   // ✅ Add tag (Workspace scope, deduped server-side)
     const handleTagAdd = async () => {
-        if (!newTag.trim()) return;
+        const raw = String(newTag || '').trim()
+        if (!raw) return
 
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        if (userError || !user?.id) {
-            console.error("Unable to get user.");
-            return;
-        }
-        
-        if (!activeWorkspaceId) {
-            setErrorMsg("No active workspace selected.");
-            return;
-        }
+        const { data: { user } = {} } = await supabase.auth.getUser()
+        if (!user?.id) { console.error('Not signed in'); return }
+        if (!activeWorkspaceId) { console.error('No activeWorkspaceId'); return }
 
-        // Insert only if not already in DB
-        if (!availableTags.includes(newTag)) {
-            await supabase.from("vault_tags").insert({
-                name: newTag,
-                section: "Workspace",
-                user_id: user.id,
-                workspace_id: activeWorkspaceId
-            });
-            setAvailableTags((prev) => [...prev, newTag]);
-        }
+        const { data: row, error } = await addWorkspaceTag(supabase, {
+            name: raw,
+            workspaceId: activeWorkspaceId,
+            userId: user.id,
+        })
+        if (error) { console.error(error); return }
 
-        // Add to local tag list if not already added
-        if (!tags.includes(newTag)) setTags((prev) => [...prev, newTag]);
-        setNewTag("");
-    };
+        const existsCI = (arr, val) =>
+            arr.some(t => String(t).toLowerCase() === String(val).toLowerCase())
+
+        setAvailableTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
+        setTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
+        setNewTag('')
+    }
 
     // Message timeout for success/error
     useEffect(() => {
@@ -429,7 +423,7 @@ export default function WorkspaceUploadDoc() {
 
                     {/* Privacy Section */}
                     <div className="mb-4">
-                        <label className="mr-4 font-semibold text-gray-800 text-sm">Upload Type:</label>
+                        <label className="mr-4 font-bold text-gray-800 text-sm">Upload Type:</label>
                         <label className="mr-4 text-gray-800 text-sm">
                             <input
                             type="radio"
@@ -454,26 +448,26 @@ export default function WorkspaceUploadDoc() {
 
                     {/* Document title input */}
                     <div>
-                        <label className="block text-sm font-medium mb-1 text-gray-800 mt-4">Document title:</label>
+                        <label className="block text-sm font-bold mb-1 text-gray-800 mt-4">Document title:</label>
                         <input
                             value={title}
                             onChange={(e) => {
                                 setTitle(e.target.value);
                                 setHasUnsavedChanges(true);
                             }}
-                            className="w-full p-2 border rounded text-gray-700 text-sm bg-gray-50"
+                            className="w-full p-2 border rounded text-gray-800 text-sm bg-gray-50"
                             placeholder="Enter document title (Public)"
                         />
                     </div>
 
                     {/* Tag Input Section */}
                     <div className="mb-4">
-                        <label className="block text-sm mb-1 text-gray-800">Tags:</label>
+                        <label className="block font-bold text-sm mb-1 text-gray-800">Tags:</label>
                         <div className="flex gap-2">
                             <input
                                 value={newTag}
                                 onChange={(e) => setNewTag(e.target.value)}
-                                className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
+                                className="border bg-gray-50 rounded px-2 py-1 text-sm flex-1 text-gray-800"
                                 placeholder="Add a tag"
                             />
                             <button onClick={handleTagAdd} className="btn-secondary">Add</button>
@@ -494,7 +488,7 @@ export default function WorkspaceUploadDoc() {
                                     className={`px-2 py-1 rounded text-xs border ${
                                     selected
                                         ? "bg-purple-100 border-purple-400 text-purple-700"
-                                        : "bg-white border-gray-300 text-gray-700"
+                                        : "bg-white border-gray-300 text-gray-800"
                                     }`}
                                 >
                                     {t}
@@ -506,7 +500,7 @@ export default function WorkspaceUploadDoc() {
 
                     {/* Notes */}
                     <div>
-                        <h className="text-sm font-medium mb-1 text-gray-800">Public note:</h>
+                        <h className="text-sm font-bold mb-1 text-gray-800">Public note:</h>
                         <textarea
                             value={notes}
                             onChange={(e) => {
@@ -523,7 +517,7 @@ export default function WorkspaceUploadDoc() {
                     {isVaulted && (
                         <>
                             <div>
-                                <p className="text-sm text-red-400 mb-1">
+                                <p className="text-sm font-bold text-red-500 mb-1">
                                 🔐 Private note will be encrypted using your saved Vault Code:
                                 </p>
                                 <textarea
@@ -540,7 +534,7 @@ export default function WorkspaceUploadDoc() {
 
                             {/* Vault Code Section */}
                             <div>
-                                <label className="block text-sm font-medium mb-1 text-gray-500">
+                                <label className="block text-sm font-bold mb-1 text-gray-800">
                                     Enter Private vault code to encrypt document:
                                 </label>
                                 <input

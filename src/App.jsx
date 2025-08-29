@@ -18,6 +18,7 @@ import WorkspaceViewNote from "./components/Workspace/WorkspaceDocs/ViewNote";
 import WorkspaceEditNote from "./components/Workspace/WorkspaceDocs/EditNote";
 import WorkspaceViewDoc from "./components/Workspace/WorkspaceDocs/ViewDoc";
 import WorkspaceEditDoc from "./components/Workspace/WorkspaceDocs/EditDoc";
+import WorkspaceTags from "./components/Workspace/WorkspaceDocs/WorkspaceTags";
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
         <Route path="/privatespace/vaults/note-edit/:id" element={<PrivateEditNote />} />
         <Route path="/privatespace/vaults/doc-view/:id" element={<PrivateViewDoc />} />
         <Route path="/privatespace/vaults/doc-edit/:id" element={<PrivateEditDoc />} />
+
         {/* Workspace Vault Routes */}
         <Route path="/workspace/vaults" element={<WorkspaceVaultList />} />
         <Route path="/workspace/vaults/file-upload" element={<WorkspaceUploadDoc />} />
@@ -42,6 +44,7 @@ function App() {
         <Route path="/workspace/vaults/note-edit/:id" element={<WorkspaceEditNote />} />
         <Route path="/workspace/vaults/doc-view/:id" element={<WorkspaceViewDoc />} />
         <Route path="/workspace/vaults/doc-edit/:id" element={<WorkspaceEditDoc />} />
+        <Route path="/workspace/vaults/tags" element={<WorkspaceTags />} />
        
       </Routes>
     </Router>

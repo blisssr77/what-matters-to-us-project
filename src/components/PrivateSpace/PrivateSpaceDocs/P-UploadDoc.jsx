@@ -9,6 +9,7 @@ import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
+import { addPrivateTag } from "@/lib/tagsApi";
 
 export default function PrivateSpaceUploadDoc() {
   const navigate = useNavigate();
@@ -128,35 +129,29 @@ export default function PrivateSpaceUploadDoc() {
     [availableTags, tags]
   );
 
-  // Add tag (insert if missing) — recommend scoping to this space going forward
-  const handleTagAdd = useCallback(async () => {
-    const t = newTag.trim();
-    if (!t) return;
+  // ✅ Add tag (Private scope, space-scoped, deduped server-side)
+  const handleTagAdd = async () => {
+    const raw = String(newTag || '').trim()
+    if (!raw) return
 
-    const { data: { user } = {}, error: uErr } = await supabase.auth.getUser();
-    if (uErr || !user?.id) {
-      console.error("Unable to get user.");
-      return;
-    }
-    if (!activeSpaceId) {
-      setErrorMsg("No active private space selected.");
-      return;
-    }
+    const { data: { user } = {} } = await supabase.auth.getUser()
+    if (!user?.id) { console.error('Not signed in'); return }
+    if (!activeSpaceId) { setErrorMsg('No active private space selected.'); return }
 
-    // If not already present in available list, insert as space-scoped
-    if (!availableTags.includes(t)) {
-      const { error } = await supabase.from("vault_tags").insert({
-        name: t,
-        section: "Private",
-        user_id: user.id,
-        private_space_id: activeSpaceId, // 🔹 space-scoped
-      });
-      if (!error) setAvailableTags((prev) => [...prev, t]);
-    }
+    const { data: row, error } = await addPrivateTag(supabase, {
+      name: raw,
+      privateSpaceId: activeSpaceId,
+      userId: user.id,
+    })
+    if (error) { console.error(error); return }
 
-    if (!tags.includes(t)) setTags((prev) => [...prev, t]);
-    setNewTag("");
-  }, [newTag, availableTags, tags, activeSpaceId]);
+    const existsCI = (arr, val) =>
+      arr.some(t => String(t).toLowerCase() === String(val).toLowerCase())
+
+    setAvailableTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
+    setTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
+    setNewTag('')
+  }
 
   // File DnD
   const handleFileDrop = (e) => {
@@ -462,7 +457,7 @@ export default function PrivateSpaceUploadDoc() {
                 setTitle(e.target.value);
                 setHasUnsavedChanges(true);
               }}
-              className="w-full p-2 border rounded text-gray-700 text-sm bg-gray-50"
+              className="w-full p-2 border rounded text-gray-800 text-sm bg-gray-50"
               placeholder="Enter document title (Public)"
             />
           </div>
@@ -474,7 +469,7 @@ export default function PrivateSpaceUploadDoc() {
               <input
                 value={newTag}
                 onChange={(e) => setNewTag(e.target.value)}
-                className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
+                className="border rounded px-2 py-1 text-sm flex-1 text-gray-800 bg-gray-50"
                 placeholder="Add a tag"
               />
               <button onClick={handleTagAdd} className="btn-secondary">Add</button>
@@ -495,7 +490,7 @@ export default function PrivateSpaceUploadDoc() {
                     className={`px-2 py-1 rounded text-xs border ${
                       selected
                         ? "bg-purple-100 border-purple-400 text-purple-700"
-                        : "bg-white border-gray-300 text-gray-700"
+                        : "bg-white border-gray-300 text-gray-800"
                     }`}
                   >
                     {t}

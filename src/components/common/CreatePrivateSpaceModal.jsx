@@ -89,7 +89,7 @@ export default function CreatePrivateSpaceModal({ open, onClose, onCreated }) {
 
         {/* Body */}
         <div className="px-4 py-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Private space name</label>
+          <label className="block text-sm font-medium text-gray-800 mb-1">Private space name</label>
           <input
             type="text"
             value={name}
@@ -104,7 +104,7 @@ export default function CreatePrivateSpaceModal({ open, onClose, onCreated }) {
 
         {/* Private Vault Code */}
         <div className="px-4 pb-2">
-          <label className="block text-sm font-medium text-gray-700 mt-3 mb-1">
+          <label className="block text-sm font-medium text-gray-800 mt-3 mb-1">
             Enter your Private vault code to confirm
           </label>
           <input
@@ -121,7 +121,7 @@ export default function CreatePrivateSpaceModal({ open, onClose, onCreated }) {
         <div className="flex justify-end gap-2 border-t px-4 py-3">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-xl border border-gray-300 text-sm text-gray-700 hover:bg-gray-100"
+            className="px-3 py-1.5 rounded-xl border border-gray-300 text-sm text-gray-800 hover:bg-gray-100"
             disabled={loading}
           >
             Cancel

@@ -181,34 +181,29 @@ export default function PrivateEditDoc() {
     [availableTags, tags]
   );
 
-  // Add tag (insert if missing) — space-scoped going forward
-  const handleTagAdd = useCallback(async () => {
-    const t = newTag.trim();
-    if (!t) return;
+  // ✅ Add tag (Private scope, space-scoped, deduped server-side)
+  const handleTagAdd = async () => {
+    const raw = String(newTag || '').trim()
+    if (!raw) return
 
-    const { data: { user } = {}, error: uErr } = await supabase.auth.getUser();
-    if (uErr || !user?.id) {
-      console.error("Unable to get user.");
-      return;
-    }
-    if (!effectiveSpaceId) {
-      setErrorMsg("No active private space selected.");
-      return;
-    }
+    const { data: { user } = {} } = await supabase.auth.getUser()
+    if (!user?.id) { console.error('Not signed in'); return }
+    if (!effectiveSpaceId) { setErrorMsg('No active private space selected.'); return }
 
-    if (!availableTags.includes(t)) {
-      const { error } = await supabase.from("vault_tags").insert({
-        name: t,
-        section: "Private",
-        user_id: user.id,
-        private_space_id: effectiveSpaceId, // ← scope to this space
-      });
-      if (!error) setAvailableTags((prev) => [...prev, t]);
-    }
+    const { data: row, error } = await addPrivateTag(supabase, {
+      name: raw,
+      privateSpaceId: effectiveSpaceId,
+      userId: user.id,
+    })
+    if (error) { console.error(error); return }
 
-    if (!tags.includes(t)) setTags((prev) => [...prev, t]);
-    setNewTag("");
-  }, [newTag, availableTags, tags, effectiveSpaceId]);
+    const existsCI = (arr, val) =>
+      arr.some(t => String(t).toLowerCase() === String(val).toLowerCase())
+
+    setAvailableTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
+    setTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
+    setNewTag('')
+  }
 
   // DnD
   const handleFileDrop = (e) => {
@@ -780,7 +775,7 @@ export default function PrivateEditDoc() {
               onChange={(e) => { setNotes(e.target.value); setHasUnsavedChanges(true); }}
               placeholder="Public notes (Visible to shared contacts)"
               rows={2}
-              className="w-full border bg-gray-50 border-gray-300 p-2 rounded font-medium text-gray-800 placeholder-gray-400 text-sm"
+              className="w-full border bg-gray-50 border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
             />
           </div>
 
@@ -797,7 +792,7 @@ export default function PrivateEditDoc() {
                     handleTagAdd();
                   }
                 }}
-                className="border rounded px-2 py-1 text-sm flex-1 text-gray-700"
+                className="border rounded px-2 py-1 text-sm flex-1 text-gray-800 bg-gray-50"
                 placeholder="Add a tag"
               />
               <button type="button" onClick={handleTagAdd} className="btn-secondary">Add</button>
@@ -818,7 +813,7 @@ export default function PrivateEditDoc() {
                     className={`px-2 py-1 rounded text-xs border ${
                       selected
                         ? "bg-purple-100 border-purple-400 text-purple-700"
-                        : "bg-white border-gray-300 text-gray-700"
+                        : "bg-white border-gray-300 text-gray-800"
                     }`}
                   >
                     {t}
@@ -840,7 +835,7 @@ export default function PrivateEditDoc() {
                   onChange={(e) => { setPrivateNote(e.target.value); setHasUnsavedChanges(true); }}
                   placeholder="Private notes (For your eyes only)"
                   rows={2}
-                  className="bg-gray-50 w-full border border-gray-300 p-2 rounded text-gray-800 font-medium placeholder-gray-400 text-sm"
+                  className="bg-gray-50 w-full border border-gray-300 p-2 rounded text-gray-800 placeholder-gray-400 text-sm"
                 />
               </div>
               <div>

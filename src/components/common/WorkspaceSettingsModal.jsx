@@ -161,7 +161,7 @@ export default function WorkspaceSettingsModal({
 
                 {/* Role management */}
                 {m.role === "owner" ? (
-                  <span className="text-sm font-semibold text-gray-700 px-3 py-1 border border-gray-300 rounded">
+                  <span className="text-sm font-semibold text-gray-800 px-3 py-1 border border-gray-300 rounded">
                     Owner
                   </span>
                 ) : (
@@ -176,7 +176,7 @@ export default function WorkspaceSettingsModal({
                       <option value="viewer">Viewer</option>
                     </select>
                   ) : (
-                    <span className="text-sm text-gray-700 px-3 py-1 border border-gray-300 rounded">
+                    <span className="text-sm text-gray-800 px-3 py-1 border border-gray-300 rounded">
                       {m.role}
                     </span>
                   )
@@ -212,7 +212,7 @@ export default function WorkspaceSettingsModal({
 
                     {/* Vault Code field */}
                     <div className="mt-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-gray-800 mb-1">
                         Enter Workspace Vault Code to confirm
                       </label>
                       <input

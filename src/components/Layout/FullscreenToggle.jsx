@@ -11,7 +11,7 @@ export default function FullscreenToggle({ className = "" }) {
       aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
       title={isFullscreen ? "Exit full screen" : "Full screen"}
     >
-      {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+      {isFullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
     </button>
   );
 }
