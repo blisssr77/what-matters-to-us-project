@@ -64,6 +64,29 @@ export const useCalendarStore = create(
       setSelectedEventId: (id) => set({ selectedEventId: id }),
       clearSelected: () => set({ selectedEventId: null }),
 
+      // ---------- Workspace filtering for calendar ----------
+      selectedWorkspaceIds: [],        // array of workspace IDs (strings)
+      showAllWorkspaces: true,         // when true, ignore selectedWorkspaceIds
+
+      setSelectedWorkspaceIds: (ids = []) => set({
+        selectedWorkspaceIds: Array.from(new Set(ids.map(String))),
+        showAllWorkspaces: ids.length === 0 ? true : false,
+      }),
+      toggleWorkspaceId: (id) => {
+        const cur = new Set(get().selectedWorkspaceIds.map(String));
+        const key = String(id);
+        if (cur.has(key)) cur.delete(key);
+        else cur.add(key);
+        set({
+          selectedWorkspaceIds: Array.from(cur),
+          showAllWorkspaces: cur.size === 0 ? true : false,
+        });
+      },
+      setShowAllWorkspaces: (flag) => set({
+        showAllWorkspaces: !!flag,
+        ...(flag ? { selectedWorkspaceIds: [] } : null),
+      }),
+
       // ---------- Derived helpers ----------
       // Returns events filtered by current filters; call inside a component:
       // const events = useCalendarStore(selectFilteredEvents);
@@ -109,6 +132,8 @@ export const useCalendarStore = create(
       partialize: (state) => ({
         view: state.view,
         filters: state.filters,
+        selectedWorkspaceIds: state.selectedWorkspaceIds,
+        showAllWorkspaces: state.showAllWorkspaces,
       }),
     }
   )

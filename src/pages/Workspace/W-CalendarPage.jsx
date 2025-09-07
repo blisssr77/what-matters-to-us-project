@@ -56,6 +56,23 @@ export default function WCalendarPage() {
 
       const collected = [];
 
+      const { selectedWorkspaceIds, showAllWorkspaces } = useCalendarStore.getState();
+
+        if (filters.includeWorkspace) {
+        let q = supabase
+            .from('workspace_calendar_items_secure')
+            .select('*')
+            .lt('start_at', endISO)
+            .or(`end_at.is.null,end_at.gte.${startISO}`);
+
+        if (!showAllWorkspaces && selectedWorkspaceIds.length) {
+            q = q.in('workspace_id', selectedWorkspaceIds);
+        }
+
+        const { data, error } = await q;
+        // ... push to collected
+        }
+
       // Workspace items — overlap predicate
       if (filters.includeWorkspace) {
         const { data, error } = await supabase
