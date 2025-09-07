@@ -3,7 +3,7 @@ import AuthPage from "./components/Auth/AuthPage";
 import Dashboard from "./pages/Dashboard";
 import ManageAccount from "./pages/Account/ManageAccount";
 // Importing components for the Private Vault
-import PrivateDocList from "./routes/PrivateSpace/privatespace-docs/P-DocList";
+import PrivateDocList from "./pages/PrivateSpace/P-DocList";
 import PrivateUploadDoc from "./components/PrivateSpace/PrivateSpaceDocs/P-UploadDoc";
 import PrivateUploadNote from "./components/PrivateSpace/PrivateSpaceDocs/P-UploadNote";
 import PrivateViewNote from "./components/PrivateSpace/PrivateSpaceDocs/P-ViewNote";
@@ -11,7 +11,7 @@ import PrivateEditNote from "./components/PrivateSpace/PrivateSpaceDocs/P-EditNo
 import PrivateViewDoc from "./components/PrivateSpace/PrivateSpaceDocs/P-ViewDoc";
 import PrivateEditDoc from "./components/PrivateSpace/PrivateSpaceDocs/P-EditDoc";
 // Importing components for the Workspace Vault
-import WorkspaceVaultList from "./routes/Workspace/workspace-docs/W-DocList";
+import WorkspaceVaultList from "./pages/Workspace/W-DocList";
 import WorkspaceUploadDoc from "./components/Workspace/WorkspaceDocs/UploadDoc";
 import WorkspaceUploadNote from "./components/Workspace/WorkspaceDocs/UploadNote";
 import WorkspaceViewNote from "./components/Workspace/WorkspaceDocs/ViewNote";
@@ -19,6 +19,7 @@ import WorkspaceEditNote from "./components/Workspace/WorkspaceDocs/EditNote";
 import WorkspaceViewDoc from "./components/Workspace/WorkspaceDocs/ViewDoc";
 import WorkspaceEditDoc from "./components/Workspace/WorkspaceDocs/EditDoc";
 import WorkspaceTags from "./components/Workspace/WorkspaceDocs/WorkspaceTags";
+import WorkspaceCalendarPage from "./pages/Workspace/W-CalendarPage";
 
 function App() {
   return (
@@ -45,6 +46,7 @@ function App() {
         <Route path="/workspace/vaults/doc-view/:id" element={<WorkspaceViewDoc />} />
         <Route path="/workspace/vaults/doc-edit/:id" element={<WorkspaceEditDoc />} />
         <Route path="/workspace/vaults/tags" element={<WorkspaceTags />} />
+        <Route path="/workspace/calendar" element={<WorkspaceCalendarPage />} />
        
       </Routes>
     </Router>

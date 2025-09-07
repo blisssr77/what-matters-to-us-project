@@ -5,7 +5,7 @@ import { X, Search } from "lucide-react";
 import { encryptText } from "../../../lib/encryption";
 import Layout from "../../Layout/Layout";
 import bcrypt from "bcryptjs"; 
-import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
+import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 import RichTextEditor from "../../Editors/RichTextEditor";
 import DOMPurify from "dompurify";

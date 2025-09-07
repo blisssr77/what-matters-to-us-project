@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FileText, Search, ChevronDown, Lock, Settings, XCircle } from "lucide-react";
 import Layout from "@/components/Layout/Layout";
 import WorkspaceTabs from "@/components/Layout/WorkspaceTabs";
-import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
+import { usePrivateSpaceStore } from "@/store/usePrivateSpaceStore";
 import dayjs from "dayjs";
 import { supabase } from "@/lib/supabaseClient";
 import CreatePrivateSpaceModal from "@/components/common/CreatePrivateSpaceModal";

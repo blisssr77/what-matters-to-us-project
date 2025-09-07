@@ -5,7 +5,7 @@ import { X, Search } from "lucide-react";
 import { encryptText } from "../../../lib/encryption";
 import Layout from "../../Layout/Layout";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
-import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
+import { usePrivateSpaceStore } from "@/store/usePrivateSpaceStore";
 import DOMPurify from "dompurify";
 import RichTextEditor from "@/components/Editors/RichTextEditor";
 import FullscreenCard from "@/components/Layout/FullscreenCard";

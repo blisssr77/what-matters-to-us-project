@@ -7,7 +7,7 @@ import Layout from "../../Layout/Layout";
 import { X, Copy, Edit2, Trash2 } from "lucide-react";
 import { saveAs } from "file-saver";
 import bcrypt from "bcryptjs";
-import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
+import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 

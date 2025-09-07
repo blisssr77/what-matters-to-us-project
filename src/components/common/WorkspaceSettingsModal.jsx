@@ -26,7 +26,7 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { useWorkspaceStore } from "@/hooks/useWorkspaceStore";
+import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 
 export default function WorkspaceSettingsModal({
   open,

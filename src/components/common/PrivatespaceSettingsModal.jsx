@@ -26,7 +26,7 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
+import { usePrivateSpaceStore } from "@/store/usePrivateSpaceStore";
 
 export default function PrivateSpaceSettingsModal({
   open,

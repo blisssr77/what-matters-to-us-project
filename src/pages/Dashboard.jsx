@@ -1,7 +1,7 @@
 import Sidebar from "../components/Layout/Sidebar";
 import Topbar from "../components/Layout/Topbar";
 import { motion } from "framer-motion";
-import { useWorkspaceStore } from "../hooks/useWorkspaceStore";
+import { useWorkspaceStore } from "../store/useWorkspaceStore";
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useWorkspaceInit } from "../hooks/useWorkspaceInit";

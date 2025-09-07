@@ -3,7 +3,7 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
 import { decryptText } from "../../../lib/encryption";
-import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
+import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import Layout from "../../Layout/Layout";
 import { X, Copy, Edit2, Trash2 } from "lucide-react";
 import dayjs from "dayjs";

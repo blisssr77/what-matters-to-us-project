@@ -5,7 +5,7 @@ import { decryptText, encryptText } from "../../../lib/encryption";
 import Layout from "../../Layout/Layout";
 import { X } from "lucide-react";
 import bcrypt from "bcryptjs";
-import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
+import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 import DOMPurify from 'dompurify'
 import { generateJSON } from '@tiptap/html'

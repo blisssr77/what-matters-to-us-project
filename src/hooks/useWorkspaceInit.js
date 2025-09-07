@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { useWorkspaceStore } from "./useWorkspaceStore";
+import { useWorkspaceStore } from "../store/useWorkspaceStore";
 
 // This hook initializes the workspace by fetching the active workspace ID
 // when the user logs in or signs up, and sets it in the workspace store.

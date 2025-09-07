@@ -4,7 +4,7 @@ import { supabase } from "../../../lib/supabaseClient";
 import { decryptText, encryptText } from "../../../lib/encryption";
 import Layout from "../../Layout/Layout";
 import { X, Search } from "lucide-react";
-import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
+import { usePrivateSpaceStore } from "@/store/usePrivateSpaceStore";
 import RichTextEditor from "@/components/Editors/RichTextEditor";
 import DOMPurify from "dompurify";
 import { generateJSON } from "@tiptap/html";

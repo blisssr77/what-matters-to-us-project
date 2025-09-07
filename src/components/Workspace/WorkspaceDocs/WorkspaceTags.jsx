@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import Layout from '@/components/Layout/Layout'
-import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
+import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import { listWorkspaceTags, createWorkspaceTag, updateTag, deleteTag } from '@/lib/tagsApi'
 import TagEditorModal from '@/components/Tags/TagEditorModal'
 import ConfirmDialog from '@/components/Tags/ConfirmDialog'

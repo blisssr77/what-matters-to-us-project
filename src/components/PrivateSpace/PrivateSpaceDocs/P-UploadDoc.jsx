@@ -6,7 +6,7 @@ import Layout from "../../Layout/Layout";
 import { encryptText, encryptFile } from "../../../lib/encryption";
 import bcrypt from "bcryptjs";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
-import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
+import { usePrivateSpaceStore } from "@/store/usePrivateSpaceStore";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 import { addPrivateTag } from "@/lib/tagsApi";

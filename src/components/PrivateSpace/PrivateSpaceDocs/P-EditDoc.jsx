@@ -5,7 +5,7 @@ import Layout from "@/components/Layout/Layout";
 import { X, Search, Loader2 } from "lucide-react";
 import { encryptFile, encryptText, decryptText, decryptFile } from "@/lib/encryption";
 import { UnsavedChangesModal } from "@/components/common/UnsavedChangesModal";
-import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
+import { usePrivateSpaceStore } from "@/store/usePrivateSpaceStore";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 

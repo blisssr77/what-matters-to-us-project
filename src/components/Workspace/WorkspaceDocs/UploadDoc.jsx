@@ -5,7 +5,7 @@ import { Loader2, X, Search } from "lucide-react";
 import Layout from "../../Layout/Layout";
 import { encryptText, encryptFile } from "../../../lib/encryption"; 
 import bcrypt from "bcryptjs";
-import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
+import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";

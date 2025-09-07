@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { decryptFile, decryptText } from "@/lib/encryption";
 import Layout from "@/components/Layout/Layout";
 import { X, Copy, Edit2, Trash2 } from "lucide-react";
-import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
+import { usePrivateSpaceStore } from "@/store/usePrivateSpaceStore";
 import { usePrivateSpaceActions } from "@/hooks/usePrivateSpaceActions";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";

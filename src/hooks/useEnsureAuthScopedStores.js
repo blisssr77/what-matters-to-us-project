@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { useWorkspaceStore } from "@/hooks/useWorkspaceStore";
-import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
+import { useWorkspaceStore } from "@/store/useWorkspaceStore";
+import { usePrivateSpaceStore } from "@/store/usePrivateSpaceStore";
 
 export function useEnsureAuthScopedStores() {
   const ensureWorkspace = useWorkspaceStore((s) => s.ensureForUser);
