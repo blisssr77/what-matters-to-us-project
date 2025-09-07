@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import Layout from '@/components/Layout/Layout'
 import { useWorkspaceStore } from "../../../hooks/useWorkspaceStore";
 import { listWorkspaceTags, createWorkspaceTag, updateTag, deleteTag } from '@/lib/tagsApi'
-import TagRow from '@/components/Tags/TagRow'
 import TagEditorModal from '@/components/Tags/TagEditorModal'
 import ConfirmDialog from '@/components/Tags/ConfirmDialog'
 import { supabase } from '@/lib/supabaseClient'
@@ -79,11 +78,11 @@ export default function WorkspaceTags() {
         const { data: { user } = {} } = await supabase.auth.getUser()
         if (!user?.id) { setError('Not signed in'); return }
         if (editInitial) {
-        const { error } = await updateTag(editInitial.id, { name, color })
-        if (error) setError(error.message); else load()
+            const { error } = await updateTag(editInitial.id, { name, color })
+            if (error) setError(error.message); else load()
         } else {
-        const { error } = await createWorkspaceTag({ name, color, workspaceId: activeWorkspaceId, userId: user.id })
-        if (error) setError(error.message); else load()
+            const { error } = await createWorkspaceTag({ name, color, workspaceId: activeWorkspaceId, userId: user.id })
+            if (error) setError(error.message); else load()
         }
     }
 
@@ -101,10 +100,10 @@ export default function WorkspaceTags() {
                 {/* Toolbar */}
                 <div className="flex items-center justify-between mb-4">
                 <div>
-                    <h1 className="text-lg font-semibold">Workspace Tags</h1>
+                    <h1 className="text-lg text-gray-800 font-bold">Workspace Tags</h1>
                     <p className="text-sm text-gray-500">Organize and standardize tags used across this workspace.</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center text-gray-500 gap-2">
                     <button
                     onClick={load}
                     className="inline-flex items-center gap-2 px-3 py-1.5 rounded border border-gray-300 text-sm bg-white hover:bg-gray-50"
@@ -113,13 +112,14 @@ export default function WorkspaceTags() {
                     <RefreshCw size={16} /> Reload
                     </button>
                     <MergeTagsButton
+                    className='text-gray-500 inline-flex items-center gap-2 px-3 py-1.5 rounded border border-gray-300 text-sm bg-white hover:bg-gray-50'
                     workspaceId={activeWorkspaceId}
                     selectedTagId={selectedId}
                     tags={filtered}
                     onMerged={load}
                     />
                     <button
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded text-white text-sm bg-gradient-to-r from-indigo-800 via-purple-800 to-violet-900 hover:from-indigo-900 hover:to-purple-900 transition"
                     onClick={handleNew}
                     >
                     <Plus size={16} /> New tag
@@ -144,7 +144,7 @@ export default function WorkspaceTags() {
                     <tr>
                         <th className="w-10 p-2"></th>
 
-                        <th className="text-left font-medium text-gray-600 p-2">
+                        <th className="text-left font-bold text-gray-600 p-2">
                         <button
                             type="button"
                             onClick={() => toggleSort("name")}
@@ -154,7 +154,7 @@ export default function WorkspaceTags() {
                         </button>
                         </th>
 
-                        <th className="text-left font-medium text-gray-600 p-2">
+                        <th className="text-left font-bold text-gray-600 p-2">
                         <button
                             type="button"
                             onClick={() => toggleSort("usage_count")}
@@ -164,7 +164,7 @@ export default function WorkspaceTags() {
                         </button>
                         </th>
 
-                        <th className="text-left font-medium text-gray-600 p-2">
+                        <th className="text-left font-bold text-gray-600 p-2">
                         <button
                             type="button"
                             onClick={() => toggleSort("created_by_name")}
@@ -174,7 +174,7 @@ export default function WorkspaceTags() {
                         </button>
                         </th>
 
-                        <th className="text-left font-medium text-gray-600 p-2">
+                        <th className="text-left font-bold text-gray-600 p-2">
                         <button
                             type="button"
                             onClick={() => toggleSort("workspace_name")}
@@ -184,7 +184,7 @@ export default function WorkspaceTags() {
                         </button>
                         </th>
 
-                        <th className="text-right font-medium text-gray-600 p-2">ACTIONS</th>
+                        <th className="text-right font-bold text-gray-600 p-2">ACTIONS</th>
                     </tr>
                     </thead>
 
@@ -215,10 +215,10 @@ export default function WorkspaceTags() {
                                 className="inline-block w-3 h-3 rounded"
                                 style={{ backgroundColor: tag.color || '#e5e7eb' }}
                                 />
-                                <span className="font-medium text-gray-800">{tag.name}</span>
-                                {tag.slug ? (
+                                <span className="font-bold text-gray-800">{tag.name}</span>
+                                {/* {tag.slug ? (
                                 <span className="text-xs text-gray-400">/{tag.slug}</span>
-                                ) : null}
+                                ) : null} */}
                             </div>
                             </td>
 

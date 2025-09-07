@@ -31,7 +31,6 @@ import { usePrivateSpaceStore } from "@/hooks/usePrivateSpaceStore";
 export default function PrivateSpaceSettingsModal({
   open,
   onClose,
-  // Optional overrides so parent can control these if prefer:
   spaceName: spaceNameProp,
   setSpaceName: setSpaceNameProp,
   onVerifyVaultCode, // optional override; if absent we call RPC verify_user_private_code
@@ -50,11 +49,22 @@ export default function PrivateSpaceSettingsModal({
   const [vaultCode, setVaultCode] = useState("");
   const [verifyErr, setVerifyErr] = useState("");
   const [verifying, setVerifying] = useState(false);
+  // Danger Zone feedback
+  const [deleteSuccess, setDeleteSuccess] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [dangerOpen, setDangerOpen] = useState(false);
 
   // Keep local state in sync with external prop if provided
   useEffect(() => {
     if (typeof spaceNameProp === "string") setSpaceName(spaceNameProp);
   }, [spaceNameProp]);
+
+  // Clear all state when modal closes
+  useEffect(() => {
+    if (!deleteSuccess && !deleteError) return;
+    const t = setTimeout(() => { setDeleteSuccess(""); setDeleteError(""); }, 3500);
+    return () => clearTimeout(t);
+  }, [deleteSuccess, deleteError]);
 
   // Load current space name when modal opens / space changes
   useEffect(() => {
@@ -115,32 +125,48 @@ export default function PrivateSpaceSettingsModal({
     return !!ok;
   };
 
+  // Handle confirming deletion of the private space
   const handleConfirmDelete = async () => {
     setVerifyErr("");
+    setDeleteError("");
+    setDeleteSuccess("");
+
     const code = vaultCode.trim();
     if (!code) {
       setVerifyErr("Vault Code required.");
+      setDeleteError("Vault Code required.");
       return;
     }
+
     setVerifying(true);
     const ok = await verifyCode(code);
     setVerifying(false);
+
     if (!ok) {
       setVerifyErr("Incorrect Vault Code.");
+      setDeleteError("Incorrect Vault Code.");
       return;
     }
-    // Delete the private space; FK on private_vault_items should cascade if set it earlier
+
     const { error } = await supabase
       .from("private_spaces")
       .delete()
       .eq("id", activeSpaceId);
+
     if (error) {
       setVerifyErr(error.message || "Failed to delete space.");
+      setDeleteError(error.message || "Failed to delete space.");
       return;
     }
-    onDeleted?.(activeSpaceId);          
-    onClose?.();
+
+    // Success: close confirm dialog, show green line under the trigger, then close outer modal
+    setDeleteSuccess("Private space deleted.");
+    setDangerOpen(false);
+
+    onDeleted?.(activeSpaceId);
+    setTimeout(() => onClose?.(), 1400);
   };
+
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -182,9 +208,14 @@ export default function PrivateSpaceSettingsModal({
           {/* Danger Zone */}
           <TabsContent value="danger" className="space-y-4 mt-10">
             <div className="flex">
-              <AlertDialog>
+              <AlertDialog open={dangerOpen} onOpenChange={setDangerOpen}>
                 <AlertDialogTrigger asChild>
-                  <Button variant="destructive" className="ml-auto">
+                  <Button variant="destructive" className="ml-auto" onClick={() => {
+                    setVerifyErr("");
+                    setDeleteError("");
+                    setDeleteSuccess("");
+                    setVaultCode("");
+                  }}>
                     Delete This Private Space
                   </Button>
                 </AlertDialogTrigger>
@@ -227,6 +258,12 @@ export default function PrivateSpaceSettingsModal({
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+            </div>
+
+            {/* Feedback messages */}
+            <div className="mt-2 text-right">
+              {deleteSuccess && <p className="text-sm text-green-600">{deleteSuccess}</p>}
+              {deleteError && <p className="text-sm text-red-500">{deleteError}</p>}
             </div>
 
             <p className="text-sm text-gray-500">

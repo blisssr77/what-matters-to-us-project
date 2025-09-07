@@ -50,6 +50,18 @@ export default function WorkspaceSettingsModal({
   const [verifyErr, setVerifyErr] = React.useState("");
   const [verifying, setVerifying] = React.useState(false);
 
+  // Danger Zone feedback
+  const [deleteSuccess, setDeleteSuccess] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [dangerOpen, setDangerOpen] = useState(false);
+
+  // Clear all state when modal closes
+  useEffect(() => {
+    if (!deleteSuccess && !deleteError) return;
+    const t = setTimeout(() => { setDeleteSuccess(""); setDeleteError(""); }, 3500);
+    return () => clearTimeout(t);
+  }, [deleteSuccess, deleteError]);
+
   // Fetch members if modal is opened
   useEffect(() => {
     if (open && activeWorkspaceId) {
@@ -83,19 +95,65 @@ export default function WorkspaceSettingsModal({
   // Handle workspace deletion confirmation
   const handleConfirmDelete = async () => {
     setVerifyErr("");
-    if (!onVerifyVaultCode) {
-      // Fail-safe: if no verifier provided, block
-      setVerifyErr("Vault Code verification is unavailable.");
+    setDeleteError("");
+    setDeleteSuccess("");
+
+    if (!activeWorkspaceId) {
+      setVerifyErr("No active workspace.");
       return;
     }
+
+    const code = String(vaultCode || "").trim();
+    if (!code) {
+      setVerifyErr("Vault Code required.");
+      return;
+    }
+
     setVerifying(true);
-    const ok = await onVerifyVaultCode(vaultCode);
+
+    // 1) Verify code (use prop override if provided, else call RPC)
+    let ok = false, rpcErr = null;
+    if (onVerifyVaultCode) {
+      try {
+        ok = await onVerifyVaultCode(code);
+      } catch (e) {
+        rpcErr = e;
+      }
+    } else {
+      // ⚠️ Use the arg name your RPC expects: p_workspace_id or p_workspace
+      const { data, error } = await supabase.rpc("verify_workspace_code", {
+        p_workspace_id: activeWorkspaceId,   // ← if your RPC uses p_workspace, change this key
+        p_code: code,
+      });
+      ok = !!data;
+      rpcErr = error || null;
+    }
+
     setVerifying(false);
+
+    if (rpcErr) {
+      setVerifyErr(rpcErr.message || "Verification failed.");
+      return;
+    }
     if (!ok) {
       setVerifyErr("Incorrect Vault Code.");
       return;
     }
-    await onDelete?.();
+
+    // 2) Delete workspace (RLS/FKs should cascade members/items if configured)
+    const { error } = await supabase.from("workspaces").delete().eq("id", activeWorkspaceId);
+    if (error) {
+      setDeleteError(error.message || "Failed to delete workspace.");
+      return;
+    }
+
+    // 3) Success UX: close confirm dialog, show success, then close parent
+    setDeleteSuccess("Workspace deleted.");
+    setDangerOpen(false);               
+    setTimeout(() => {
+      onDelete?.();
+      onClose?.();
+    }, 1400);
   };
 
   return (
@@ -190,9 +248,18 @@ export default function WorkspaceSettingsModal({
             <TabsContent value="danger" className="space-y-4 mt-10">
               {/* Right-align the trigger */}
               <div className="flex">
-                <AlertDialog>
+                <AlertDialog open={dangerOpen} onOpenChange={setDangerOpen}>
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive" className="ml-auto">
+                    <Button
+                      variant="destructive"
+                      className="ml-auto"
+                      onClick={() => {
+                        setVerifyErr("");
+                        setDeleteError("");
+                        setDeleteSuccess("");
+                        setVaultCode("");
+                      }}
+                    >
                       Delete This Workspace
                     </Button>
                   </AlertDialogTrigger>
@@ -230,16 +297,22 @@ export default function WorkspaceSettingsModal({
 
                     <AlertDialogFooter>
                       <AlertDialogCancel disabled={loading || verifying}>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
+                      <Button
                         className="bg-red-600 hover:bg-red-700 disabled:opacity-60"
                         onClick={handleConfirmDelete}
                         disabled={!vaultCode || loading || verifying}
                       >
                         {verifying ? "Verifying..." : "Confirm Delete"}
-                      </AlertDialogAction>
+                      </Button>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
+              </div>
+
+              {/* Show success/error under the trigger area */}
+              <div className="mt-2 text-right">
+                {deleteSuccess && <p className="text-sm text-green-600">{deleteSuccess}</p>}
+                {deleteError   && <p className="text-sm text-red-500">{deleteError}</p>}
               </div>
 
               <p className="text-sm text-gray-500">
