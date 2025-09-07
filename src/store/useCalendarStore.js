@@ -16,6 +16,8 @@ const defaultFilters = {
   statuses: [],           // e.g. ['in_progress','blocked']
   tagSlugs: [],           // array of lower/slugged tag names
   mineOnly: false,        // only events where created_by === currentUserId
+  showPublicOnly: false,
+  showVaultedOnly: false,
 };
 
 export const useCalendarStore = create(

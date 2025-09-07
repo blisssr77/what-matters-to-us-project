@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useCalendarStore } from '@/store/useCalendarStore';
 
 // keep slug logic identical to the store so filters match
@@ -20,6 +20,30 @@ export function useCalendarFilters() {
   const setFilters = useCalendarStore((s) => s.setFilters);
   const resetFilters = useCalendarStore((s) => s.resetFilters);
   const currentUserId = useCalendarStore((s) => s.currentUserId);
+
+  const setShowPublicOnly = useCallback(
+  (val) => {
+    const v = !!val;
+    setFilters({
+      showPublicOnly: v,
+      // exclusive with vaulted-only
+      showVaultedOnly: v ? false : filters.showVaultedOnly,
+    });
+  },
+  [setFilters, filters.showVaultedOnly]
+);
+
+const setShowVaultedOnly = useCallback(
+  (val) => {
+    const v = !!val;
+    setFilters({
+      showVaultedOnly: v,
+      // exclusive with public-only
+      showPublicOnly: v ? false : filters.showPublicOnly,
+    });
+  },
+  [setFilters, filters.showPublicOnly]
+);
 
   // --- basic setters ---
   const setSearch = useCallback(
@@ -122,7 +146,9 @@ export function useCalendarFilters() {
       !!f.assigneeId ||
       !!(f.statuses && f.statuses.length) ||
       !!(f.tagSlugs && f.tagSlugs.length) ||
-      !!f.mineOnly
+      !!f.mineOnly ||
+      !!f.showPublicOnly ||
+      !!f.showVaultedOnly
     );
   }, [filters]);
 
@@ -137,6 +163,9 @@ export function useCalendarFilters() {
     setTagSlugs,
     setMineOnly,
     resetFilters,
+
+    setShowPublicOnly,
+    setShowVaultedOnly,
 
     // toggles / quick actions
     toggleStatus,
@@ -154,14 +183,14 @@ export function useCalendarFilters() {
  * Optional small debounced input helper.
  * Use for the search box so it doesn’t re-render the board on every keystroke.
  */
-// export function useDebouncedSearch(setSearch, delay = 300) {
-//   return useCallback {
-//     let t;
-//     return (val) => {
-//       clearTimeout(t);
-//       t = setTimeout(() => setSearch(val), delay);
-//     };
-//   }(setSearch, delay);
-// }
+export function useDebouncedSearch(setSearch, delay = 300) {
+  const tRef = useRef();
+  return useCallback(
+    (val) => {
+      clearTimeout(tRef.current);
+      tRef.current = setTimeout(() => setSearch(val), delay);
+    },
+    [setSearch, delay]
+  );
+}
 
-export default { useCalendarFilters };

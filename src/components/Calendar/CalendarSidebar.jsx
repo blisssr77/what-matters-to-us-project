@@ -1,15 +1,34 @@
 import dayjs from 'dayjs'
 import { Plus } from 'lucide-react'
-import { useCalendarFilters } from '@/hooks/useCalendarFilters'
 import MiniMonth from './MiniMonth'
+import { useCalendarStore } from '@/store/useCalendarStore'
+import { useCalendarFilters } from '@/hooks/useCalendarFilters'
+import { useState, useEffect } from 'react'
 
 export default function CalendarSidebar() {
-  const {
-    filters,
-    setIncludeWorkspace,
-    setIncludePrivate,
-    setShowVaultedOnly,
-  } = useCalendarFilters()
+  const { filters, setShowPublicOnly, setShowVaultedOnly } = useCalendarFilters()
+
+  // pull/set the range from your store
+  const visibleStart = useCalendarStore(s => s.range.from)
+  const setRange      = useCalendarStore(s => s.setRange)
+  const setView       = useCalendarStore(s => s.setView)
+
+  // local month follows store start or today
+  const [month, setMonth] = useState(dayjs())
+
+  useEffect(() => {
+    // If your range stores ISO strings, convert to dayjs
+    const base = visibleStart ? dayjs(visibleStart) : dayjs()
+    setMonth(base.startOf('month'))
+  }, [visibleStart])
+
+  // When a day is clicked → jump week in grid
+  const handleDayClick = (d) => {
+    const start = d.startOf('week')
+    const end   = d.endOf('week')
+    setView('timeGridWeek')                   // optional: ensure week view
+    setRange({ from: start.toISOString(), to: end.toISOString() })
+  }
 
   return (
     <div className="h-full flex flex-col">
@@ -21,31 +40,24 @@ export default function CalendarSidebar() {
 
       <div className="p-3 border-b">
         <MiniMonth
-          month={dayjs()}         // today
-          onDayClick={() => {}}   // hook up later to jump range
+          month={month}
+          onDayClick={handleDayClick}
+          onMonthChange={setMonth}
         />
       </div>
 
       <div className="p-3 space-y-3 overflow-y-auto">
-        <h4 className="text-xs font-semibold text-gray-500 uppercase">My calendars</h4>
+        <h4 className="text-xs font-semibold text-gray-500 uppercase">Options</h4>
+
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            checked={!!filters.includeWorkspace}
-            onChange={(e)=>setIncludeWorkspace(e.target.checked)}
+            checked={!!filters.showPublicOnly}
+            onChange={(e)=>setShowPublicOnly(e.target.checked)}
           />
-          Workspace
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={!!filters.includePrivate}
-            onChange={(e)=>setIncludePrivate(e.target.checked)}
-          />
-          My Private
+          Public only
         </label>
 
-        <h4 className="mt-4 text-xs font-semibold text-gray-500 uppercase">Options</h4>
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
