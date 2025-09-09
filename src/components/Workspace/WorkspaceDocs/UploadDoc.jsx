@@ -11,6 +11,8 @@ import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 import { addWorkspaceTag } from "@/lib/tagsApi";
 
+import AddToCalendar from "@/components/Calendar/AddToCalendar";
+
 export default function WorkspaceUploadDoc() {
     const [files, setFiles] = useState([]);
     const [tags, setTags] = useState([]);
@@ -29,6 +31,10 @@ export default function WorkspaceUploadDoc() {
     const { activeWorkspaceId, setActiveWorkspaceId } = useWorkspaceStore();
     const [isVaulted, setIsVaulted] = useState(true);
     const [wsName, setWsName] = useState("");
+
+    // New calendar-related states
+    const [calendarPayload, setCalendarPayload] = useState(null);
+    const calendarEnabled = !!calendarPayload?.calendar_enabled;
 
     const navigate = useNavigate();
 
@@ -172,7 +178,7 @@ export default function WorkspaceUploadDoc() {
         }
     }, [successMsg, errorMsg]);
 
-    // Handle file upload
+    // ==================================== Handle file upload ====================================
     const handleUpload = async (e) => {
         e.preventDefault();
         setUploading(true);
@@ -338,34 +344,86 @@ export default function WorkspaceUploadDoc() {
             }
         }
 
-        // Save metadata to DB
-        const { error: insertError } = await supabase.from("workspace_vault_items").insert({
+        // ---- Calendar defaults (when disabled) ----
+        const CAL_DEFAULTS = {
+            calendar_enabled: false,
+            start_at: null,
+            end_at: null,
+            all_day: false,
+            calendar_color: null,
+            calendar_status: null,
+            assignee_id: null,
+            calendar_visibility: null,
+        };
+
+        // ---- Validate payload from <AddToCalendar /> ----
+        const enabled = !!calendarPayload?.calendar_enabled;
+        const startISO = calendarPayload?.start_at || null;
+        let   endISO   = calendarPayload?.end_at || null;
+
+        // required start when enabled
+        if (enabled && !startISO) {
+            setErrorMsg('Please pick a start date/time for the calendar entry.');
+            setUploading(false);
+            return;
+        }
+
+        // normalize empties
+        const norm = (v) => (v === '' ? null : v);
+
+        // ensure end >= start (if both provided)
+        if (enabled && startISO && endISO && new Date(endISO) < new Date(startISO)) {
+            // you can also auto-fix: endISO = startISO;
+            setErrorMsg('End time must be after the start time.');
+            setUploading(false);
+            return;
+        }
+
+        // build the calendar block we’ll write
+        const calBlock = enabled
+        ? {
+            ...calendarPayload,
+            start_at: startISO,
+            end_at: norm(endISO),
+            // if you want to force visibility by vaulted-ness, override only when missing:
+            calendar_visibility:
+                calendarPayload.calendar_visibility ??
+                (isVaulted ? 'masked' : 'public'),
+            }
+        : { ...CAL_DEFAULTS };
+
+        // ---- Final row ----
+        const row = {
             user_id: userId,
-            file_name: files.map((f) => f.name).join(", "),
+            file_name: files.map(f => f.name).join(', '),
             file_metas: fileMetas,
             title,
             tags,
             notes,
             encrypted_note: encryptedNote,
             note_iv: noteIv,
-            created_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),      // (optional; DB default can handle)
             workspace_id: activeWorkspaceId,
             created_by: userId,
             is_vaulted: isVaulted,
-        });
+            ...calBlock,
+        };
+
+        const { error: insertError } = await supabase
+        .from('workspace_vault_items')
+        .insert(row);
 
         if (insertError) {
             console.error(insertError);
-            setErrorMsg("Failed to save document.");
+            setErrorMsg('Failed to save document.');
         } else {
-            setSuccessMsg("✅ Files uploaded successfully!");
-            setTimeout(() => navigate("/workspace/vaults"), 1300);
+            setSuccessMsg('✅ Files uploaded successfully!');
+            setTimeout(() => navigate('/workspace/vaults'), 1300);
         }
 
         setUploading(false);
         setHasUnsavedChanges(false);
     };
-
 
     return (
         <Layout>
@@ -549,6 +607,12 @@ export default function WorkspaceUploadDoc() {
                             </div>
                         </>
                     )}
+                    
+                    {/* Calendar Integration Section */}
+                    <AddToCalendar
+                    isVaulted={isVaulted}
+                    onChange={setCalendarPayload}
+                    />
 
                     {/* Upload */}
                     <button

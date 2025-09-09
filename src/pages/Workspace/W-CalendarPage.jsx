@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback } from 'react';
+import { useEffect, useMemo, useCallback, useState } from 'react';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -11,6 +11,7 @@ import { useCalendarFilters } from '@/hooks/useCalendarFilters';
 import CalendarToolbar from '@/components/Calendar/CalendarToolbar';
 import CalendarSidebar from '@/components/Calendar/CalendarSidebar';
 import CalendarGridWeek from '@/components/Calendar/CalendarGridWeek';
+import EventQuickView from '@/components/Calendar/EventQuickView';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -25,6 +26,22 @@ export default function WCalendarPage() {
   const setEvents   = useCalendarStore(s => s.setEvents);
 
   const { filters } = useCalendarFilters();
+
+  // --- navigation helpers
+  const [quick, setQuick] = useState(null);
+  const onEventClick = useCallback((e) => setQuick(e), []);
+  const onCloseQuick = useCallback(() => setQuick(null), []);
+  const canSeeVaulted = true;
+
+  const onEdit = useCallback((e) => {
+    // route wherever your editor is; example:
+    if (e.scope === 'workspace') {
+      // e.id should be the workspace_vault_items id
+      navigate(`/workspace/doc/${e.id}?from=calendar`);
+    } else {
+      navigate(`/private/doc/${e.id}?from=calendar`);
+    }
+  }, []);
 
   // ---- derive a safe range (prevents .startOf on undefined) -----------------
   const { safeStart, safeEnd } = useMemo(() => {
@@ -166,6 +183,14 @@ export default function WCalendarPage() {
           </div>
         </section>
       </div>
+
+      {/* Quick view modal */}
+      <EventQuickView
+        event={quick}
+        canSeeVaulted={canSeeVaulted}
+        onEdit={onEdit}
+        onClose={onCloseQuick}
+      />
     </Layout>
   );
 }
