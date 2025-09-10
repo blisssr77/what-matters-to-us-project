@@ -179,6 +179,7 @@ export default function WCalendarPage() {
             <CalendarGridWeek
               startOfWeek={safeStart.startOf('week')}
               events={filteredItems}
+              onEventClick={setQuick}
             />
           </div>
         </section>
@@ -188,8 +189,8 @@ export default function WCalendarPage() {
       <EventQuickView
         event={quick}
         canSeeVaulted={canSeeVaulted}
-        onEdit={onEdit}
-        onClose={onCloseQuick}
+        onClose={() => setQuick(null)}
+        onEdit={() => { setQuick(null); }}
       />
     </Layout>
   );

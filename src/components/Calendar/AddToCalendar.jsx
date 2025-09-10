@@ -72,6 +72,7 @@ export default function AddToCalendar({
       calendar_color: color || null,
       calendar_status: status || null,
       calendar_visibility: visibility || (isVaulted ? 'masked' : 'public'),
+      // If/when you support repeat windows, pass them in via props and include here.
     }
   }, [enabled, allDay, startDate, startTime, endDate, endTime, color, status, visibility, isVaulted, tz])
 

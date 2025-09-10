@@ -2,7 +2,9 @@ import dayjs from 'dayjs'
 
 const HOUR_PX = 64;
 
-// clip a [start,end) range to a day’s [00:00,24:00)
+// ---------- helpers ----------
+const minsSinceMidnight = (d) => d.hour() * 60 + d.minute();
+
 function clipToDay(start, end, day) {
   const dayStart = day.startOf('day');
   const dayEnd   = day.endOf('day');
@@ -11,31 +13,88 @@ function clipToDay(start, end, day) {
   return { s, e };
 }
 
-// produce day-sized segments for a (possibly multi-day) timed event
+// 1) existing: split a continuous range into day-sized segments
 function splitIntoDaySegments(e, weekStart) {
   const start = dayjs(e.start_at);
-  const end   = e.end_at ? dayjs(e.end_at) : start.add(30,'minute');
-
+  const end   = e.end_at ? dayjs(e.end_at) : start.add(30, 'minute');
   const segments = [];
+
   for (let i = 0; i < 7; i++) {
     const d = weekStart.add(i, 'day');
-    // If the event intersects this day
     if (start.isBefore(d.endOf('day')) && end.isAfter(d.startOf('day'))) {
       const { s, e } = clipToDay(start, end, d);
       segments.push({
         dayIndex: i,
         segStart: s,
         segEnd: e,
-        isFirst: s.isSame(start),
-        isLast:  e.isSame(end),
       });
     }
   }
   return segments;
 }
 
-function minutesSinceMidnight(d) {
-  return d.hour() * 60 + d.minute();
+// 2) daily window explicit (from DB/UI fields)
+function buildDailyWindowSegments(e, weekStart) {
+  const firstDay = dayjs(e.start_at).startOf('day');
+  const untilDay = dayjs(e.calendar_repeat_until || e.end_at || e.start_at).startOf('day');
+  const startHM = e.calendar_window_start; // 'HH:mm'
+  const endHM   = e.calendar_window_end;   // 'HH:mm'
+
+  const segments = [];
+  for (let i = 0; i < 7; i++) {
+    const d = weekStart.add(i, 'day');
+    if (d.isBefore(firstDay, 'day') || d.isAfter(untilDay, 'day')) continue;
+
+    const segStart = dayjs(`${d.format('YYYY-MM-DD')} ${startHM}`);
+    const segEnd   = dayjs(`${d.format('YYYY-MM-DD')} ${endHM}`);
+    segments.push({ dayIndex: i, segStart, segEnd });
+  }
+  return segments;
+}
+
+// 3) daily window inferred (fallback when event spans multiple days but
+//    you don't yet persist calendar_window_*). Uses start/end clocks.
+function buildDailyWindowFromRange(e, weekStart) {
+  const start = dayjs(e.start_at);
+  const end   = dayjs(e.end_at);
+  const startHM = start.format('HH:mm');
+  const endHM   = end.format('HH:mm');
+
+  const firstDay = start.startOf('day');
+  const lastDay  = end.startOf('day');
+
+  const segments = [];
+  for (let i = 0; i < 7; i++) {
+    const d = weekStart.add(i, 'day');
+    if (d.isBefore(firstDay, 'day') || d.isAfter(lastDay, 'day')) continue;
+
+    const segStart = dayjs(`${d.format('YYYY-MM-DD')} ${startHM}`);
+    const segEnd   = dayjs(`${d.format('YYYY-MM-DD')} ${endHM}`);
+
+    segments.push({ dayIndex: i, segStart, segEnd });
+  }
+  return segments;
+}
+
+// Dispatcher
+function buildSegmentsForEvent(e, weekStart) {
+  const hasExplicitDaily =
+    e.calendar_repeat === 'daily' &&
+    e.calendar_window_start &&
+    e.calendar_window_end;
+
+  if (hasExplicitDaily) {
+    return buildDailyWindowSegments(e, weekStart);
+  }
+
+  const hasMultiDayRange =
+    !e.all_day && e.end_at && dayjs(e.end_at).startOf('day').diff(dayjs(e.start_at).startOf('day'), 'day') >= 1;
+
+  if (hasMultiDayRange) {
+    return buildDailyWindowFromRange(e, weekStart);
+  }
+
+  return splitIntoDaySegments(e, weekStart);
 }
 
 export default function CalendarGridWeek({ startOfWeek, events = [], onEventClick }) {
@@ -115,34 +174,25 @@ export default function CalendarGridWeek({ startOfWeek, events = [], onEventClic
 
             {/* timed segments for this day */}
             {timed.flatMap(e => {
-              const segs = splitIntoDaySegments(e, weekStart);
+              const segs = buildSegmentsForEvent(e, weekStart);
               return segs
                 .filter(s => s.dayIndex === dayIdx)
                 .map(s => {
-                  const top = (minutesSinceMidnight(s.segStart) / 60) * HOUR_PX;
-                  const durationMin = Math.max(1, s.segEnd.diff(s.segStart, 'minute'));
-                  const height = Math.max(28, (durationMin / 60) * HOUR_PX);
+                  const top = (minsSinceMidnight(s.segStart) / 60) * HOUR_PX;
+                  const heightMin = Math.max(1, s.segEnd.diff(s.segStart, 'minute'));
+                  const height = Math.max(28, (heightMin / 60) * HOUR_PX);
 
                   return (
                     <div
-                      key={`${e.id}-${dayIdx}`}
+                      key={`${e.id}-${dayIdx}-${s.segStart.valueOf()}`}
                       onClick={() => onEventClick?.(e)}
                       className="absolute left-1 right-1 rounded px-2 py-1 text-[12px] font-medium text-white shadow cursor-pointer"
                       style={{ top, height, background: e.color || '#2563eb' }}
                     >
-                      {/* tails show continuation into prev/next day */}
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="whitespace-normal leading-tight break-words">
-                          {e.title}
-                        </span>
-                        <span className="text-[10px] opacity-80">
-                          {s.segStart.format('h:mm a')} – {s.segEnd.format('h:mm a')}
-                        </span>
+                      <div className="leading-tight whitespace-normal break-words">{e.title}</div>
+                      <div className="text-[10px] opacity-80 mt-0.5">
+                        {s.segStart.format('h:mm a')} – {s.segEnd.format('h:mm a')}
                       </div>
-
-                      {/* chevrons to hint multi-day continuation */}
-                      {!s.isFirst && <span className="absolute -left-1 top-1 text-white/80">◀</span>}
-                      {!s.isLast  && <span className="absolute -right-1 top-1 text-white/80">▶</span>}
                     </div>
                   );
                 });

@@ -12,6 +12,12 @@ import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 import { addWorkspaceTag } from "@/lib/tagsApi";
 
 import AddToCalendar from "@/components/Calendar/AddToCalendar";
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import tzPlugin from 'dayjs/plugin/timezone'
+dayjs.extend(utc)
+dayjs.extend(tzPlugin)
+
 
 export default function WorkspaceUploadDoc() {
     const [files, setFiles] = useState([]);
@@ -34,7 +40,10 @@ export default function WorkspaceUploadDoc() {
 
     // New calendar-related states
     const [calendarPayload, setCalendarPayload] = useState(null);
-    const calendarEnabled = !!calendarPayload?.calendar_enabled;
+    const [editRow, setEditRow] = useState(null); // for future use if editing existing rows
+    const enabled = !!calendarPayload?.calendar_enabled;
+    const startISO = calendarPayload?.start_at || null;
+    const allDay   = !!calendarPayload?.all_day;
 
     const navigate = useNavigate();
 
@@ -363,7 +372,10 @@ export default function WorkspaceUploadDoc() {
 
         // required start when enabled
         if (enabled && !startISO) {
-            setErrorMsg('Please pick a start date/time for the calendar entry.');
+            setErrorMsg(allDay
+                ? 'Please pick a date for the calendar entry.'
+                : 'Please pick a start date/time for the calendar entry.'
+            );
             setUploading(false);
             return;
         }
@@ -527,8 +539,14 @@ export default function WorkspaceUploadDoc() {
                                 onChange={(e) => setNewTag(e.target.value)}
                                 className="border bg-gray-50 rounded px-2 py-1 text-sm flex-1 text-gray-800"
                                 placeholder="Add a tag"
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        handleTagAdd();
+                                    }
+                                }}
                             />
-                            <button onClick={handleTagAdd} className="btn-secondary">Add</button>
+                            <button type="button" onClick={handleTagAdd} className="btn-secondary">Add</button>
                         </div>
 
                         <div className="mt-2 flex flex-wrap gap-2">
@@ -610,9 +628,26 @@ export default function WorkspaceUploadDoc() {
                     
                     {/* Calendar Integration Section */}
                     <AddToCalendar
-                    isVaulted={isVaulted}
-                    onChange={setCalendarPayload}
+                        isVaulted={isVaulted}
+                        initial={editRow ? {
+                            calendar_enabled: !!editRow.calendar_enabled,
+                            start_at: editRow.start_at,
+                            end_at: editRow.end_at,
+                            all_day: !!editRow.all_day,
+                            calendar_color: editRow.calendar_color,
+                            calendar_status: editRow.calendar_status,
+                            calendar_visibility: editRow.calendar_visibility,
+                        } : {}}
+                        onChange={setCalendarPayload}
                     />
+
+                    {/* Validation message if calendar enabled but no start */}
+                    {enabled && !startISO && (
+                        <p className="mt-2 text-xs text-amber-600">
+                            {allDay ? 'Please pick a date for the calendar entry.' 
+                                    : 'Please pick a start date/time for the calendar entry.'}
+                        </p>
+                    )}
 
                     {/* Upload */}
                     <button
