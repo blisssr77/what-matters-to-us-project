@@ -34,7 +34,7 @@ export default function CalendarSidebar() {
   return (
     <div className="h-full flex flex-col">
       <div className="p-3 border-b">
-        <div className="p-3 space-y-3 overflow-y-auto">
+        <div className="p-3 space-y-3 overflow-y-auto text-gray-700">
           <WorkspaceSelect
             includeWorkspace={!!filters.includeWorkspace}
             includePrivate={!!filters.includePrivate}
@@ -43,7 +43,7 @@ export default function CalendarSidebar() {
           />
         </div>
 
-        <button className="w-full inline-flex items-center justify-center gap-2 rounded bg-blue-600 hover:bg-blue-700 text-white py-2 text-sm">
+        <button className="btn-main w-full inline-flex items-center justify-center gap-2 rounded bg-blue-600 hover:bg-blue-700 text-white py-2 text-sm">
           <Plus size={16}/> Create
         </button>
       </div>
@@ -56,8 +56,8 @@ export default function CalendarSidebar() {
         />
       </div>
       <div className="p-3 space-y-3 overflow-y-auto">
-        <h4 className="text-xs font-semibold text-gray-500 uppercase">My calendars</h4>
-        <label className="flex items-center gap-2 text-sm">
+        <h4 className="text-xs font-bold text-gray-700 uppercase">My calendars</h4>
+        <label className="flex items-center gap-2 text-sm text-gray-500">
           <input
             type="checkbox"
             checked={!!filters.includeWorkspace}
@@ -65,7 +65,7 @@ export default function CalendarSidebar() {
           />
           Workspace
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm text-gray-500">
           <input
             type="checkbox"
             checked={!!filters.includePrivate}
@@ -76,9 +76,9 @@ export default function CalendarSidebar() {
       </div>
 
       <div className="p-3 space-y-3 overflow-y-auto">
-        <h4 className="text-xs font-semibold text-gray-500 uppercase">Options</h4>
+        <h4 className="text-xs font-bold text-gray-700 uppercase">Options</h4>
 
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm text-gray-500">
           <input
             type="checkbox"
             checked={!!filters.showPublicOnly}
@@ -87,7 +87,7 @@ export default function CalendarSidebar() {
           Public only
         </label>
 
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm text-gray-500">
           <input
             type="checkbox"
             checked={!!filters.showVaultedOnly}

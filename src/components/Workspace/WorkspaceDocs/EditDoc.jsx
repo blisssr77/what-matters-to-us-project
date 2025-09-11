@@ -11,6 +11,77 @@ import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 import { addWorkspaceTag } from "@/lib/tagsApi";
 
+import AddToCalendar from "@/components/Calendar/AddToCalendar";
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import tzPlugin from 'dayjs/plugin/timezone'
+dayjs.extend(utc)
+dayjs.extend(tzPlugin)
+
+// Derive storage path from a full URL (for signed URLs)
+const CAL_DEFAULTS = {
+  calendar_enabled: false,
+  start_at: null,
+  end_at: null,
+  all_day: false,
+  calendar_color: null,
+  calendar_status: null,
+  assignee_id: null,
+  calendar_visibility: null,
+  // include these if you support recurrence/windows
+  calendar_repeat: null,
+  calendar_repeat_until: null,
+  calendar_window_start: null,
+  calendar_window_end: null,
+};
+
+// Validate calendar payload; returns error string or null if valid
+function validateCalendarPayload(payload) {
+  if (payload == null) return null; // untouched = no validation needed
+  const enabled = !!payload.calendar_enabled;
+  if (!enabled) return null;        // disabled = ok
+  const startISO = payload.start_at || null;
+  const endISO   = payload.end_at   || null;
+
+  if (!startISO) {
+    return payload.all_day
+      ? 'Please pick a date for the calendar entry.'
+      : 'Please pick a start date/time for the calendar entry.';
+  }
+  if (startISO && endISO && new Date(endISO) < new Date(startISO)) {
+    return 'End time must be after the start time.';
+  }
+  return null;
+}
+
+// Normalize calendar payload for DB storage
+function normalizeCalendarBlock(payload, isVaulted) {
+  if (payload == null) return null;               // untouched → don't include any calendar fields
+  const enabled = !!payload.calendar_enabled;
+  if (!enabled) return { ...CAL_DEFAULTS };       // explicitly turned OFF → clear all fields
+
+  const startISO = payload.start_at || null;
+  const endISO   = payload.end_at   || null;
+
+  return {
+    calendar_enabled: true,
+    start_at: startISO,
+    end_at: endISO || null,
+    all_day: !!payload.all_day,
+    calendar_color: payload.calendar_color || null,
+    calendar_status: payload.calendar_status || null,
+    assignee_id: payload.assignee_id || null,
+    calendar_visibility:
+      payload.calendar_visibility ?? (isVaulted ? 'masked' : 'public'),
+
+    // include these if you support them
+    calendar_repeat: payload.calendar_repeat ?? null,
+    calendar_repeat_until: payload.calendar_repeat_until ?? null,
+    calendar_window_start: payload.calendar_window_start ?? null,
+    calendar_window_end: payload.calendar_window_end ?? null,
+  };
+}
+
 export default function WorkspaceEditDoc() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -37,6 +108,27 @@ export default function WorkspaceEditDoc() {
     const [initialIsVaulted, setInitialIsVaulted] = useState(null);
 
     const { activeWorkspaceId } = useWorkspaceStore();
+
+    // New calendar-related states
+    const [calendarPayload, setCalendarPayload] = useState(null);
+    const [editRow, setEditRow] = useState(null); // for future use if editing existing rows
+
+    // Prepare initial calendar payload when editRow is set (for future use)
+    const calendarInitial = useMemo(() => (
+        editRow ? {
+            calendar_enabled: !!editRow.calendar_enabled,
+            start_at: editRow.start_at,
+            end_at: editRow.end_at,
+            all_day: !!editRow.all_day,
+            calendar_color: editRow.calendar_color,
+            calendar_status: editRow.calendar_status,
+            calendar_visibility: editRow.calendar_visibility,
+            calendar_repeat: editRow.calendar_repeat,
+            calendar_repeat_until: editRow.calendar_repeat_until,
+            calendar_window_start: editRow.calendar_window_start,
+            calendar_window_end: editRow.calendar_window_end,
+        } : {}
+    ), [editRow]);
 
     // Allowed MIME types for file uploads
     const allowedMimes = [
@@ -69,53 +161,57 @@ export default function WorkspaceEditDoc() {
     
     // Fetch document data and tags on mount
     useEffect(() => {
-        const fetchDoc = async () => {
+        let ignore = false;
+        if (!id || !activeWorkspaceId) return;
+
+        (async () => {
+            // 1) Document
             const { data, error } = await supabase
-            .from("workspace_vault_items")
-            .select("*")
-            .eq("id", id)
-            .eq("workspace_id", activeWorkspaceId)
-            .single();
+                .from('workspace_vault_items')
+                .select('*')
+                .eq('id', id)
+                .eq('workspace_id', activeWorkspaceId)
+                .single();
 
-            if (!error && data) {
-            setTitle(data.title);
-            setTags(data.tags || []);
-            setNotes(data.notes || []);
-            setExistingFiles(data.file_metas || []);
-            setIsVaulted(data.is_vaulted || false);
-            setInitialIsVaulted(data.is_vaulted || false);
+            if (!ignore && !error && data) {
+                setEditRow(data); // for future use if editing existing rows
 
+                // hydrate other UI fields
+                setTitle(data.title ?? '');
+                setTags(Array.isArray(data.tags) ? data.tags : []);
+                setNotes(typeof data.notes === 'string' ? data.notes : ''); // notes should be string
+                setExistingFiles(Array.isArray(data.file_metas) ? data.file_metas : []);
+                setIsVaulted(!!data.is_vaulted);
+                setInitialIsVaulted(!!data.is_vaulted);
 
-            const storedVaultCode = sessionStorage.getItem("vaultCode");
-
-            if (data.encrypted_note && data.note_iv && storedVaultCode) {
-                try {
-                    const decrypted = await decryptText(
-                        data.encrypted_note,
-                        data.note_iv,
-                        storedVaultCode
-                    );
-                    setPrivateNote(decrypted);
-                } catch (err) {
-                    console.error("Failed to decrypt note:", err);
-                    setPrivateNote("🔐 Encrypted");
+                // decrypt private note if we can
+                const storedVaultCode = sessionStorage.getItem('vaultCode');
+                if (data.encrypted_note && data.note_iv && storedVaultCode) {
+                    try {
+                        const decrypted = await decryptText(data.encrypted_note, data.note_iv, storedVaultCode);
+                        if (!ignore) setPrivateNote(decrypted);
+                    } catch (err) {
+                        console.error('Failed to decrypt note:', err);
+                        if (!ignore) setPrivateNote('🔐 Encrypted');
+                    }
+                } else {
+                    if (!ignore) setPrivateNote('');
                 }
-            } else {
-                setPrivateNote(""); // no encrypted note
-            }}
-        };
-        const fetchTags = async () => {
-            const { data } = await supabase
-            .from("vault_tags")
-            .select("*")
-            .eq("workspace_id", activeWorkspaceId);
-            const tagNames = data?.map((tag) => tag.name) || [];
-            setAvailableTags(tagNames);
-        };
+            }
 
-        fetchDoc();
-        fetchTags();
-    }, [id, activeWorkspaceId]);
+            // 2) Tags (workspace)
+            const { data: tagRows } = await supabase
+                .from('vault_tags')
+                .select('name')
+                .eq('workspace_id', activeWorkspaceId);
+
+            if (!ignore) {
+                setAvailableTags((tagRows || []).map(t => t.name));
+            }
+        })();
+
+        return () => { ignore = true; };
+        }, [id, activeWorkspaceId]);
 
     // Ensure selected tags are visible even if legacy/user-only
     const tagOptions = useMemo(
@@ -480,21 +576,36 @@ export default function WorkspaceEditDoc() {
             }
         }
 
+        // ---- Calendar handling (EDIT) ----
+        const calErr = validateCalendarPayload(calendarPayload);
+        if (calErr) {
+        setUploading(false);
+        setErrorMsg(calErr);
+        return;
+        }
+
+        const calBlock = normalizeCalendarBlock(calendarPayload, isVaulted);
+
         // -------- Final DB update --------
         const safeMetas = Array.isArray(updatedFileMetas) ? updatedFileMetas : [];
+
+        const updatePatch = {
+            title,
+            tags,
+            notes,
+            is_vaulted: isVaulted,
+            encrypted_note: goingPublic ? null : (isVaulted ? (encryptedNote || undefined) : null),
+            note_iv:        goingPublic ? null : (isVaulted ? (noteIv || undefined) : null),
+            file_metas: safeMetas,
+            ...(calBlock ?? {}),  // if null (untouched), we don't touch calendar columns
+        };
+
+        // Do the actual update BEFORE checking updateError:
         const { error: updateError } = await supabase
-            .from("workspace_vault_items")
-            .update({
-                title,
-                tags,
-                notes,
-                is_vaulted: isVaulted,
-                encrypted_note: goingPublic ? null : (isVaulted ? (encryptedNote || undefined) : null),
-                note_iv: goingPublic ? null : (isVaulted ? (noteIv || undefined) : null),
-                file_metas: safeMetas,
-            })
-            .eq("id", id)
-            .eq("workspace_id", activeWorkspaceId);
+            .from('workspace_vault_items')
+            .update(updatePatch)
+            .eq('id', id)
+            .eq('workspace_id', activeWorkspaceId);
 
         if (updateError) {
             console.error(updateError);
@@ -701,19 +812,19 @@ export default function WorkspaceEditDoc() {
 
                     {/* Tag Input Section */}
                     <div className="mb-4">
-                        <label className="block text-sm font-boldmb-1 mb-1 text-gray-800">Tags:</label>
+                        <label className="block text-sm font-bold mb-1 text-gray-800">Tags:</label>
                         <div className="flex gap-2">
                             <input
-                            value={newTag}
-                            onChange={(e) => setNewTag(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                    e.preventDefault(); 
-                                    handleTagAdd();
-                                }
-                            }}
-                            className="border rounded px-2 py-1 text-sm flex-1 text-gray-800 bg-gray-50"
-                            placeholder="Add a tag"
+                                value={newTag}
+                                onChange={(e) => setNewTag(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault(); 
+                                        handleTagAdd();
+                                    }
+                                }}
+                                className="border rounded px-2 py-1 text-sm flex-1 text-gray-800 bg-gray-50"
+                                placeholder="Add a tag"
                             />
                             <button type="button" onClick={handleTagAdd} className="btn-secondary">Add</button>
                         </div>
@@ -797,6 +908,14 @@ export default function WorkspaceEditDoc() {
                         </>
                     )}
 
+                    {/* Calendar Integration */}
+                    <AddToCalendar
+                        isVaulted={isVaulted}
+                        initial={calendarInitial}
+                        defaultColor="#f59e0b"
+                        onChange={setCalendarPayload}
+                    />
+
                     {/* Upload Button */}
                     <button
                         type="submit"
@@ -814,10 +933,10 @@ export default function WorkspaceEditDoc() {
 
                     <br />
                     {successMsg && (
-                    <p className="text-sm text-green-600 text-center">{successMsg}</p>
+                        <p className="text-sm text-green-600 text-center">{successMsg}</p>
                     )}
                     {errorMsg && (
-                    <p className="text-sm text-red-600 text-center">{errorMsg}</p>
+                        <p className="text-sm text-red-600 text-center">{errorMsg}</p>
                     )}
                 </form>
             </FullscreenCard>

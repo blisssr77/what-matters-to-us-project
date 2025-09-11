@@ -153,7 +153,7 @@ export default function WorkspaceSelect({ className = "" }) {
             {/* dropdown */}
             <div
               className={clsx(
-                "z-[1000] rounded-md border bg-white shadow-xl",
+                "z-[1000] rounded-md border bg-white shadow-xl text-gray-600",
                 "animate-in fade-in zoom-in-95",
                 "max-h-[70vh] overflow-auto"
               )}
@@ -161,7 +161,7 @@ export default function WorkspaceSelect({ className = "" }) {
               role="listbox"
             >
               {/* Header: “All Workspaces” */}
-              <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b">
+              <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b text-gray-600">
                 <button
                   type="button"
                   className={clsx(
@@ -180,13 +180,13 @@ export default function WorkspaceSelect({ className = "" }) {
 
                 {/* Search (only when many workspaces; set showSearch=true to force) */}
                 {showSearch && (
-                  <div className="px-3 pb-2">
+                  <div className="px-3 pb-2 text-gray-700">
                     <input
                       type="text"
                       value={q}
                       onChange={(e) => setQ(e.target.value)}
                       placeholder="Search workspaces…"
-                      className="w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                      className="w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 text-gray-600"
                     />
                   </div>
                 )}

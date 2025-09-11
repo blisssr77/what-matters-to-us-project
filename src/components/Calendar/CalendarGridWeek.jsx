@@ -107,7 +107,7 @@ export default function CalendarGridWeek({ startOfWeek, events = [], onEventClic
   return (
     <div className="h-full flex flex-col">
       {/* header */}
-      <div className="grid grid-cols-[64px_repeat(7,1fr)] border-b bg-white sticky top-0 z-10">
+      <div className="grid grid-cols-[64px_repeat(7,1fr)] border-b bg-white sticky top-0 z-1 text-gray-600">
         <div className="h-10" />
         {days.map(d => (
           <div key={d.format('YYYY-MM-DD')} className="h-10 px-3 flex items-center border-l">

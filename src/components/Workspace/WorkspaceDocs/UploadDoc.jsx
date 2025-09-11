@@ -18,7 +18,6 @@ import tzPlugin from 'dayjs/plugin/timezone'
 dayjs.extend(utc)
 dayjs.extend(tzPlugin)
 
-
 export default function WorkspaceUploadDoc() {
     const [files, setFiles] = useState([]);
     const [tags, setTags] = useState([]);
@@ -628,6 +627,7 @@ export default function WorkspaceUploadDoc() {
                     
                     {/* Calendar Integration Section */}
                     <AddToCalendar
+                        key={editRow?.id || 'new'}
                         isVaulted={isVaulted}
                         initial={editRow ? {
                             calendar_enabled: !!editRow.calendar_enabled,

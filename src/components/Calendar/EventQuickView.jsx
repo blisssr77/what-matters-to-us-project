@@ -55,9 +55,7 @@ export default function EventQuickView({ event, canSeeVaulted, onEdit, onClose }
             <button
               onClick={() => onEdit?.(event)}
               className={clsx(
-                'inline-flex items-center gap-2 px-3 py-1.5 rounded',
-                'bg-gradient-to-r from-indigo-700 via-purple-700 to-violet-700 text-white',
-                'hover:from-indigo-800 hover:to-purple-800'
+                'btn-secondary inline-flex items-center gap-2 px-3 py-1.5 rounded'
               )}
             >
               <Edit size={16} /> Edit
