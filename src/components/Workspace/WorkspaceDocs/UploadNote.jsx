@@ -13,10 +13,81 @@ import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 import { addWorkspaceTag } from "@/lib/tagsApi";
 
+import AddToCalendar from "@/components/Calendar/AddToCalendar";
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import tzPlugin from 'dayjs/plugin/timezone'
+dayjs.extend(utc)
+dayjs.extend(tzPlugin)
+
+// Derive storage path from a full URL (for signed URLs)
+const CAL_DEFAULTS = {
+  calendar_enabled: false,
+  start_at: null,
+  end_at: null,
+  all_day: false,
+  calendar_color: null,
+  calendar_status: null,
+  assignee_id: null,
+  calendar_visibility: null,
+  // include these if you support recurrence/windows
+  calendar_repeat: null,
+  calendar_repeat_until: null,
+  calendar_window_start: null,
+  calendar_window_end: null,
+};
+
+// Validate calendar payload; returns error string or null if valid
+function validateCalendarPayload(payload) {
+  if (payload == null) return null; // untouched = no validation needed
+  const enabled = !!payload.calendar_enabled;
+  if (!enabled) return null;        // disabled = ok
+  const startISO = payload.start_at || null;
+  const endISO   = payload.end_at   || null;
+
+  if (!startISO) {
+    return payload.all_day
+      ? 'Please pick a date for the calendar entry.'
+      : 'Please pick a start date/time for the calendar entry.';
+  }
+  if (startISO && endISO && new Date(endISO) < new Date(startISO)) {
+    return 'End time must be after the start time.';
+  }
+  return null;
+}
+
+// Normalize calendar payload for DB storage
+function normalizeCalendarBlock(payload, isVaulted) {
+  if (payload == null) return null;               // untouched → don't include any calendar fields
+  const enabled = !!payload.calendar_enabled;
+  if (!enabled) return { ...CAL_DEFAULTS };       // explicitly turned OFF → clear all fields
+
+  const startISO = payload.start_at || null;
+  const endISO   = payload.end_at   || null;
+
+  return {
+    calendar_enabled: true,
+    start_at: startISO,
+    end_at: endISO || null,
+    all_day: !!payload.all_day,
+    calendar_color: payload.calendar_color || null,
+    calendar_status: payload.calendar_status || null,
+    assignee_id: payload.assignee_id || null,
+    calendar_visibility:
+      payload.calendar_visibility ?? (isVaulted ? 'masked' : 'public'),
+
+    // include these if you support them
+    calendar_repeat: payload.calendar_repeat ?? null,
+    calendar_repeat_until: payload.calendar_repeat_until ?? null,
+    calendar_window_start: payload.calendar_window_start ?? null,
+    calendar_window_end: payload.calendar_window_end ?? null,
+  };
+}
+
 const WorkspaceUploadNote = () => {
     const [title, setTitle] = useState("");
     const [privateNote, setPrivateNote] = useState("");
-    const [loading, setLoading] = useState(false);
+    const [uploading, setUploading] = useState(false);
     const [newTag, setNewTag] = useState("");
     const [tags, setTags] = useState([]);
     const [notes, setNotes] = useState("");
@@ -37,6 +108,10 @@ const WorkspaceUploadNote = () => {
     const [publicHtml, setPublicHtml] = useState('')
     const [privateJson, setPrivateJson] = useState()
     const [privateHtml, setPrivateHtml] = useState('')
+
+    // Calendar states
+    const [calendarPayload, setCalendarPayload] = useState(null);
+    const [editRow, setEditRow] = useState(null); // for future use if editing existing rows
 
     // ✅ Fetch and set active workspace on mount
     // 1) On mount, pick an active workspace ID for this user
@@ -159,7 +234,7 @@ const WorkspaceUploadNote = () => {
 
     // Handle note upload-------------------------------------------
     const handleCreate = async () => {
-        setLoading(true)
+        setUploading(true)
         setSuccessMsg('')
         setErrorMsg('')
 
@@ -167,7 +242,7 @@ const WorkspaceUploadNote = () => {
         const { data: userData } = await supabase.auth.getUser()
         const user = userData?.user
         if (!user?.id) {
-            setLoading(false)
+            setUploading(false)
             setErrorMsg('User not authenticated.')
             return
         }
@@ -186,7 +261,7 @@ const WorkspaceUploadNote = () => {
         const hasPrivate = !!privateJson && JSON.stringify(privateJson).length > 20
 
         if (!hasPublic && !(isVaulted && hasPrivate)) {
-            setLoading(false)
+            setUploading(false)
             setErrorMsg('Nothing to save.')
             return
         }
@@ -195,7 +270,7 @@ const WorkspaceUploadNote = () => {
         if (isVaulted && hasPrivate) {
             const code = (vaultCode || '').trim()
             if (!code) {
-                setLoading(false)
+                setUploading(false)
                 setErrorMsg('Please enter your Vault Code.')
                 return
             }
@@ -204,12 +279,12 @@ const WorkspaceUploadNote = () => {
                 p_code: code,
             })
             if (error) {
-                setLoading(false)
+                setUploading(false)
                 setErrorMsg(error.message || 'Verification failed.')
                 return
             }
             if (!ok) {
-                setLoading(false)
+                setUploading(false)
                 setErrorMsg('Incorrect Vault Code.')
                 return
             }
@@ -227,17 +302,27 @@ const WorkspaceUploadNote = () => {
             }
         } catch (e) {
             console.error('Encryption failed:', e)
-            setLoading(false)
+            setUploading(false)
             setErrorMsg('Encryption error.')
             return
         }
+
+        // ---- Calendar handling (EDIT) ----
+        const calErr = validateCalendarPayload(calendarPayload);
+        if (calErr) {
+            setUploading(false);
+            setErrorMsg(calErr);
+            return;
+        }
+
+        const calBlock = normalizeCalendarBlock(calendarPayload, isVaulted);
 
         // derive plain text + optional summary from public note (for search)
         const publicText = hasPublic ? stripHtmlToText(cleanPublicHtml) : null
         const summary = hasPublic ? publicText.slice(0, 160) : null
 
         // build payload to match your schema
-        const payload = {
+        const row = {
             user_id: user.id,
             workspace_id: activeWorkspaceId,
             created_by: user.id,
@@ -260,11 +345,14 @@ const WorkspaceUploadNote = () => {
             // keep legacy encrypted_note/note_iv empty to avoid duplication
             encrypted_note: null,
             note_iv: null,
+
+            created_at: new Date().toISOString(),
+            ...calBlock
         }
 
         const { error: insertError } = await supabase
             .from('workspace_vault_items')
-            .insert(payload)
+            .insert(row)
 
         if (insertError) {
             console.error(insertError)
@@ -275,7 +363,7 @@ const WorkspaceUploadNote = () => {
             setTimeout(() => navigate('/workspace/vaults'), 900)
         }
 
-        setLoading(false)
+        setUploading(false)
     }
 
     return (
@@ -412,12 +500,27 @@ const WorkspaceUploadNote = () => {
                     </>
                 )}
 
+                <AddToCalendar
+                    key={editRow?.id || 'new'}
+                    isVaulted={isVaulted}
+                    initial={editRow ? {
+                        calendar_enabled: !!editRow.calendar_enabled,
+                        start_at: editRow.start_at,
+                        end_at: editRow.end_at,
+                        all_day: !!editRow.all_day,
+                        calendar_color: editRow.calendar_color,
+                        calendar_status: editRow.calendar_status,
+                        calendar_visibility: editRow.calendar_visibility,
+                    } : {}}
+                    onChange={setCalendarPayload}
+                />
+
                 <button
                     onClick={handleCreate}
-                    disabled={loading}
+                    disabled={uploading}
                     className="btn-secondary w-full mt-4"
                 >
-                    {loading ? "Creating..." : "Upload Note"}
+                    {uploading ? "Creating..." : "Upload Note"}
                 </button>
 
                 <br />

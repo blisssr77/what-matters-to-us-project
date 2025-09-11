@@ -211,7 +211,7 @@ export default function WorkspaceEditDoc() {
         })();
 
         return () => { ignore = true; };
-        }, [id, activeWorkspaceId]);
+    }, [id, activeWorkspaceId]);
 
     // Ensure selected tags are visible even if legacy/user-only
     const tagOptions = useMemo(
@@ -579,9 +579,9 @@ export default function WorkspaceEditDoc() {
         // ---- Calendar handling (EDIT) ----
         const calErr = validateCalendarPayload(calendarPayload);
         if (calErr) {
-        setUploading(false);
-        setErrorMsg(calErr);
-        return;
+            setUploading(false);
+            setErrorMsg(calErr);
+            return;
         }
 
         const calBlock = normalizeCalendarBlock(calendarPayload, isVaulted);
@@ -793,7 +793,12 @@ export default function WorkspaceEditDoc() {
                             />{" "}
                             Public
                         </label>
-                        <h2 className="text-xs text-purple-500 mt-1">Switching to Public will permanently delete the Private note.</h2>
+                        {/* Vaulted warning */}
+                        {isVaulted && (
+                            <h2 className="text-xs text-purple-500 mt-1">
+                                Switching to Public will permanently delete the Private note.
+                            </h2>
+                        )}
                     </div>
 
                     {/* Title */}

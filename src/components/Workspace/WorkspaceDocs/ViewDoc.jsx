@@ -10,6 +10,7 @@ import bcrypt from "bcryptjs";
 import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
+import dayjs from "dayjs";
 
 const mimeToExtension = {
   "application/pdf": ".pdf",
@@ -512,6 +513,17 @@ export default function WorkspaceViewDoc() {
                 </div>
 
                 {renderFileViewer()}
+
+                {doc?.created_at && (
+                        <div className="mb-1 text-xs text-gray-400">
+                            Created: {dayjs(doc.created_at).format("MMM D, YYYY h:mm A")}
+                        </div>
+                    )}
+                    {doc?.updated_at && (
+                        <div className="mb-3 text-xs text-gray-400">
+                            Updated: {dayjs(doc.updated_at).format("MMM D, YYYY h:mm A")}
+                        </div>
+                  )}
 
                 {/* Tags */}
                 {/* {doc?.tags?.length > 0 && (

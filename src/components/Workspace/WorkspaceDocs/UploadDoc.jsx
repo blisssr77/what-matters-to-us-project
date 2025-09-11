@@ -413,7 +413,7 @@ export default function WorkspaceUploadDoc() {
             notes,
             encrypted_note: encryptedNote,
             note_iv: noteIv,
-            created_at: new Date().toISOString(),      // (optional; DB default can handle)
+            created_at: new Date().toISOString(),      // (DB default can handle)
             workspace_id: activeWorkspaceId,
             created_by: userId,
             is_vaulted: isVaulted,
@@ -639,6 +639,7 @@ export default function WorkspaceUploadDoc() {
                             calendar_visibility: editRow.calendar_visibility,
                         } : {}}
                         onChange={setCalendarPayload}
+                        defaultColor="#f59e0b"
                     />
 
                     {/* Validation message if calendar enabled but no start */}

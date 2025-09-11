@@ -753,7 +753,12 @@ export default function PrivateEditDoc() {
                   />{" "}
                   Public
               </label>
-              <h2 className="text-xs text-purple-500 mt-1">Switching to Public will permanently delete the Private note.</h2>
+              {/* Vaulted warning */}
+              {isVaulted && (
+                  <h2 className="text-xs text-purple-500 mt-1">
+                      Switching to Public will permanently delete the Private note.
+                  </h2>
+              )}
           </div>
 
           {/* Title */}
