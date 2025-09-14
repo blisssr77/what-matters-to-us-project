@@ -132,7 +132,7 @@ export default function Sidebar() {
               >
                 {navLink("Projects Planner", <FolderKanban size={16} />, "/privatespace/projects", "text-xs")}
                 {navLink("Messenger", <MessageCircle size={16} />, "/privatespace/messenger", "text-xs")}
-                {navLink("Calendar", <CalendarDays size={16} />, "/privatespace/calendar", "text-xs")}
+                {/* {navLink("Calendar", <CalendarDays size={16} />, "/privatespace/calendar", "text-xs")} */}
                 {/* {navLink("Documents", <FileText size={16} />, "/privatespace/documents", "text-xs")} */}
                 {navLink("Docs", <Lock size={16} />, "/privatespace/vaults", "text-xs")}
               </motion.ul>

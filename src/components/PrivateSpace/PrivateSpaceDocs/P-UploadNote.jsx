@@ -55,7 +55,7 @@ function validateCalendarPayload(payload) {
 }
 
 // Normalize calendar payload for DB storage
-function normalizeCalendarBlock(payload, isVaulted) {
+function normalizePrivateCalendarBlock(payload, isVaulted) {
   if (payload == null) return null;               // untouched → don't include any calendar fields
   const enabled = !!payload.calendar_enabled;
   if (!enabled) return { ...CAL_DEFAULTS };       // explicitly turned OFF → clear all fields
@@ -297,7 +297,7 @@ export default function PrivateUploadNote() {
       // --- calendar: validate + normalize (only write if user touched it) ---
       const calErr = validateCalendarPayload(calendarPayload);
       if (calErr) { setErrorMsg(calErr); return; }
-      const calBlock = normalizeCalendarBlock(calendarPayload, /* isVaulted */ !!hasPrivate);
+      const calBlock = normalizePrivateCalendarBlock(calendarPayload, /* isVaulted */ !!hasPrivate);
 
       // --- build initial (modern) payload (JS object only) ---
       const modernPayload = {

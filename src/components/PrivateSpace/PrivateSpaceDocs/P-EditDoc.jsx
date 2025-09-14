@@ -9,12 +9,81 @@ import { usePrivateSpaceStore } from "@/store/usePrivateSpaceStore";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 
+import AddToCalendar from "@/components/Calendar/AddToCalendar";
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import tzPlugin from 'dayjs/plugin/timezone'
+dayjs.extend(utc)
+dayjs.extend(tzPlugin)
+
+// Derive storage path from a full URL (for signed URLs)
+const CAL_DEFAULTS = {
+  calendar_enabled: false,
+  start_at: null,
+  end_at: null,
+  all_day: false,
+  calendar_color: null,
+  calendar_status: null,
+  calendar_visibility: null,
+  // include these if you support recurrence/windows
+  calendar_repeat: null,
+  calendar_repeat_until: null,
+  calendar_window_start: null,
+  calendar_window_end: null,
+};
+
+// Validate calendar payload; returns error string or null if valid
+function validateCalendarPayload(payload) {
+  if (payload == null) return null; // untouched = no validation needed
+  const enabled = !!payload.calendar_enabled;
+  if (!enabled) return null;        // disabled = ok
+  const startISO = payload.start_at || null;
+  const endISO   = payload.end_at   || null;
+
+  if (!startISO) {
+    return payload.all_day
+      ? 'Please pick a date for the calendar entry.'
+      : 'Please pick a start date/time for the calendar entry.';
+  }
+  if (startISO && endISO && new Date(endISO) < new Date(startISO)) {
+    return 'End time must be after the start time.';
+  }
+  return null;
+}
+
+// Normalize calendar payload for DB storage
+function normalizePrivateCalendarBlock(payload, isVaulted) {
+  if (payload == null) return null;               // untouched → don't include any calendar fields
+  const enabled = !!payload.calendar_enabled;
+  if (!enabled) return { ...CAL_DEFAULTS };       // explicitly turned OFF → clear all fields
+
+  const startISO = payload.start_at || null;
+  const endISO   = payload.end_at   || null;
+
+  return {
+    calendar_enabled: true,
+    start_at: startISO,
+    end_at: endISO || null,
+    all_day: !!payload.all_day,
+    calendar_color: payload.calendar_color || null,
+    calendar_status: payload.calendar_status || null,
+    calendar_visibility:
+      payload.calendar_visibility ?? (isVaulted ? 'masked' : 'public'),
+
+    // include these if you support them
+    calendar_repeat: payload.calendar_repeat ?? null,
+    calendar_repeat_until: payload.calendar_repeat_until ?? null,
+    calendar_window_start: payload.calendar_window_start ?? null,
+    calendar_window_end: payload.calendar_window_end ?? null,
+  };
+}
+
 export default function PrivateEditDoc() {
   const { id } = useParams();
   const navigate = useNavigate();
 
   // Private space store (single source of truth)
-  const activeSpaceIdFromStore = usePrivateSpaceStore((s) => s.activeSpaceId);
+  const activeSpaceId = usePrivateSpaceStore((s) => s.activeSpaceId);
   const setActiveSpaceId = usePrivateSpaceStore((s) => s.setActiveSpaceId);
 
   const [files, setFiles] = useState([]);
@@ -45,7 +114,28 @@ export default function PrivateEditDoc() {
   const [spaceName, setSpaceName] = useState("");
 
   // Effective space (store wins; fallback to doc’s space id)
-  const effectiveSpaceId = activeSpaceIdFromStore || docSpaceId || null;
+  const effectiveSpaceId = activeSpaceId || docSpaceId || null;
+
+  // New calendar-related states
+  const [calendarPayload, setCalendarPayload] = useState(null);
+  const [editRow, setEditRow] = useState(null); // for future use if editing existing rows
+
+  // Prepare initial calendar payload when editRow is set (for future use)
+  const calendarInitial = useMemo(() => (
+      editRow ? {
+          calendar_enabled: !!editRow.calendar_enabled,
+          start_at: editRow.start_at,
+          end_at: editRow.end_at,
+          all_day: !!editRow.all_day,
+          calendar_color: editRow.calendar_color,
+          calendar_status: editRow.calendar_status,
+          calendar_visibility: editRow.calendar_visibility,
+          calendar_repeat: editRow.calendar_repeat,
+          calendar_repeat_until: editRow.calendar_repeat_until,
+          calendar_window_start: editRow.calendar_window_start,
+          calendar_window_end: editRow.calendar_window_end,
+      } : {}
+  ), [editRow]);
 
   // Allowed MIME types
   const allowedMimes = [
@@ -78,6 +168,8 @@ export default function PrivateEditDoc() {
 
   // Load the document (and sync store space if empty)
   useEffect(() => {
+    let isMounted = true;
+
     (async () => {
       if (!id) return;
 
@@ -87,12 +179,15 @@ export default function PrivateEditDoc() {
         .eq("id", id)
         .maybeSingle();
 
+      if (!isMounted) return;
+
       if (error || !data) {
         setErrorMsg("Failed to load document.");
         console.error("❌ Failed to fetch doc:", error);
         return;
       }
 
+      // ---------- Core fields ----------
       setTitle(data.title || "");
       setTags(Array.isArray(data.tags) ? data.tags : []);
       setNotes(data.notes || "");
@@ -102,11 +197,24 @@ export default function PrivateEditDoc() {
       setDocSpaceId(data.private_space_id || null);
 
       // If the store has no active space yet, align it with the doc’s space
-      if (!activeSpaceIdFromStore && data.private_space_id) {
+      if (!activeSpaceId && data.private_space_id) {
         setActiveSpaceId(data.private_space_id);
       }
 
-      // OPTIONAL: try to show decrypted private note if session has a code
+      // ---------- Calendar: normalize + hydrate AddToCalendar via editRow ----------
+      // If the DB row is missing calendar_enabled but has dates, turn it "on" for UI.
+      const normalizedForCalendar = {
+        ...data,
+        calendar_enabled:
+          data.calendar_enabled ?? Boolean(data.start_at || data.end_at),
+        all_day: !!data.all_day,
+      };
+      setEditRow(normalizedForCalendar);
+
+      // Important: calendarPayload stays null so we don't overwrite DB unless user changes it
+      setCalendarPayload(null);
+
+      // ---------- Private note preview (optional) ----------
       const storedVaultCode = sessionStorage.getItem("vaultCode")?.trim();
       if (data.encrypted_note && data.note_iv && storedVaultCode) {
         try {
@@ -115,6 +223,7 @@ export default function PrivateEditDoc() {
             data.note_iv,
             storedVaultCode
           );
+          if (!isMounted) return;
           setPrivateNote(decrypted);
         } catch (err) {
           console.error("Failed to decrypt note with session code:", err);
@@ -124,6 +233,8 @@ export default function PrivateEditDoc() {
         setPrivateNote(""); // no encrypted note in DB or no session code
       }
     })();
+
+    return () => { isMounted = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -267,14 +378,15 @@ export default function PrivateEditDoc() {
   };
   const sanitizeName = (s) => (s || "file").replace(/[^\w.-]/g, "_");
 
-  // Submit update =============================================================
+  // ======================================================= Submit update ========================================================
   const handleUpload = async (e) => {
-    e.preventDefault();
-    setUploading(true);
-    setErrorMsg("");
-    setSuccessMsg("");
+  e.preventDefault();
+  setUploading(true);
+  setErrorMsg("");
+  setSuccessMsg("");
 
-    // treat privacy-only flip as an update
+  try {
+    // ------------------- basic checks -------------------
     const privacyChanged = originalIsVaulted !== isVaulted;
 
     const nothingToUpdate =
@@ -287,35 +399,36 @@ export default function PrivateEditDoc() {
       !privacyChanged;
 
     if (nothingToUpdate) {
-      setUploading(false);
       setErrorMsg("⚠️ Nothing to update.");
       return;
     }
 
     const invalid = files.filter((f) => !allowedMimes.includes(f.type));
     if (invalid.length) {
-      setUploading(false);
       setErrorMsg("One or more files have unsupported types.");
       return;
     }
 
     const { data: { user } = {} } = await supabase.auth.getUser();
     if (!user) {
-      setUploading(false);
       setErrorMsg("User not authenticated.");
       return;
     }
 
-    // transitions
+    if (!activeSpaceId) {
+      setErrorMsg("No private space selected.");
+      return;
+    }
+
+    // ------------------- transitions -------------------
     const wasVaulted   = !!originalIsVaulted;
     const goingPublic  = wasVaulted && !isVaulted;
     const goingVaulted = !wasVaulted && isVaulted;
 
-    // You need the code when final is vaulted (encrypt) OR when going public (decrypt)
+    // Need code when final is vaulted OR when going public (to decrypt)
     let code = String(vaultCode || sessionStorage.getItem("vaultCode") || "").trim();
     if (isVaulted || goingPublic) {
       if (!code) {
-        setUploading(false);
         setErrorMsg(
           goingPublic
             ? "Please enter your Vault Code to migrate files to Public."
@@ -323,9 +436,11 @@ export default function PrivateEditDoc() {
         );
         return;
       }
-      const { data: ok, error: vErr } = await supabase.rpc("verify_user_private_code", { p_code: code });
+      const { data: ok, error: vErr } = await supabase.rpc(
+        "verify_user_private_code",
+        { p_code: code }
+      );
       if (vErr || !ok) {
-        setUploading(false);
         setErrorMsg(vErr?.message || "Failed to verify Vault Code.");
         return;
       }
@@ -333,7 +448,7 @@ export default function PrivateEditDoc() {
       if (!vaultCode) setVaultCode(code);
     }
 
-    // -------- Delete explicitly removed files (build per-bucket lists) --------
+    // ------------------- delete marked files -------------------
     const byBucketToDelete = { "private.public": [], "private.vaulted": [] };
 
     for (const token of filesToRemove) {
@@ -363,7 +478,7 @@ export default function PrivateEditDoc() {
       if (error) console.warn("Delete vaulted files:", error);
     }
 
-    // Keep remaining metas (exclude the deleted ones)
+    // keep remaining metas
     const deletedSet = new Set(
       [...byBucketToDelete["private.public"], ...byBucketToDelete["private.vaulted"]]
     );
@@ -380,27 +495,21 @@ export default function PrivateEditDoc() {
       return p ? !deletedSet.has(p) : true;
     });
 
-    // -------- Privacy migrations --------
-
-    // Vaulted ➜ Public: download (vaulted), decrypt, upload to public, then remove old
+    // ------------------- privacy migrations -------------------
+    // Vaulted ➜ Public
     if (goingPublic) {
       const migrated = [];
       let failed = false;
 
       for (const meta of updatedFileMetas) {
         const isEnc = !!meta.iv || (meta.url || "").includes("private.vaulted");
-        if (!isEnc) {
-          // already public: keep, clear iv just in case
-          migrated.push({ ...meta, iv: "" });
-          continue;
-        }
+        if (!isEnc) { migrated.push({ ...meta, iv: "" }); continue; }
 
         const encPath = meta.path || parsePathFromAnyUrl(meta.url, "private.vaulted");
         if (!encPath) { migrated.push(meta); failed = true; continue; }
 
-        const { data: encObj, error: dlErr } = await supabase.storage
-          .from("private.vaulted")
-          .download(encPath);
+        const { data: encObj, error: dlErr } =
+          await supabase.storage.from("private.vaulted").download(encPath);
         if (dlErr) { console.error("DL vaulted failed", dlErr, encPath); migrated.push(meta); failed = true; continue; }
 
         let plainBlob;
@@ -413,7 +522,7 @@ export default function PrivateEditDoc() {
           migrated.push(meta); failed = true; continue;
         }
 
-        const newPath = `${effectiveSpaceId}/${Date.now()}-${sanitizeName(meta.name)}`;
+        const newPath = `${activeSpaceId}/${Date.now()}-${sanitizeName(meta.name)}`;
         const { error: upErr } = await supabase.storage
           .from("private.public")
           .upload(newPath, plainBlob, { contentType: meta.type || "application/octet-stream", upsert: false });
@@ -428,19 +537,17 @@ export default function PrivateEditDoc() {
           iv: "",
         });
 
-        // remove old encrypted only after success
         await supabase.storage.from("private.vaulted").remove([encPath]).catch(() => {});
       }
 
       if (failed) {
-        setUploading(false);
         setErrorMsg("Some files could not be migrated. Nothing was changed.");
         return;
       }
       updatedFileMetas = migrated;
     }
 
-    // Public ➜ Vaulted: download (public), encrypt, upload to vaulted, then remove old
+    // Public ➜ Vaulted
     if (goingVaulted) {
       const migrated = [];
 
@@ -463,7 +570,7 @@ export default function PrivateEditDoc() {
           ivBytes
         );
 
-        const newPath = `${effectiveSpaceId}/${Date.now()}-${sanitizeName(meta.name)}`;
+        const newPath = `${activeSpaceId}/${Date.now()}-${sanitizeName(meta.name)}`;
         const { error: upErr } = await supabase.storage
           .from("private.vaulted")
           .upload(newPath, encryptedBlob, { contentType: meta.type || "application/octet-stream" });
@@ -472,8 +579,8 @@ export default function PrivateEditDoc() {
         migrated.push({
           name: meta.name,
           type: meta.type,
-          path: newPath, // vaulted keeps path
-          iv: ivHex,     // vaulted keeps iv
+          path: newPath,
+          iv: ivHex,
           url: null,
         });
 
@@ -483,11 +590,11 @@ export default function PrivateEditDoc() {
       updatedFileMetas = migrated;
     }
 
-    // -------- Upload any *new* files --------
+    // ------------------- upload any NEW files -------------------
     let noteIv = "";
     for (const file of files) {
       const sanitized = sanitizeName(file.name);
-      const filePath = `${effectiveSpaceId}/${Date.now()}-${sanitized}`;
+      const filePath = `${activeSpaceId}/${Date.now()}-${sanitized}`;
       const bucket = isVaulted ? "private.vaulted" : "private.public";
 
       let ivHex = "";
@@ -512,7 +619,7 @@ export default function PrivateEditDoc() {
             iv: ivHex,
             url: null,
             user_id: user.id,
-            private_space_id: effectiveSpaceId,
+            private_space_id: activeSpaceId,
           });
         }
       } else {
@@ -521,7 +628,7 @@ export default function PrivateEditDoc() {
           .upload(filePath, file, {
             contentType: file.type,
             upsert: false,
-            metadata: { user_id: user.id, private_space_id: effectiveSpaceId },
+            metadata: { user_id: user.id, private_space_id: activeSpaceId },
           }));
         if (!uploadErr) {
           const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
@@ -532,7 +639,7 @@ export default function PrivateEditDoc() {
             url: urlData?.publicUrl || "",
             iv: "",
             user_id: user.id,
-            private_space_id: effectiveSpaceId,
+            private_space_id: activeSpaceId,
           });
         }
       }
@@ -540,7 +647,7 @@ export default function PrivateEditDoc() {
       if (uploadErr) console.error("Upload failed:", uploadErr);
     }
 
-    // -------- Encrypt private note if needed --------
+    // ------------------- private note encryption (small note) -------------------
     let encryptedNote = "";
     if (!goingPublic && isVaulted && privateNote && privateNote !== "🔐 Encrypted") {
       try {
@@ -549,25 +656,39 @@ export default function PrivateEditDoc() {
         noteIv = res.iv;
       } catch (err) {
         console.error(err);
-        setUploading(false);
         setErrorMsg("Failed to encrypt private note.");
         return;
       }
     }
 
-    // -------- Final DB update --------
+    // ------------------- calendar (validate + normalize) -------------------
+    const calErr = validateCalendarPayload(calendarPayload);
+    if (calErr) {
+      setErrorMsg(calErr);
+      return;
+    }
+    const calBlock = normalizePrivateCalendarBlock(calendarPayload, isVaulted);
+    // calBlock === null  -> untouched, don't include any calendar columns
+    // calBlock !== null  -> include (enabled OR explicit clear)
+
+    // ------------------- final DB update -------------------
     const safeMetas = Array.isArray(updatedFileMetas) ? updatedFileMetas : [];
+
+    const updatePatch = {
+      title,
+      tags,
+      notes,
+      is_vaulted: isVaulted,
+      encrypted_note: goingPublic ? null : (isVaulted ? (encryptedNote || undefined) : null),
+      note_iv:        goingPublic ? null : (isVaulted ? (noteIv || undefined) : null),
+      file_metas: safeMetas,
+      ...(calBlock ?? {}), // only touch calendar if user touched the UI
+      updated_at: new Date().toISOString(),
+    };
+
     const { error: updateError } = await supabase
       .from("private_vault_items")
-      .update({
-        title,
-        tags,
-        notes,
-        is_vaulted: isVaulted,
-        encrypted_note: goingPublic ? null : (isVaulted ? (encryptedNote || undefined) : null),
-        note_iv: goingPublic ? null : (isVaulted ? (noteIv || undefined) : null),
-        file_metas: safeMetas,
-      })
+      .update(updatePatch)
       .eq("id", id);
 
     if (updateError) {
@@ -579,10 +700,13 @@ export default function PrivateEditDoc() {
       setHasUnsavedChanges(false);
       setTimeout(() => navigate("/privatespace/vaults"), 1300);
     }
-
+  } catch (err) {
+    console.error("❌ Private edit failed:", err);
+    setErrorMsg("Something went wrong.");
+  } finally {
     setUploading(false);
-    setHasUnsavedChanges(false);
-  };
+  }
+};
 
   return (
     <Layout>
@@ -858,6 +982,14 @@ export default function PrivateEditDoc() {
               </div>
             </>
           )}
+
+          {/* Calendar Integration */}
+          <AddToCalendar
+              isVaulted={isVaulted}
+              initial={calendarInitial}
+              defaultColor="#f59e0b"
+              onChange={setCalendarPayload}
+          />
 
           {/* Submit */}
           <button type="submit" disabled={uploading} className="btn-secondary w-full">

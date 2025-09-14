@@ -22,6 +22,7 @@ export default function WorkspaceUploadDoc() {
     const [files, setFiles] = useState([]);
     const [tags, setTags] = useState([]);
     const [availableTags, setAvailableTags] = useState([]);
+    const [pendingTags, setPendingTags] = useState([]); // New state for tags to be added
     const [newTag, setNewTag] = useState("");
     const [notes, setNotes] = useState("");
     const [privateNote, setPrivateNote] = useState("");
@@ -151,29 +152,28 @@ export default function WorkspaceUploadDoc() {
         [availableTags, tags]
     );
 
-   // ✅ Add tag (Workspace scope, deduped server-side)
-    const handleTagAdd = async () => {
-        const raw = String(newTag || '').trim()
-        if (!raw) return
+    // Helper. Warn about unsaved changes if navigating away
+    const existsCI = (arr, val) =>
+        arr.some(t => String(t).toLowerCase() === String(val).toLowerCase());
 
-        const { data: { user } = {} } = await supabase.auth.getUser()
-        if (!user?.id) { console.error('Not signed in'); return }
-        if (!activeWorkspaceId) { console.error('No activeWorkspaceId'); return }
+    // ✅ Add tag (Workspace scope, deduped server-side)
+    const handleTagAdd = () => {
+        const raw = String(newTag || "").trim();
+        if (!raw) return;
 
-        const { data: row, error } = await addWorkspaceTag(supabase, {
-            name: raw,
-            workspaceId: activeWorkspaceId,
-            userId: user.id,
-        })
-        if (error) { console.error(error); return }
+        // add to selected tags
+        setTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
 
-        const existsCI = (arr, val) =>
-            arr.some(t => String(t).toLowerCase() === String(val).toLowerCase())
+        // show in dropdown immediately (local-only)
+        setAvailableTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
 
-        setAvailableTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
-        setTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
-        setNewTag('')
-    }
+        // mark as “pending persist” only if not already known by backend list
+        if (!existsCI(availableTags, raw)) {
+            setPendingTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
+        }
+
+        setNewTag("");
+    };
 
     // Message timeout for success/error
     useEffect(() => {
@@ -421,19 +421,38 @@ export default function WorkspaceUploadDoc() {
         };
 
         const { error: insertError } = await supabase
-        .from('workspace_vault_items')
-        .insert(row);
+            .from('workspace_vault_items')
+            .insert(row)
 
         if (insertError) {
             console.error(insertError);
-            setErrorMsg('Failed to save document.');
-        } else {
-            setSuccessMsg('✅ Files uploaded successfully!');
-            setTimeout(() => navigate('/workspace/vaults'), 1300);
-        }
+            setErrorMsg('Failed to create note.');
+            } else {
+            // 🔽 persist brand-new tags *after* the note is created
+            try {
+                const { data: { user } = {} } = await supabase.auth.getUser();
+                if (user?.id && activeWorkspaceId && pendingTags.length) {
+                    await Promise.all(
+                        pendingTags.map(name =>
+                        addWorkspaceTag(supabase, {
+                            name,
+                            workspaceId: activeWorkspaceId,
+                            userId: user.id,
+                        })
+                        )
+                    );
+                }
+            } catch (e) {
+                console.warn('Tag persist (post-create) failed:', e);
+                // optional toast only; don't block success flow
+            } finally {
+                setPendingTags([]); // clear either way
+            }
 
-        setUploading(false);
-        setHasUnsavedChanges(false);
+            setSuccessMsg('✅ Note created successfully!');
+            setHasUnsavedChanges(false);
+            setTimeout(() => navigate('/workspace/vaults'), 900);
+        }
     };
 
     return (

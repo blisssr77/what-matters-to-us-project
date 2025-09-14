@@ -93,10 +93,8 @@ export default function WorkspaceEditNote() {
 
     const [vaultCode, setVaultCode] = useState("");
     const [noteData, setNoteData] = useState(null); // Note data fetched from Supabase
-    const [notes, setNotes] = useState(""); // Public notes
     const [loading, setLoading] = useState(false);
     const [editedTitle, setEditedTitle] = useState("");
-    const [editedNote, setEditedNote] = useState("");
     const [toastMessage, setToastMessage] = useState("");
     const [saving, setSaving] = useState(false);
     const [successMsg, setSuccessMsg] = useState("");
@@ -116,6 +114,7 @@ export default function WorkspaceEditNote() {
     const [availableTags, setAvailableTags] = useState([]);
     const [newTag, setNewTag] = useState("");
     const [tags, setTags] = useState([]);
+    const [pendingTags, setPendingTags] = useState([]); // to persist on save
 
     // New calendar-related states
     const [calendarPayload, setCalendarPayload] = useState(null);
@@ -276,6 +275,24 @@ export default function WorkspaceEditNote() {
         () => Array.from(new Set([...(availableTags || []), ...(tags || [])])),
         [availableTags, tags]
     );
+
+    // Helper. Warn about unsaved changes
+    const existsCI = (arr, val) =>
+        arr?.some(t => String(t).toLowerCase() === String(val).toLowerCase());
+
+    // Add tag (Workspace scope, deduped server-side)
+    const handleTagAdd = () => {
+        const raw = String(newTag || '').trim();
+        if (!raw) return;
+
+        setTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
+        setAvailableTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
+
+        // remember to persist after a successful save
+        setPendingTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
+
+        setNewTag('');
+    };
 
     // Handle decryption
     const handleDecrypt = async (codeParam = vaultCode) => {
@@ -504,42 +521,39 @@ export default function WorkspaceEditNote() {
             .from('workspace_vault_items')
             .update(updatePatch)
             .eq('id', id)
-            .eq('workspace_id', activeWorkspaceId)
+            .eq('workspace_id', activeWorkspaceId);
 
-        if (updateError) {
-            console.error('Update error:', updateError)
-            setErrorMsg('Failed to update note.')
-        } else {
-            setSuccessMsg('✅ Note updated successfully!')
-            setHasUnsavedChanges(false)
-            setTimeout(() => navigate('/workspace/vaults/'), 1200)
+            if (updateError) {
+                console.error('Update error:', updateError);
+                setErrorMsg('Failed to update note.');
+            } else {
+            // 🔽 Persist pending tags now that the note is saved
+            try {
+                const { data: { user } = {} } = await supabase.auth.getUser();
+                if (user?.id && activeWorkspaceId && pendingTags.length) {
+                    await Promise.all(
+                        pendingTags.map(name =>
+                        addWorkspaceTag(supabase, {
+                            name,
+                            workspaceId: activeWorkspaceId,
+                            userId: user.id,
+                        })
+                        )
+                    );
+                }
+            } catch (e) {
+                console.warn('Post-update tag persist failed:', e);
+                // non-blocking
+            } finally {
+                setPendingTags([]);
+            }
+
+            setSuccessMsg('✅ Note updated successfully!');
+            setHasUnsavedChanges(false);
+            setTimeout(() => navigate('/workspace/vaults/'), 1200);
         }
 
-        setSaving(false)
-    }
-
-    // ✅ Add tag (Workspace scope, deduped server-side)
-    const handleTagAdd = async () => {
-        const raw = String(newTag || '').trim()
-        if (!raw) return
-
-        const { data: { user } = {} } = await supabase.auth.getUser()
-        if (!user?.id) { console.error('Not signed in'); return }
-        if (!activeWorkspaceId) { console.error('No activeWorkspaceId'); return }
-
-        const { data: row, error } = await addWorkspaceTag(supabase, {
-            name: raw,
-            workspaceId: activeWorkspaceId,
-            userId: user.id,
-        })
-        if (error) { console.error(error); return }
-
-        const existsCI = (arr, val) =>
-            arr.some(t => String(t).toLowerCase() === String(val).toLowerCase())
-
-        setAvailableTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
-        setTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
-        setNewTag('')
+        setSaving(false);
     }
 
     return (

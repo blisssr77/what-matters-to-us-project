@@ -19,7 +19,7 @@ import WorkspaceEditNote from "./components/Workspace/WorkspaceDocs/EditNote";
 import WorkspaceViewDoc from "./components/Workspace/WorkspaceDocs/ViewDoc";
 import WorkspaceEditDoc from "./components/Workspace/WorkspaceDocs/EditDoc";
 import WorkspaceTags from "./components/Workspace/WorkspaceDocs/WorkspaceTags";
-import WorkspaceCalendarPage from "./pages/Workspace/W-CalendarPage";
+import WCalendarPage from "./pages/Workspace/W-CalendarPage";
 
 function App() {
   return (
@@ -46,7 +46,7 @@ function App() {
         <Route path="/workspace/vaults/doc-view/:id" element={<WorkspaceViewDoc />} />
         <Route path="/workspace/vaults/doc-edit/:id" element={<WorkspaceEditDoc />} />
         <Route path="/workspace/vaults/tags" element={<WorkspaceTags />} />
-        <Route path="/workspace/calendar" element={<WorkspaceCalendarPage />} />
+        <Route path="/workspace/calendar" element={<WCalendarPage />} />
        
       </Routes>
     </Router>

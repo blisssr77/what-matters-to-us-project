@@ -29,7 +29,6 @@ const CAL_DEFAULTS = {
   all_day: false,
   calendar_color: null,
   calendar_status: null,
-  assignee_id: null,
   calendar_visibility: null,
   // include these if you support recurrence/windows
   calendar_repeat: null,
@@ -58,7 +57,7 @@ function validateCalendarPayload(payload) {
 }
 
 // Normalize calendar payload for DB storage
-function normalizeCalendarBlock(payload, isVaulted) {
+function normalizePrivateCalendarBlock(payload, isVaulted) {
   if (payload == null) return null;               // untouched → don't include any calendar fields
   const enabled = !!payload.calendar_enabled;
   if (!enabled) return { ...CAL_DEFAULTS };       // explicitly turned OFF → clear all fields
@@ -73,7 +72,6 @@ function normalizeCalendarBlock(payload, isVaulted) {
     all_day: !!payload.all_day,
     calendar_color: payload.calendar_color || null,
     calendar_status: payload.calendar_status || null,
-    assignee_id: payload.assignee_id || null,
     calendar_visibility:
       payload.calendar_visibility ?? (isVaulted ? 'masked' : 'public'),
 
@@ -148,7 +146,7 @@ export default function PrivateEditNote() {
           calendar_window_end: editRow.calendar_window_end,
       } : {}
   ), [editRow]);
-gi
+
   // Fetch note on mount (PRIVATE)
   useEffect(() => {
     (async () => {
@@ -171,7 +169,10 @@ gi
       setIsVaulted(!!data.is_vaulted);
       setTags(Array.isArray(data.tags) ? data.tags : []);
 
-      // Hydrate PUBLIC TipTap editor (prefer HTML column)
+      // This line makes AddToCalendar show the original values and pre-check Enable
+      setEditRow(data);
+
+      // TipTap hydration (unchanged)
       if (data.public_note_html) {
         setPublicHtml(data.public_note_html);
         try {
@@ -181,11 +182,9 @@ gi
           ]);
           setPublicJson(json);
         } catch {
-          // If conversion fails, fallback to minimal doc
           setPublicJson({ type: "doc", content: [{ type: "paragraph" }] });
         }
       } else if (data.notes) {
-        // Legacy plain text → minimal TipTap JSON
         const paragraphs = String(data.notes)
           .split("\n")
           .map((line) =>
@@ -200,12 +199,10 @@ gi
         setPublicHtml("");
       }
 
-      // If store has no active space yet, sync it to this note's space id
       if (!activeSpaceId && data.private_space_id) {
         setActiveSpaceId(data.private_space_id);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // Load space name + debug log
@@ -495,28 +492,41 @@ gi
         sessionStorage.setItem("vaultCode", code);
       }
 
-      // Build payload (modern columns)
+      // Calendar — validate + normalize (private-safe)
+      const calErr = validateCalendarPayload(calendarPayload);
+      if (calErr) {
+        setErrorMsg(calErr);
+        setSaving(false);
+        return;
+      }
+      const calBlock = normalizePrivateCalendarBlock(calendarPayload, isVaulted);
+      // calBlock === null → untouched (don’t touch any calendar columns)
+      // calBlock === { ...defaults } → explicitly disabled (clear fields)
+      // calBlock with enabled true → write normalized values
+
+      // Build patch
       const payload = {
         title: editedTitle || null,
         tags: (tags || []).map((t) => t.trim()).filter(Boolean),
 
-        // PUBLIC
+        // public
         public_note_html: cleanPublicHtml || null,
-        notes: publicText || null, // plain text for search/back-compat
+        notes: publicText || null,
         summary,
 
-        // PRIVATE
+        // private
         is_vaulted: !!(isVaulted && privateJson),
-        private_note_ciphertext:
-          isVaulted && privateJson ? private_note_ciphertext : null,
+        private_note_ciphertext: isVaulted && privateJson ? private_note_ciphertext : null,
         private_note_iv: isVaulted && privateJson ? private_note_iv : null,
         private_note_format: isVaulted && privateJson ? "tiptap_json" : null,
 
-        // clear legacy fields to avoid duplication
+        // clear legacy to avoid duplication
         encrypted_note: null,
         note_iv: null,
 
         updated_at: new Date().toISOString(),
+
+        ...(calBlock ?? {}),  // ← include only if changed
       };
 
       const { error: upErr } = await supabase
@@ -745,6 +755,14 @@ gi
             </div>
           </>
         )}
+
+        {/* Calendar Integration */}
+        <AddToCalendar
+            isVaulted={isVaulted}
+            initial={calendarInitial}
+            defaultColor="#f59e0b"
+            onChange={setCalendarPayload}
+        />
 
         {/* Save */}
         <div className="flex gap-4 mt-4">

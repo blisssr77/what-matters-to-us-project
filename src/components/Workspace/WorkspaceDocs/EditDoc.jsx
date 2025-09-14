@@ -9,7 +9,7 @@ import { useWorkspaceStore } from "../../../store/useWorkspaceStore";
 import { UnsavedChangesModal } from "../../common/UnsavedChangesModal";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
-import { addWorkspaceTag } from "@/lib/tagsApi";
+import { addWorkspaceTag, persistPendingTags } from "@/lib/tagsApi";
 
 import AddToCalendar from "@/components/Calendar/AddToCalendar";
 import dayjs from 'dayjs'
@@ -93,6 +93,7 @@ export default function WorkspaceEditDoc() {
     const [tags, setTags] = useState([]);
     const [availableTags, setAvailableTags] = useState([]);
     const [newTag, setNewTag] = useState("");
+    const [pendingTags, setPendingTags] = useState([]); // to persist on save
     const [notes, setNotes] = useState("");
     const [privateNote, setPrivateNote] = useState("");
     const [vaultCode, setVaultCode] = useState("");
@@ -233,29 +234,23 @@ export default function WorkspaceEditDoc() {
         });
     };
 
-    // ✅ Add tag (Workspace scope, deduped server-side)
-    const handleTagAdd = async () => {
-        const raw = String(newTag || '').trim()
-        if (!raw) return
+    // Helper. Warn about unsaved changes
+    const existsCI = (arr, val) =>
+        arr?.some(t => String(t).toLowerCase() === String(val).toLowerCase());
 
-        const { data: { user } = {} } = await supabase.auth.getUser()
-        if (!user?.id) { console.error('Not signed in'); return }
-        if (!activeWorkspaceId) { console.error('No activeWorkspaceId'); return }
+    // Add tag (Workspace scope, deduped server-side)
+    const handleTagAdd = () => {
+        const raw = String(newTag || '').trim();
+        if (!raw) return;
 
-        const { data: row, error } = await addWorkspaceTag(supabase, {
-            name: raw,
-            workspaceId: activeWorkspaceId,
-            userId: user.id,
-        })
-        if (error) { console.error(error); return }
+        setTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
+        setAvailableTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
 
-        const existsCI = (arr, val) =>
-            arr.some(t => String(t).toLowerCase() === String(val).toLowerCase())
+        // remember to persist after a successful save
+        setPendingTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
 
-        setAvailableTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
-        setTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
-        setNewTag('')
-    }
+        setNewTag('');
+    };
 
     // Parse storage path from any URL ------- HELPER function
     const parsePathFromAnyUrl = (url, bucket) => {
@@ -324,29 +319,29 @@ export default function WorkspaceEditDoc() {
 
         // You need a code when (a) staying vaulted (to encrypt new things) OR (b) going public (to decrypt old things)
         const code = String(vaultCode || sessionStorage.getItem("vaultCode") || "").trim();
-        if (isVaulted || goingPublic) {
-            if (!code) {
+            if (isVaulted || goingPublic) {
+                if (!code) {
+                    setUploading(false);
+                    setErrorMsg(
+                        goingPublic
+                        ? "Please enter your Vault Code to migrate files to Public."
+                        : "Please enter your Vault Code to encrypt the document."
+                    );
+                    return;
+                }
+
+                const { data: ok, error: vErr } = await supabase.rpc("verify_workspace_code", {
+                    p_workspace: activeWorkspaceId,
+                    p_code: code,
+                });
+                if (vErr || !ok) {
                 setUploading(false);
-                setErrorMsg(
-                    goingPublic
-                    ? "Please enter your Vault Code to migrate files to Public."
-                    : "Please enter your Vault Code to encrypt the document."
-                );
+                setErrorMsg(vErr?.message || "Verification failed. Check your Vault Code.");
                 return;
             }
 
-            const { data: ok, error: vErr } = await supabase.rpc("verify_workspace_code", {
-                p_workspace: activeWorkspaceId,
-                p_code: code,
-            });
-            if (vErr || !ok) {
-            setUploading(false);
-            setErrorMsg(vErr?.message || "Verification failed. Check your Vault Code.");
-            return;
-        }
-
-        sessionStorage.setItem("vaultCode", code);
-        if (!vaultCode) setVaultCode(code);
+            sessionStorage.setItem("vaultCode", code);
+            if (!vaultCode) setVaultCode(code);
         }
 
         // -------- Delete marked files from the correct bucket(s) --------
@@ -354,35 +349,35 @@ export default function WorkspaceEditDoc() {
         const byBucketToDelete = { "workspace.public": [], "workspace.vaulted": [] };
 
         for (const token of filesToRemove) {
-        const meta = existingFiles.find(
-            (f) => (f.path && f.path === token) || (f.url && f.url === token)
-        );
-        const wasVaulted = !!meta?.iv || (meta?.url || "").includes("workspace.vaulted");
-        const bucket = wasVaulted ? "workspace.vaulted" : "workspace.public";
+            const meta = existingFiles.find(
+                (f) => (f.path && f.path === token) || (f.url && f.url === token)
+            );
+            const wasVaulted = !!meta?.iv || (meta?.url || "").includes("workspace.vaulted");
+            const bucket = wasVaulted ? "workspace.vaulted" : "workspace.public";
 
-        let path = token;
-        if (typeof token === "string" && token.includes("/storage/v1/object/")) {
-            path = parsePathFromAnyUrl(token, bucket);
-        }
-        if (path) byBucketToDelete[bucket].push(path);
+            let path = token;
+            if (typeof token === "string" && token.includes("/storage/v1/object/")) {
+                path = parsePathFromAnyUrl(token, bucket);
+            }
+            if (path) byBucketToDelete[bucket].push(path);
         }
 
         if (byBucketToDelete["workspace.public"].length) {
-        const { error } = await supabase.storage
-            .from("workspace.public")
-            .remove(byBucketToDelete["workspace.public"]);
-        if (error) console.warn("Delete public files:", error);
+            const { error } = await supabase.storage
+                .from("workspace.public")
+                .remove(byBucketToDelete["workspace.public"]);
+            if (error) console.warn("Delete public files:", error);
         }
         if (byBucketToDelete["workspace.vaulted"].length) {
-        const { error } = await supabase.storage
-            .from("workspace.vaulted")
-            .remove(byBucketToDelete["workspace.vaulted"]);
-        if (error) console.warn("Delete vaulted files:", error);
+            const { error } = await supabase.storage
+                .from("workspace.vaulted")
+                .remove(byBucketToDelete["workspace.vaulted"]);
+            if (error) console.warn("Delete vaulted files:", error);
         }
 
         const deletedSet = new Set(Object.values(byBucketToDelete).flat());
         const normPath = (m) => m.path || (m.url ? (
-        parsePathFromAnyUrl(m.url, m.iv ? "workspace.vaulted" : "workspace.public")
+            parsePathFromAnyUrl(m.url, m.iv ? "workspace.vaulted" : "workspace.public")
         ) : null);
 
         let updatedFileMetas = (existingFiles || []).filter((m) => {
@@ -400,14 +395,14 @@ export default function WorkspaceEditDoc() {
 
                 // Already public → keep, but clear iv defensively
                 if (!wasVaulted) {
-                migrated.push({ ...meta, iv: "" });
-                continue;
+                    migrated.push({ ...meta, iv: "" });
+                    continue;
                 }
 
                 // 1) download encrypted from vaulted
                 const oldBucket = "workspace.vaulted";
                 const encPath =
-                meta.path || derivePathFromUrl(meta.url, oldBucket);
+                    meta.path || derivePathFromUrl(meta.url, oldBucket);
                 if (!encPath) {
                     console.warn("Could not derive vaulted path for meta:", meta);
                     migrated.push(meta);           // keep original so we don't lose it
@@ -416,8 +411,8 @@ export default function WorkspaceEditDoc() {
                 }
 
                 const { data: encFile, error: dlErr } = await supabase.storage
-                .from(oldBucket)
-                .download(encPath);
+                    .from(oldBucket)
+                    .download(encPath);
                 if (dlErr) {
                     console.error("Download vaulted failed:", dlErr, encPath);
                     migrated.push(meta);           // keep original
@@ -442,8 +437,8 @@ export default function WorkspaceEditDoc() {
                 const newBucket = "workspace.public";
                 const newPath = `${activeWorkspaceId}/${Date.now()}-${sanitizeName(meta.name)}`;
                 const { error: upErr } = await supabase.storage
-                .from(newBucket)
-                .upload(newPath, plainBlob, { contentType: meta.type || "application/octet-stream", upsert: false });
+                    .from(newBucket)
+                    .upload(newPath, plainBlob, { contentType: meta.type || "application/octet-stream", upsert: false });
                 if (upErr) {
                     console.error("Upload public failed:", upErr, newPath);
                     migrated.push(meta);           // keep original
@@ -453,8 +448,8 @@ export default function WorkspaceEditDoc() {
 
                 // 4) public URL + new meta (no iv)
                 const { data: urlData } = await supabase.storage
-                .from(newBucket)
-                .getPublicUrl(newPath);
+                    .from(newBucket)
+                    .getPublicUrl(newPath);
                 migrated.push({
                     name: meta.name,
                     type: meta.type || "application/octet-stream",
@@ -489,7 +484,7 @@ export default function WorkspaceEditDoc() {
                 if (!srcPath) { console.warn("No public path:", meta); continue; }
 
                 const { data: srcObj, error: dlErr } = await supabase.storage
-                .from(publicBucket).download(srcPath);
+                    .from(publicBucket).download(srcPath);
                 if (dlErr) { console.error("DL public→vaulted failed", dlErr, srcPath); continue; }
 
                 const buf = await srcObj.arrayBuffer();
@@ -502,8 +497,8 @@ export default function WorkspaceEditDoc() {
 
                 const newPath = `${activeWorkspaceId}/${Date.now()}-${sanitizeName(meta.name)}`;
                 const { error: upErr } = await supabase.storage
-                .from("workspace.vaulted")
-                .upload(newPath, encryptedBlob, { contentType: meta.type || "application/octet-stream" });
+                    .from("workspace.vaulted")
+                    .upload(newPath, encryptedBlob, { contentType: meta.type || "application/octet-stream" });
                 if (upErr) { console.error("UP public→vaulted failed", upErr, meta); continue; }
 
                 migrated.push({ name: meta.name, type: meta.type, path: newPath, iv: ivHex, url: null });
@@ -607,10 +602,24 @@ export default function WorkspaceEditDoc() {
             .eq('id', id)
             .eq('workspace_id', activeWorkspaceId);
 
-        if (updateError) {
-            console.error(updateError);
-            setErrorMsg("Failed to update document.");
-        } else {
+            if (updateError) {
+                console.error(updateError);
+                setErrorMsg("Failed to update document.");
+            } else {
+                // ✅ Only now persist any new tags to vault_tags
+                try {
+                    if (pendingTags.length) {
+                    const { data: { user } = {} } = await supabase.auth.getUser();
+                    if (user?.id) {
+                        await persistPendingTags(supabase, activeWorkspaceId, user.id, pendingTags);
+                    }
+                    setPendingTags([]);
+                }
+            } catch (e) {
+                console.warn('Tag persistence failed after document update:', e);
+                // You can optionally set a non-blocking toast here.
+            }
+
             setSuccessMsg("Document updated successfully!");
             setFilesToRemove([]);
             setHasUnsavedChanges(false);

@@ -86,11 +86,10 @@ function normalizeCalendarBlock(payload, isVaulted) {
 
 const WorkspaceUploadNote = () => {
     const [title, setTitle] = useState("");
-    const [privateNote, setPrivateNote] = useState("");
     const [uploading, setUploading] = useState(false);
     const [newTag, setNewTag] = useState("");
     const [tags, setTags] = useState([]);
-    const [notes, setNotes] = useState("");
+    const [pendingTags, setPendingTags] = useState([]); // New state for tags to be added
     const [availableTags, setAvailableTags] = useState([]);
     const [successMsg, setSuccessMsg] = useState("");
     const [errorMsg, setErrorMsg] = useState("");
@@ -178,7 +177,7 @@ const WorkspaceUploadNote = () => {
         })();
     }, [setActiveWorkspaceId]);
 
-     // Message timeout for success/error
+    // Message timeout for success/error
     useEffect(() => {
         if (successMsg || errorMsg) {
             const timer = setTimeout(() => {
@@ -208,29 +207,28 @@ const WorkspaceUploadNote = () => {
         [availableTags, tags]
     );
 
+    // Helper. Warn about unsaved changes if navigating away
+    const existsCI = (arr, val) =>
+        arr.some(t => String(t).toLowerCase() === String(val).toLowerCase());
+
     // ✅ Add tag (Workspace scope, deduped server-side)
-    const handleTagAdd = async () => {
-        const raw = String(newTag || '').trim()
-        if (!raw) return
+    const handleTagAdd = () => {
+        const raw = String(newTag || "").trim();
+        if (!raw) return;
 
-        const { data: { user } = {} } = await supabase.auth.getUser()
-        if (!user?.id) { console.error('Not signed in'); return }
-        if (!activeWorkspaceId) { console.error('No activeWorkspaceId'); return }
+        // add to selected tags
+        setTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
 
-        const { data: row, error } = await addWorkspaceTag(supabase, {
-            name: raw,
-            workspaceId: activeWorkspaceId,
-            userId: user.id,
-        })
-        if (error) { console.error(error); return }
+        // show in dropdown immediately (local-only)
+        setAvailableTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
 
-        const existsCI = (arr, val) =>
-            arr.some(t => String(t).toLowerCase() === String(val).toLowerCase())
+        // mark as “pending persist” only if not already known by backend list
+        if (!existsCI(availableTags, raw)) {
+            setPendingTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
+        }
 
-        setAvailableTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
-        setTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
-        setNewTag('')
-    }
+        setNewTag("");
+    };
 
     // Handle note upload-------------------------------------------
     const handleCreate = async () => {
@@ -355,12 +353,33 @@ const WorkspaceUploadNote = () => {
             .insert(row)
 
         if (insertError) {
-            console.error(insertError)
-            setErrorMsg('Failed to create note.')
-        } else {
-            setSuccessMsg('✅ Note created successfully!')
-            setHasUnsavedChanges(false)
-            setTimeout(() => navigate('/workspace/vaults'), 900)
+            console.error(insertError);
+            setErrorMsg('Failed to create note.');
+            } else {
+            // 🔽 persist brand-new tags *after* the note is created
+            try {
+                const { data: { user } = {} } = await supabase.auth.getUser();
+                if (user?.id && activeWorkspaceId && pendingTags.length) {
+                    await Promise.all(
+                        pendingTags.map(name =>
+                        addWorkspaceTag(supabase, {
+                            name,
+                            workspaceId: activeWorkspaceId,
+                            userId: user.id,
+                        })
+                        )
+                    );
+                }
+            } catch (e) {
+                console.warn('Tag persist (post-create) failed:', e);
+                // optional toast only; don't block success flow
+            } finally {
+                setPendingTags([]); // clear either way
+            }
+
+            setSuccessMsg('✅ Note created successfully!');
+            setHasUnsavedChanges(false);
+            setTimeout(() => navigate('/workspace/vaults'), 900);
         }
 
         setUploading(false)

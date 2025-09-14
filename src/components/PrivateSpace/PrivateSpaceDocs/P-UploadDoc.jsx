@@ -11,6 +11,75 @@ import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 import { addPrivateTag } from "@/lib/tagsApi";
 
+import AddToCalendar from "@/components/Calendar/AddToCalendar";
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import tzPlugin from 'dayjs/plugin/timezone'
+dayjs.extend(utc)
+dayjs.extend(tzPlugin)
+
+// Derive storage path from a full URL (for signed URLs)
+const CAL_DEFAULTS = {
+  calendar_enabled: false,
+  start_at: null,
+  end_at: null,
+  all_day: false,
+  calendar_color: null,
+  calendar_status: null,
+  calendar_visibility: null,
+  // include these if you support recurrence/windows
+  calendar_repeat: null,
+  calendar_repeat_until: null,
+  calendar_window_start: null,
+  calendar_window_end: null,
+};
+
+// Validate calendar payload; returns error string or null if valid
+function validateCalendarPayload(payload) {
+  if (payload == null) return null; // untouched = no validation needed
+  const enabled = !!payload.calendar_enabled;
+  if (!enabled) return null;        // disabled = ok
+  const startISO = payload.start_at || null;
+  const endISO   = payload.end_at   || null;
+
+  if (!startISO) {
+    return payload.all_day
+      ? 'Please pick a date for the calendar entry.'
+      : 'Please pick a start date/time for the calendar entry.';
+  }
+  if (startISO && endISO && new Date(endISO) < new Date(startISO)) {
+    return 'End time must be after the start time.';
+  }
+  return null;
+}
+
+// Normalize calendar payload for DB storage
+function normalizePrivateCalendarBlock(payload, isVaulted) {
+  if (payload == null) return null;               // untouched → don't include any calendar fields
+  const enabled = !!payload.calendar_enabled;
+  if (!enabled) return { ...CAL_DEFAULTS };       // explicitly turned OFF → clear all fields
+
+  const startISO = payload.start_at || null;
+  const endISO   = payload.end_at   || null;
+
+  return {
+    calendar_enabled: true,
+    start_at: startISO,
+    end_at: endISO || null,
+    all_day: !!payload.all_day,
+    calendar_color: payload.calendar_color || null,
+    calendar_status: payload.calendar_status || null,
+    calendar_visibility:
+      payload.calendar_visibility ?? (isVaulted ? 'masked' : 'public'),
+
+    // include these if you support them
+    calendar_repeat: payload.calendar_repeat ?? null,
+    calendar_repeat_until: payload.calendar_repeat_until ?? null,
+    calendar_window_start: payload.calendar_window_start ?? null,
+    calendar_window_end: payload.calendar_window_end ?? null,
+  };
+}
+
 export default function PrivateSpaceUploadDoc() {
   const navigate = useNavigate();
 
@@ -37,6 +106,10 @@ export default function PrivateSpaceUploadDoc() {
   const activeSpaceId = usePrivateSpaceStore((s) => s.activeSpaceId);
   const setactiveSpaceId = usePrivateSpaceStore((s) => s.setActiveSpaceId);
   const [psName, setPsName] = useState("");
+
+  // Calendar states
+  const [calendarPayload, setCalendarPayload] = useState(null);
+  const [editRow, setEditRow] = useState(null); // for future use if editing existing rows
 
   // Allowed MIME types (same as workspace version)
   const allowedMimes = [
@@ -172,197 +245,211 @@ export default function PrivateSpaceUploadDoc() {
     }
   }, [successMsg, errorMsg]);
 
-  // Upload handler (same logic, swapped to private)
+  // ==================================== Upload handler (same logic, swapped to private) ==============================
   const handleUpload = async (e) => {
     e.preventDefault();
     setUploading(true);
     setErrorMsg("");
     setSuccessMsg("");
 
-    if (!files.length) {
-      setUploading(false);
-      setErrorMsg("⚠️ Please attach file(s) before uploading.");
-      return;
-    }
-
-    const invalidFiles = files.filter((f) => !allowedMimes.includes(f.type));
-    if (invalidFiles.length > 0) {
-      setUploading(false);
-      setErrorMsg("One or more files have unsupported types.");
-      return;
-    }
-
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData?.user?.id;
-    if (!userId) {
-      setUploading(false);
-      setErrorMsg("User not authenticated.");
-      return;
-    }
-
-    // Vault code check (private_code)
-    if (isVaulted) {
-      if (!vaultCode) {
-        setUploading(false);
-        setErrorMsg("Please enter your Vault Code.");
+    try {
+      // 0) basic checks
+      if (!files.length) {
+        setErrorMsg("⚠️ Please attach file(s) before uploading.");
         return;
       }
 
-      const { data: row, error: vErr } = await supabase
-        .from("vault_codes")
-        .select("private_code_hash")
-        .eq("id", userId)
-        .single();
+      const invalidFiles = files.filter((f) => !allowedMimes.includes(f.type));
+      if (invalidFiles.length > 0) {
+        setErrorMsg("One or more files have unsupported types.");
+        return;
+      }
 
-      if (vErr || !row?.private_code_hash) {
-        setUploading(false);
-        setErrorMsg(
-          'Please set your Vault Code in <a href="/account/manage" class="text-blue-600 underline">Account Settings</a> before uploading.'
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      if (!userId) {
+        setErrorMsg("User not authenticated.");
+        return;
+      }
+
+      if (!activeSpaceId) {
+        setErrorMsg("Private space not selected. Please refresh or select a private space.");
+        return;
+      }
+
+      // 1) Vault code (private) — verify via RPC when vaulted
+      if (isVaulted) {
+        const code = String(vaultCode || "").trim();
+        if (!code) {
+          setErrorMsg("Please enter your Vault Code.");
+          return;
+        }
+        const { data: ok, error: vErr } = await supabase.rpc(
+          "verify_user_private_code",
+          { p_code: code }
         );
-        return;
+        if (vErr) {
+          setErrorMsg(vErr.message || "Failed to verify Vault Code.");
+          return;
+        }
+        if (!ok) {
+          setErrorMsg("Incorrect Vault Code.");
+          return;
+        }
+        // remember for this tab
+        sessionStorage.setItem("vaultCode", code);
       }
 
-      const isMatch = await bcrypt.compare(vaultCode, row.private_code_hash);
-      if (!isMatch) {
-        setUploading(false);
-        setErrorMsg("Incorrect Vault Code.");
+      // 2) upload files
+      const fileMetas = [];
+      let uploadedCount = 0;
+
+      for (const file of files) {
+        try {
+          const sanitizedName = file.name.replace(/[^\w.-]/g, "_");
+          const filePath = `${activeSpaceId}/${Date.now()}-${sanitizedName}`;
+
+          let ivHex = "";
+          let uploadError, urlData;
+
+          if (isVaulted) {
+            const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
+            const { encryptedBlob, ivHex: hex } = await encryptFile(file, vaultCode, ivBytes);
+            ivHex = hex;
+
+            ({ error: uploadError } = await supabase.storage
+              .from("private.vaulted")
+              .upload(filePath, encryptedBlob, {
+                contentType: file.type,
+                upsert: false,
+                metadata: { user_id: userId, private_space_id: activeSpaceId },
+              }));
+
+            ({ data: urlData } = supabase.storage
+              .from("private.vaulted")
+              .getPublicUrl(filePath));
+          } else {
+            ({ error: uploadError } = await supabase.storage
+              .from("private.public")
+              .upload(filePath, file, {
+                contentType: file.type,
+                upsert: false,
+                metadata: { user_id: userId, private_space_id: activeSpaceId },
+              }));
+
+            ({ data: urlData } = supabase.storage
+              .from("private.public")
+              .getPublicUrl(filePath));
+          }
+
+          if (uploadError || !urlData?.publicUrl) {
+            console.error("Upload failed:", uploadError);
+            continue;
+          }
+
+          fileMetas.push({
+            name: file.name,
+            url: urlData.publicUrl,
+            iv: isVaulted ? ivHex : "",
+            type: file.type,
+            path: filePath,
+            user_id: userId,
+            private_space_id: activeSpaceId,
+          });
+
+          uploadedCount++;
+        } catch (err) {
+          console.error("Unexpected upload error:", err);
+        }
+      }
+
+      if (!fileMetas.length) {
+        setErrorMsg("Upload failed for all files.");
+        return;
+      } else if (uploadedCount < files.length) {
+        setErrorMsg(`⚠️ Only ${uploadedCount} of ${files.length} files uploaded successfully.`);
+      }
+
+      // 3) encrypt private note (optional small note field)
+      let encryptedNote = "";
+      let noteIv = "";
+      if (isVaulted && privateNote) {
+        try {
+          const result = await encryptText(privateNote, vaultCode);
+          encryptedNote = result.encryptedData;
+          noteIv = result.iv;
+        } catch (err) {
+          console.error("Note encryption failed:", err);
+          setErrorMsg("Failed to encrypt private note.");
+          return;
+        }
+      }
+
+      // 4) ensure tags exist (Private scope)
+      for (const tag of tags) {
+        if (!availableTags.includes(tag)) {
+          const { error } = await supabase.from("vault_tags").insert({
+            name: tag,
+            section: "Private",
+            user_id: userId,
+            private_space_id: activeSpaceId,
+          });
+          if (!error) {
+            setAvailableTags((prev) => [...prev, tag]);
+          } else {
+            console.error("❌ Failed to insert tag:", tag, error?.message);
+          }
+        }
+      }
+
+      // 5) Calendar — validate + normalize (private-safe: NO assignee_id)
+      const calErr = validateCalendarPayload(calendarPayload);
+      if (calErr) {
+        setErrorMsg(calErr);
         return;
       }
-    }
+      const calBlock = normalizePrivateCalendarBlock(calendarPayload, isVaulted);
+      // calBlock === null → untouched (don’t include any calendar columns)
+      // calBlock === defaults → explicitly disabled (clear fields)
+      // calBlock enabled → write normalized values
 
-    if (!activeSpaceId) {
+      // 6) insert into private_vault_items
+      const row = {
+        user_id: userId,
+        private_space_id: activeSpaceId,
+        created_by: userId,
+
+        file_name: files.map((f) => f.name).join(", "),
+        file_metas: fileMetas,
+        title,
+        tags,
+        notes,
+        encrypted_note: encryptedNote || null,
+        note_iv: noteIv || null,
+        is_vaulted: !!isVaulted,
+        created_at: new Date().toISOString(),
+
+        ...(calBlock ?? {}), // only include calendar if user touched it
+      };
+
+      const { error: insertError } = await supabase
+        .from("private_vault_items")
+        .insert(row);
+
+      if (insertError) {
+        console.error(insertError);
+        setErrorMsg("Failed to save document.");
+      } else {
+        setSuccessMsg("✅ Files uploaded successfully!");
+        setHasUnsavedChanges(false);
+        setTimeout(() => navigate("/privatespace/vaults"), 1300);
+      }
+    } catch (e) {
+      console.error("❌ Private upload failed:", e);
+      setErrorMsg("Something went wrong.");
+    } finally {
       setUploading(false);
-      setErrorMsg("Private space not selected. Please refresh or select a private space.");
-      return;
     }
-
-    const fileMetas = [];
-    let uploadedCount = 0;
-    let noteIv = "";
-
-    for (const file of files) {
-      try {
-        const sanitizedName = file.name.replace(/[^\w.-]/g, "_");
-        const filePath = `${activeSpaceId}/${Date.now()}-${sanitizedName}`;
-        console.log('upload path:', filePath, 'spaceId:', activeSpaceId);
-
-        let ivHex = "";
-        let uploadError, urlData;
-
-        if (isVaulted) {
-          const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
-          const { encryptedBlob, ivHex: hex } = await encryptFile(file, vaultCode, ivBytes);
-          ivHex = hex;
-
-          ({ error: uploadError } = await supabase.storage
-            .from("private.vaulted")
-            .upload(filePath, encryptedBlob, {
-              contentType: file.type,
-              upsert: false,
-              metadata: { user_id: userId, private_space_id: activeSpaceId },
-            }));
-
-          ({ data: urlData } = supabase.storage.from("private.vaulted").getPublicUrl(filePath));
-        } else {
-          ({ error: uploadError } = await supabase.storage
-            .from("private.public")
-            .upload(filePath, file, {
-              contentType: file.type,
-              upsert: false,
-              metadata: { user_id: userId, private_space_id: activeSpaceId },
-            }));
-
-          ({ data: urlData } = supabase.storage.from("private.public").getPublicUrl(filePath));
-        }
-
-        if (uploadError || !urlData?.publicUrl) {
-          console.error("Upload failed:", uploadError);
-          continue;
-        }
-
-        fileMetas.push({
-          name: file.name,
-          url: urlData.publicUrl,
-          iv: ivHex,
-          type: file.type,
-          path: filePath,
-          user_id: userId,
-          private_space_id: activeSpaceId,
-        });
-
-        uploadedCount++;
-      } catch (err) {
-        console.error("Unexpected upload error:", err);
-      }
-    }
-
-    if (!fileMetas.length) {
-      setUploading(false);
-      setErrorMsg("Upload failed for all files.");
-      return;
-    } else if (uploadedCount < files.length) {
-      setErrorMsg(`⚠️ Only ${uploadedCount} of ${files.length} files uploaded successfully.`);
-    }
-
-    // Encrypt private note if provided
-    let encryptedNote = "";
-    if (isVaulted && privateNote) {
-      try {
-        const result = await encryptText(privateNote, vaultCode);
-        encryptedNote = result.encryptedData;
-        noteIv = result.iv;
-      } catch (err) {
-        console.error("Note encryption failed:", err);
-        setUploading(false);
-        setErrorMsg("Failed to encrypt private note.");
-        return;
-      }
-    }
-
-    // Ensure tags exist (Private scope)
-    for (const tag of tags) {
-      if (!availableTags.includes(tag)) {
-        const { error } = await supabase.from("vault_tags").insert({
-          name: tag,
-          section: "Private",
-          user_id: userId,
-          private_space_id: activeSpaceId,
-        });
-
-        if (!error) {
-          setAvailableTags((prev) => [...prev, tag]);
-        } else {
-          console.error("❌ Failed to insert tag:", tag, error.message);
-        }
-      }
-    }
-
-    // Save to private_vault_items
-    const { error: insertError } = await supabase.from("private_vault_items").insert({
-      user_id: userId,
-      file_name: files.map((f) => f.name).join(", "),
-      file_metas: fileMetas,
-      title,
-      tags,
-      notes,
-      encrypted_note: encryptedNote,
-      note_iv: noteIv,
-      created_at: new Date().toISOString(),
-      private_space_id: activeSpaceId,
-      created_by: userId,
-      is_vaulted: isVaulted,
-    });
-
-    if (insertError) {
-      console.error(insertError);
-      setErrorMsg("Failed to save document.");
-    } else {
-      setSuccessMsg("✅ Files uploaded successfully!");
-      setTimeout(() => navigate("/privatespace/vaults"), 1300);
-    }
-
-    setUploading(false);
-    setHasUnsavedChanges(false);
   };
 
   return (
@@ -551,6 +638,21 @@ export default function PrivateSpaceUploadDoc() {
               </div>
             </>
           )}
+
+          <AddToCalendar
+            key={editRow?.id || 'new'}
+            isVaulted={isVaulted}
+            initial={editRow ? {
+              calendar_enabled: !!editRow.calendar_enabled,
+              start_at: editRow.start_at,
+              end_at: editRow.end_at,
+              all_day: !!editRow.all_day,
+              calendar_color: editRow.calendar_color,
+              calendar_status: editRow.calendar_status,
+              calendar_visibility: editRow.calendar_visibility,
+            } : {}}
+            onChange={setCalendarPayload}
+          />
 
           {/* Upload */}
           <button type="submit" disabled={uploading} className="btn-secondary w-full mt-4">
