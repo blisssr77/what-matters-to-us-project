@@ -14,6 +14,77 @@ import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
 import { addPrivateTag } from "@/lib/tagsApi";
 
+import AddToCalendar from "@/components/Calendar/AddToCalendar";
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import tzPlugin from 'dayjs/plugin/timezone'
+dayjs.extend(utc)
+dayjs.extend(tzPlugin)
+
+// Derive storage path from a full URL (for signed URLs)
+const CAL_DEFAULTS = {
+  calendar_enabled: false,
+  start_at: null,
+  end_at: null,
+  all_day: false,
+  calendar_color: null,
+  calendar_status: null,
+  assignee_id: null,
+  calendar_visibility: null,
+  // include these if you support recurrence/windows
+  calendar_repeat: null,
+  calendar_repeat_until: null,
+  calendar_window_start: null,
+  calendar_window_end: null,
+};
+
+// Validate calendar payload; returns error string or null if valid
+function validateCalendarPayload(payload) {
+  if (payload == null) return null; // untouched = no validation needed
+  const enabled = !!payload.calendar_enabled;
+  if (!enabled) return null;        // disabled = ok
+  const startISO = payload.start_at || null;
+  const endISO   = payload.end_at   || null;
+
+  if (!startISO) {
+    return payload.all_day
+      ? 'Please pick a date for the calendar entry.'
+      : 'Please pick a start date/time for the calendar entry.';
+  }
+  if (startISO && endISO && new Date(endISO) < new Date(startISO)) {
+    return 'End time must be after the start time.';
+  }
+  return null;
+}
+
+// Normalize calendar payload for DB storage
+function normalizeCalendarBlock(payload, isVaulted) {
+  if (payload == null) return null;               // untouched → don't include any calendar fields
+  const enabled = !!payload.calendar_enabled;
+  if (!enabled) return { ...CAL_DEFAULTS };       // explicitly turned OFF → clear all fields
+
+  const startISO = payload.start_at || null;
+  const endISO   = payload.end_at   || null;
+
+  return {
+    calendar_enabled: true,
+    start_at: startISO,
+    end_at: endISO || null,
+    all_day: !!payload.all_day,
+    calendar_color: payload.calendar_color || null,
+    calendar_status: payload.calendar_status || null,
+    assignee_id: payload.assignee_id || null,
+    calendar_visibility:
+      payload.calendar_visibility ?? (isVaulted ? 'masked' : 'public'),
+
+    // include these if you support them
+    calendar_repeat: payload.calendar_repeat ?? null,
+    calendar_repeat_until: payload.calendar_repeat_until ?? null,
+    calendar_window_start: payload.calendar_window_start ?? null,
+    calendar_window_end: payload.calendar_window_end ?? null,
+  };
+}
+
 export default function PrivateEditNote() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -57,6 +128,27 @@ export default function PrivateEditNote() {
   const [privateJson, setPrivateJson] = useState();
   const autoDecryptTriedRef = useRef(false);
 
+  // New calendar-related states
+  const [calendarPayload, setCalendarPayload] = useState(null);
+  const [editRow, setEditRow] = useState(null); // for future use if editing existing rows
+
+  // Prepare initial calendar payload when editRow is set (for future use)
+  const calendarInitial = useMemo(() => (
+      editRow ? {
+          calendar_enabled: !!editRow.calendar_enabled,
+          start_at: editRow.start_at,
+          end_at: editRow.end_at,
+          all_day: !!editRow.all_day,
+          calendar_color: editRow.calendar_color,
+          calendar_status: editRow.calendar_status,
+          calendar_visibility: editRow.calendar_visibility,
+          calendar_repeat: editRow.calendar_repeat,
+          calendar_repeat_until: editRow.calendar_repeat_until,
+          calendar_window_start: editRow.calendar_window_start,
+          calendar_window_end: editRow.calendar_window_end,
+      } : {}
+  ), [editRow]);
+gi
   // Fetch note on mount (PRIVATE)
   useEffect(() => {
     (async () => {

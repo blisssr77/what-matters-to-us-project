@@ -43,7 +43,7 @@ export default function CalendarSidebar() {
           />
         </div>
 
-        <button className="btn-main w-full inline-flex items-center justify-center gap-2 rounded bg-blue-600 hover:bg-blue-700 text-white py-2 text-sm">
+        <button type='button' className="btn-main w-full inline-flex items-center justify-center gap-2 rounded bg-blue-600 hover:bg-blue-700 text-white py-2 text-sm">
           <Plus size={16}/> Create
         </button>
       </div>

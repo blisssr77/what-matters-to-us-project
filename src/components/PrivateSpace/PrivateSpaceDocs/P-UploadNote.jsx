@@ -10,7 +10,76 @@ import DOMPurify from "dompurify";
 import RichTextEditor from "@/components/Editors/RichTextEditor";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
+
+import AddToCalendar from "@/components/Calendar/AddToCalendar";
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import tzPlugin from 'dayjs/plugin/timezone'
+dayjs.extend(utc)
+dayjs.extend(tzPlugin)
 import { addPrivateTag } from "@/lib/tagsApi";
+
+// Derive storage path from a full URL (for signed URLs)
+const CAL_DEFAULTS = {
+  calendar_enabled: false,
+  start_at: null,
+  end_at: null,
+  all_day: false,
+  calendar_color: null,
+  calendar_status: null,
+  calendar_visibility: null,
+  // include these if you support recurrence/windows
+  calendar_repeat: null,
+  calendar_repeat_until: null,
+  calendar_window_start: null,
+  calendar_window_end: null,
+};
+
+// Validate calendar payload; returns error string or null if valid
+function validateCalendarPayload(payload) {
+  if (payload == null) return null; // untouched = no validation needed
+  const enabled = !!payload.calendar_enabled;
+  if (!enabled) return null;        // disabled = ok
+  const startISO = payload.start_at || null;
+  const endISO   = payload.end_at   || null;
+
+  if (!startISO) {
+    return payload.all_day
+      ? 'Please pick a date for the calendar entry.'
+      : 'Please pick a start date/time for the calendar entry.';
+  }
+  if (startISO && endISO && new Date(endISO) < new Date(startISO)) {
+    return 'End time must be after the start time.';
+  }
+  return null;
+}
+
+// Normalize calendar payload for DB storage
+function normalizeCalendarBlock(payload, isVaulted) {
+  if (payload == null) return null;               // untouched → don't include any calendar fields
+  const enabled = !!payload.calendar_enabled;
+  if (!enabled) return { ...CAL_DEFAULTS };       // explicitly turned OFF → clear all fields
+
+  const startISO = payload.start_at || null;
+  const endISO   = payload.end_at   || null;
+
+  return {
+    calendar_enabled: true,
+    start_at: startISO,
+    end_at: endISO || null,
+    all_day: !!payload.all_day,
+    calendar_color: payload.calendar_color || null,
+    calendar_status: payload.calendar_status || null,
+    calendar_visibility:
+      payload.calendar_visibility ?? (isVaulted ? 'masked' : 'public'),
+
+    // include these if you support them
+    calendar_repeat: payload.calendar_repeat ?? null,
+    calendar_repeat_until: payload.calendar_repeat_until ?? null,
+    calendar_window_start: payload.calendar_window_start ?? null,
+    calendar_window_end: payload.calendar_window_end ?? null,
+  };
+}
 
 export default function PrivateUploadNote() {
   const navigate = useNavigate();
@@ -45,6 +114,10 @@ export default function PrivateUploadNote() {
   const [publicJson, setPublicJson]   = useState()
   const [publicHtml, setPublicHtml]   = useState('')
   const [privateJson, setPrivateJson] = useState()
+
+  // Calendar states
+  const [calendarPayload, setCalendarPayload] = useState(null);
+  const [editRow, setEditRow] = useState(null); // for future use if editing existing rows
 
   // If no active space is set in the store, pick the first one for this user
   useEffect(() => {
@@ -164,7 +237,7 @@ export default function PrivateUploadNote() {
     }
   }, [tags, availableTags, activeSpaceId]);
 
-  // Create note (public or vaulted)
+  // ========================================= Create note (public or vaulted) =========================================
   const handleCreate = async () => {
     setLoading(true);
     setSuccessMsg('');
@@ -220,7 +293,13 @@ export default function PrivateUploadNote() {
       // 5) ensure tags exist (your helper)
       await ensureTagsExist(user.id);
 
-      // 6) attempt MODERN payload first (if your table has these columns)
+      // 6) calendar — validate + normalize
+      // --- calendar: validate + normalize (only write if user touched it) ---
+      const calErr = validateCalendarPayload(calendarPayload);
+      if (calErr) { setErrorMsg(calErr); return; }
+      const calBlock = normalizeCalendarBlock(calendarPayload, /* isVaulted */ !!hasPrivate);
+
+      // --- build initial (modern) payload (JS object only) ---
       const modernPayload = {
         created_by: user.id,
         user_id: user.id,
@@ -241,19 +320,22 @@ export default function PrivateUploadNote() {
         private_note_iv: hasPrivate ? private_note_iv : null,
         private_note_format: hasPrivate ? 'tiptap_json' : null,
 
-        // keep legacy empty to avoid duplication
+        // legacy fields left empty
         encrypted_note: null,
         note_iv: null,
+
         created_at: new Date().toISOString(),
+
+        // calendar (write only if user touched it; else omit)
+        ...(calBlock ?? {}),
       };
 
-      let insertError = null;
+      // --- try insert into modern table first ---
+      let { error: insertError } = await supabase
+        .from('private_vault_items')
+        .insert(modernPayload);
 
-      // try modern columns
-      let res = await supabase.from('private_vault_items').insert(modernPayload);
-      insertError = res.error;
-
-      // 7) fallback to LEGACY schema if modern columns don’t exist
+      // --- fallback to legacy schema if columns don't exist ---
       if (insertError && /column .* does not exist|42703/i.test(insertError.message || '')) {
         const legacyPayload = {
           created_by: user.id,
@@ -262,30 +344,38 @@ export default function PrivateUploadNote() {
 
           file_name: title || 'Untitled Note',
           title: title || 'Untitled Note',
-          tags,
+          tags: Array.isArray(tags) && tags.length ? tags : null,
 
-          // store public as plain text (legacy)
+          // public stored as plain text (legacy)
           notes: publicText,
 
-          // store private in legacy columns
+          // private stored in legacy columns
           is_vaulted: !!hasPrivate,
           encrypted_note: hasPrivate ? private_note_ciphertext : null,
           note_iv: hasPrivate ? private_note_iv : null,
 
           created_at: new Date().toISOString(),
+
+          // calendar — only include if your legacy table already has these columns.
+          ...(calBlock ?? {}),
         };
-        res = await supabase.from('private_vault_items').insert(legacyPayload);
+
+        const res = await supabase
+          .from('private_vault_items')
+          .insert(legacyPayload);
+
         insertError = res.error;
       }
 
       if (insertError) {
         console.error(insertError);
         setErrorMsg('Failed to create note.');
-      } else {
-        setSuccessMsg('✅ Note created successfully!');
-        setHasUnsavedChanges(false);
-        setTimeout(() => navigate('/privatespace/vaults'), 1200);
+        return;
       }
+
+      setSuccessMsg('✅ Note created successfully!');
+      setHasUnsavedChanges(false);
+      setTimeout(() => navigate('/privatespace/vaults'), 1200);
     } catch (e) {
       console.error('❌ Create note failed:', e);
       setErrorMsg('Something went wrong.');
@@ -434,6 +524,21 @@ export default function PrivateUploadNote() {
             />
           </>
         )}
+
+        <AddToCalendar
+          key={editRow?.id || 'new'}
+          isVaulted={isVaulted}
+          initial={editRow ? {
+            calendar_enabled: !!editRow.calendar_enabled,
+            start_at: editRow.start_at,
+            end_at: editRow.end_at,
+            all_day: !!editRow.all_day,
+            calendar_color: editRow.calendar_color,
+            calendar_status: editRow.calendar_status,
+            calendar_visibility: editRow.calendar_visibility,
+          } : {}}
+          onChange={setCalendarPayload}
+        />
 
         <button onClick={handleCreate} disabled={loading} className="btn-secondary w-full mt-2">
           {loading ? "Creating..." : "Upload Note"}
