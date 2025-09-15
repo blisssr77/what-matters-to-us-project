@@ -60,7 +60,7 @@ export default function CreatePrivateSpaceModal({ open, onClose, onCreated }) {
       });
       if (codeErr) return setErrorMsg(codeErr.message || "Failed to set private space vault code.");
 
-      setSuccessMsg("✅ Private space created successfully!");
+      setSuccessMsg(" Private space created successfully!");
       onCreated?.(ps);
       setName(""); setVaultCode("");
       onClose();

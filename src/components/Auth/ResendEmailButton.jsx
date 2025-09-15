@@ -20,7 +20,7 @@ export default function ResendEmailButton() {
     if (error) {
       setStatus("❌ Failed to resend. Try again.");
     } else {
-      setStatus("✅ Email sent!");
+      setStatus(" Email sent!");
     }
   };
 

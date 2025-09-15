@@ -63,7 +63,7 @@ export default function InviteModal({ onClose, workspaceId }) {
       return;
     }
 
-    // ✅ Fetch current user’s profile (for invited_by_name)
+    //  Fetch current user’s profile (for invited_by_name)
     const { data: currentProfile } = await supabase
       .from("profiles")
       .select("username, email")
@@ -95,7 +95,7 @@ export default function InviteModal({ onClose, workspaceId }) {
         workspace_id: workspaceId,
         role,
         invited_by: user.id,
-        invited_by_name: invitedByName, // ✅ Current user's name/email
+        invited_by_name: invitedByName, //  Current user's name/email
       });
 
       // 🔔 Send in-app notification
@@ -184,7 +184,7 @@ export default function InviteModal({ onClose, workspaceId }) {
         </div>
       </div>
 
-      {/* ✅ Success Modal */}
+      {/*  Success Modal */}
       {showSuccessModal && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm">

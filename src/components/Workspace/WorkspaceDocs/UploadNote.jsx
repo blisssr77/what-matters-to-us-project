@@ -112,7 +112,7 @@ const WorkspaceUploadNote = () => {
     const [calendarPayload, setCalendarPayload] = useState(null);
     const [editRow, setEditRow] = useState(null); // for future use if editing existing rows
 
-    // ✅ Fetch and set active workspace on mount
+    // Fetch and set active workspace on mount
     // 1) On mount, pick an active workspace ID for this user
     useEffect(() => {
         (async () => {
@@ -188,7 +188,7 @@ const WorkspaceUploadNote = () => {
         }
     }, [successMsg, errorMsg]);
 
-    // ✅ Fetch tags for this workspace
+    // Fetch tags for this workspace
     useEffect(() => {
         if (!activeWorkspaceId) return;
         const fetchTags = async () => {
@@ -211,7 +211,7 @@ const WorkspaceUploadNote = () => {
     const existsCI = (arr, val) =>
         arr.some(t => String(t).toLowerCase() === String(val).toLowerCase());
 
-    // ✅ Add tag (Workspace scope, deduped server-side)
+    //  Add tag (Workspace scope, deduped server-side)
     const handleTagAdd = () => {
         const raw = String(newTag || "").trim();
         if (!raw) return;
@@ -356,17 +356,18 @@ const WorkspaceUploadNote = () => {
             console.error(insertError);
             setErrorMsg('Failed to create note.');
             } else {
-            // 🔽 persist brand-new tags *after* the note is created
-            try {
-                const { data: { user } = {} } = await supabase.auth.getUser();
-                if (user?.id && activeWorkspaceId && pendingTags.length) {
-                    await Promise.all(
-                        pendingTags.map(name =>
-                        addWorkspaceTag(supabase, {
-                            name,
-                            workspaceId: activeWorkspaceId,
-                            userId: user.id,
-                        })
+                // 🔽 persist brand-new tags *after* the note is created
+                try {
+                    const { data: { user } = {} } = await supabase.auth.getUser();
+                    if (user?.id && activeWorkspaceId && pendingTags.length) {
+                        // persist each pending tag; ignore failures so create flow isn’t blocked
+                        await Promise.allSettled(
+                            pendingTags.map((name) =>
+                            addWorkspaceTag(supabase, {
+                                name,                        // preserve the original casing
+                                workspaceId: activeWorkspaceId,
+                                userId: user.id,
+                            })
                         )
                     );
                 }
@@ -377,7 +378,7 @@ const WorkspaceUploadNote = () => {
                 setPendingTags([]); // clear either way
             }
 
-            setSuccessMsg('✅ Note created successfully!');
+            setSuccessMsg(' Note created successfully!');
             setHasUnsavedChanges(false);
             setTimeout(() => navigate('/workspace/vaults'), 900);
         }

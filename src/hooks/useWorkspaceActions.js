@@ -48,7 +48,7 @@ export const useWorkspaceActions = ({
       console.error("Rename failed:", error);
       setWorkspaceActionErrorMsg(error.message || "❌ Failed to rename workspace");
     } else {
-      setWorkspaceActionSuccessMsg("✅ Workspace renamed successfully");
+      setWorkspaceActionSuccessMsg(" Workspace renamed successfully");
       // optional: window.location.reload();
     }
     setWorkspaceActionLoading(false);

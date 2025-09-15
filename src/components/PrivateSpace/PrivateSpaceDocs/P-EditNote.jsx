@@ -94,8 +94,6 @@ export default function PrivateEditNote() {
   // Core state
   const [noteData, setNoteData] = useState(null);
   const [editedTitle, setEditedTitle] = useState("");
-  const [publicNote, setPublicNote] = useState("");     // ← public note
-  const [privateNote, setPrivateNote] = useState("");   // ← decrypted (editable) private note
   const [isVaulted, setIsVaulted] = useState(false);    // ← toggle encrypted vs public
 
   // Vault / UX state
@@ -112,6 +110,8 @@ export default function PrivateEditNote() {
   const [availableTags, setAvailableTags] = useState([]);
   const [newTag, setNewTag] = useState("");
   const [tags, setTags] = useState([]);
+  const [pendingTags, setPendingTags] = useState([]); // New state for tags to be added
+
   const tagBoxRef = useRef(null);
 
   // For logging / optional header
@@ -256,29 +256,28 @@ export default function PrivateEditNote() {
     [availableTags, tags]
   );
 
-  // ✅ Add tag (Private scope, space-scoped, deduped server-side)
-  const handleTagAdd = async () => {
-    const raw = String(newTag || '').trim()
-    if (!raw) return
+  // Helper. Warn about unsaved changes if navigating away
+  const existsCI = (arr, val) =>
+    arr.some(t => String(t).toLowerCase() === String(val).toLowerCase());
 
-    const { data: { user } = {} } = await supabase.auth.getUser()
-    if (!user?.id) { console.error('Not signed in'); return }
-    if (!effectiveSpaceId) { setErrorMsg('No active private space selected.'); return }
+  //  Add tag (Workspace scope, deduped server-side)
+  const handleTagAdd = () => {
+    const raw = String(newTag || "").trim();
+    if (!raw) return;
 
-    const { data: row, error } = await addPrivateTag(supabase, {
-      name: raw,
-      privateSpaceId: effectiveSpaceId,
-      userId: user.id,
-    })
-    if (error) { console.error(error); return }
+    // add to selected tags
+    setTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
 
-    const existsCI = (arr, val) =>
-      arr.some(t => String(t).toLowerCase() === String(val).toLowerCase())
+    // show in dropdown immediately (local-only)
+    setAvailableTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
 
-    setAvailableTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
-    setTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
-    setNewTag('')
-  }
+    // mark as “pending persist” only if not already known by backend list
+    if (!existsCI(availableTags, raw)) {
+      setPendingTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
+    }
+
+    setNewTag("");
+  };
 
   // Try auto-decrypt with stored vault code (only if vaulted + encrypted fields present)
   useEffect(() => {
@@ -538,7 +537,29 @@ export default function PrivateEditNote() {
         console.error(upErr);
         setErrorMsg("Failed to update note.");
       } else {
-        setSuccessMsg("✅ Note updated successfully!");
+        // Persist brand-new tags only AFTER the note update succeeds
+        try {
+          if (pendingTags.length) {
+            const { data: { user } = {} } = await supabase.auth.getUser();
+            if (user?.id && activeSpaceId) {
+              await Promise.allSettled(
+                pendingTags.map((name) =>
+                  addPrivateTag(supabase, {
+                    name,                    // keep user's casing in UI; backend normalizes slug
+                    privateSpaceId: activeSpaceId,
+                    userId: user.id,
+                  })
+                )
+              );
+            }
+            setPendingTags([]); // clear either way
+          }
+        } catch (e) {
+          console.warn("Tag persistence (post-update) failed:", e);
+          // optional: non-blocking toast here
+        }
+
+        setSuccessMsg(" Note updated successfully!");
         setHasUnsavedChanges(false);
         setTimeout(() => navigate("/privatespace/vaults"), 1100);
       }

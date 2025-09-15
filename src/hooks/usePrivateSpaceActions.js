@@ -31,7 +31,7 @@ export const usePrivateSpaceActions = ({
     if (error) {
       setErrorMsg("❌ Failed to rename private space.");
     } else {
-      setSuccessMsg("✅ Private space renamed.");
+      setSuccessMsg(" Private space renamed.");
     }
     setLoading(false);
   };
@@ -158,7 +158,7 @@ export const usePrivateSpaceActions = ({
         .eq("id", activeSpaceId);
       if (spaceErr) throw spaceErr;
 
-      setSuccessMsg("✅ Private space deleted.");
+      setSuccessMsg(" Private space deleted.");
       return true;
     } catch (err) {
       setErrorMsg(err.message || "Failed to delete private space.");

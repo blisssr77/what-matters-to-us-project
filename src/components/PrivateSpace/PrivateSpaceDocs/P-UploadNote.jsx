@@ -86,8 +86,6 @@ export default function PrivateUploadNote() {
 
   // form
   const [title, setTitle] = useState("");
-  const [notes, setNotes] = useState("");           // public note
-  const [privateNote, setPrivateNote] = useState(""); // encrypted note
   const [isVaulted, setIsVaulted] = useState(true);
   const [vaultCode, setVaultCode] = useState("");
 
@@ -102,6 +100,7 @@ export default function PrivateUploadNote() {
   const [tags, setTags] = useState([]);                // selected tags
   const [availableTags, setAvailableTags] = useState([]); // options list
   const [newTag, setNewTag] = useState("");
+  const [pendingTags, setPendingTags] = useState([]); // New state for tags to be added
 
   // 🔹 Use the PRIVATE SPACE STORE (single source of truth)
   const activeSpaceId = usePrivateSpaceStore((s) => s.activeSpaceId);
@@ -194,29 +193,28 @@ export default function PrivateUploadNote() {
     [availableTags, tags]
   );
 
-  // ✅ Add tag (Private scope, space-scoped, deduped server-side)
-  const handleTagAdd = async () => {
-    const raw = String(newTag || '').trim()
-    if (!raw) return
+  // Helper. Warn about unsaved changes if navigating away
+  const existsCI = (arr, val) =>
+      arr.some(t => String(t).toLowerCase() === String(val).toLowerCase());
 
-    const { data: { user } = {} } = await supabase.auth.getUser()
-    if (!user?.id) { console.error('Not signed in'); return }
-    if (!activeSpaceId) { setErrorMsg('No active private space selected.'); return }
+  //  Add tag (Workspace scope, deduped server-side)
+  const handleTagAdd = () => {
+      const raw = String(newTag || "").trim();
+      if (!raw) return;
 
-    const { data: row, error } = await addPrivateTag(supabase, {
-      name: raw,
-      privateSpaceId: activeSpaceId,
-      userId: user.id,
-    })
-    if (error) { console.error(error); return }
+      // add to selected tags
+      setTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
 
-    const existsCI = (arr, val) =>
-      arr.some(t => String(t).toLowerCase() === String(val).toLowerCase())
+      // show in dropdown immediately (local-only)
+      setAvailableTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
 
-    setAvailableTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
-    setTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
-    setNewTag('')
-  }
+      // mark as “pending persist” only if not already known by backend list
+      if (!existsCI(availableTags, raw)) {
+          setPendingTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
+      }
+
+      setNewTag("");
+  };
 
   // (optional) ensure any selected tag exists before saving (best-effort)
   const ensureTagsExist = useCallback(async () => {
@@ -290,16 +288,12 @@ export default function PrivateUploadNote() {
       const publicText = hasPublic ? stripHtmlToText(cleanPublicHtml) : null;
       const summary    = publicText ? publicText.slice(0, 160) : null;
 
-      // 5) ensure tags exist (your helper)
-      await ensureTagsExist(user.id);
-
-      // 6) calendar — validate + normalize
-      // --- calendar: validate + normalize (only write if user touched it) ---
+      // 6) calendar — validate + normalize (only write if user touched it)
       const calErr = validateCalendarPayload(calendarPayload);
       if (calErr) { setErrorMsg(calErr); return; }
       const calBlock = normalizePrivateCalendarBlock(calendarPayload, /* isVaulted */ !!hasPrivate);
 
-      // --- build initial (modern) payload (JS object only) ---
+      // 7) build payload (modern columns first)
       const modernPayload = {
         created_by: user.id,
         user_id: user.id,
@@ -326,16 +320,16 @@ export default function PrivateUploadNote() {
 
         created_at: new Date().toISOString(),
 
-        // calendar (write only if user touched it; else omit)
+        // calendar (only if user touched it)
         ...(calBlock ?? {}),
       };
 
-      // --- try insert into modern table first ---
+      // try modern insert
       let { error: insertError } = await supabase
         .from('private_vault_items')
         .insert(modernPayload);
 
-      // --- fallback to legacy schema if columns don't exist ---
+      // fallback to legacy schema if needed
       if (insertError && /column .* does not exist|42703/i.test(insertError.message || '')) {
         const legacyPayload = {
           created_by: user.id,
@@ -346,24 +340,21 @@ export default function PrivateUploadNote() {
           title: title || 'Untitled Note',
           tags: Array.isArray(tags) && tags.length ? tags : null,
 
-          // public stored as plain text (legacy)
+          // public as plain text (legacy)
           notes: publicText,
 
-          // private stored in legacy columns
+          // private in legacy columns
           is_vaulted: !!hasPrivate,
           encrypted_note: hasPrivate ? private_note_ciphertext : null,
           note_iv: hasPrivate ? private_note_iv : null,
 
           created_at: new Date().toISOString(),
 
-          // calendar — only include if your legacy table already has these columns.
+          // calendar only if legacy has those columns
           ...(calBlock ?? {}),
         };
 
-        const res = await supabase
-          .from('private_vault_items')
-          .insert(legacyPayload);
-
+        const res = await supabase.from('private_vault_items').insert(legacyPayload);
         insertError = res.error;
       }
 
@@ -371,6 +362,29 @@ export default function PrivateUploadNote() {
         console.error(insertError);
         setErrorMsg('Failed to create note.');
         return;
+      }
+
+      // 8) persist brand-new tags AFTER successful insert
+      try {
+        if (pendingTags?.length) {
+          const { data: { user } = {} } = await supabase.auth.getUser();
+          if (user?.id && activeSpaceId) {
+            await Promise.allSettled(
+              pendingTags.map((name) =>
+                addPrivateTag(supabase, {
+                  name,                 // keep original casing in UI
+                  privateSpaceId: activeSpaceId,
+                  userId: user.id,
+                })
+              )
+            );
+          }
+        }
+      } catch (e) {
+        console.warn('Tag persist (post-create) failed:', e);
+        // non-blocking
+      } finally {
+        setPendingTags([]); // clear either way
       }
 
       setSuccessMsg('✅ Note created successfully!');

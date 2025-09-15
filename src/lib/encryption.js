@@ -47,7 +47,7 @@ export const decryptText = async (encryptedData, ivBase64, passphrase) => {
   const iv = Uint8Array.from(atob(ivBase64), (c) => c.charCodeAt(0));
   const data = Uint8Array.from(atob(encryptedData), (c) => c.charCodeAt(0));
   const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
-  return decoder.decode(decrypted); // ✅ returns a string directly
+  return decoder.decode(decrypted); //  returns a string directly
 };
 
 // Converts hex IV string to Uint8Array

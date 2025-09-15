@@ -22,7 +22,7 @@ export const useWorkspaceInit = (userId) => {
 
       if (memberRow?.workspace_id) {
         setActiveWorkspaceId(memberRow.workspace_id);
-        console.log("✅ Workspace ID set:", memberRow.workspace_id);
+        console.log(" Workspace ID set:", memberRow.workspace_id);
       }
     };
 

@@ -18,7 +18,7 @@ export default function EmailConfirmGate({ children }) {
 
       if (confirmedAt || user?.app_metadata?.provider === "google") {
         setVerified(true);
-        navigate("/dashboard"); // ✅ Redirect if confirmed
+        navigate("/dashboard"); //  Redirect if confirmed
       } else {
         setVerified(false);
       }

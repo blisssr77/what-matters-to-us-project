@@ -102,7 +102,7 @@ export default function CreateWorkspaceModal({ open, onClose, onCreated }) {
         console.error("set_workspace_vault_code error:", codeErr);
       }
 
-      setSuccessMsg("✅ Workspace created successfully!");
+      setSuccessMsg(" Workspace created successfully!");
       onCreated?.(ws);
       setName("");
       setVaultCode("");

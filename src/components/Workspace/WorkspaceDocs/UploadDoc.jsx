@@ -156,7 +156,7 @@ export default function WorkspaceUploadDoc() {
     const existsCI = (arr, val) =>
         arr.some(t => String(t).toLowerCase() === String(val).toLowerCase());
 
-    // ✅ Add tag (Workspace scope, deduped server-side)
+    //  Add tag (Workspace scope, deduped server-side)
     const handleTagAdd = () => {
         const raw = String(newTag || "").trim();
         if (!raw) return;
@@ -449,7 +449,7 @@ export default function WorkspaceUploadDoc() {
                 setPendingTags([]); // clear either way
             }
 
-            setSuccessMsg('✅ Note created successfully!');
+            setSuccessMsg(' Note created successfully!');
             setHasUnsavedChanges(false);
             setTimeout(() => navigate('/workspace/vaults'), 900);
         }

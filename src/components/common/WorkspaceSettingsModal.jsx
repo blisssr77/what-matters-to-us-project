@@ -86,7 +86,7 @@ export default function WorkspaceSettingsModal({
       console.error("❌ Failed to fetch members:", error);
     } else {
       if (data.length > 0) {
-        setWorkspaceName(data[0].workspaces.name); // ✅ Set workspace name for modal
+        setWorkspaceName(data[0].workspaces.name); //  Set workspace name for modal
       }
       setMembers(data);
     }

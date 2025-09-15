@@ -548,7 +548,7 @@ export default function WorkspaceEditNote() {
                 setPendingTags([]);
             }
 
-            setSuccessMsg('✅ Note updated successfully!');
+            setSuccessMsg(' Note updated successfully!');
             setHasUnsavedChanges(false);
             setTimeout(() => navigate('/workspace/vaults/'), 1200);
         }

@@ -131,7 +131,7 @@ export default function AuthPage() {
       //     return;
       //   }
 
-      //   console.log("✅ Workspace member inserted successfully.");
+      //   console.log(" Workspace member inserted successfully.");
       // } else {
       //   console.log("⚠️ User already a member of a workspace, skipping insert.");
       // }

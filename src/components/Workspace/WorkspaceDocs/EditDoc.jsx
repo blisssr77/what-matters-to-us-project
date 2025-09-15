@@ -602,22 +602,31 @@ export default function WorkspaceEditDoc() {
             .eq('id', id)
             .eq('workspace_id', activeWorkspaceId);
 
-            if (updateError) {
-                console.error(updateError);
-                setErrorMsg("Failed to update document.");
-            } else {
-                // ✅ Only now persist any new tags to vault_tags
-                try {
-                    if (pendingTags.length) {
+        if (updateError) {
+            console.error(updateError);
+            setErrorMsg("Failed to update document.");
+        } else {
+            // Only now persist any new tags to vault_tags
+            try {
+                if (pendingTags.length) {
                     const { data: { user } = {} } = await supabase.auth.getUser();
-                    if (user?.id) {
-                        await persistPendingTags(supabase, activeWorkspaceId, user.id, pendingTags);
+                    if (user?.id && activeWorkspaceId) {
+                        // fire-and-forget each add; ignore individual failures
+                        await Promise.allSettled(
+                            pendingTags.map((name) =>
+                                addWorkspaceTag(supabase, {
+                                    name,                     // keep original casing
+                                    workspaceId: activeWorkspaceId,
+                                    userId: user.id,
+                                })
+                            )
+                        );
                     }
-                    setPendingTags([]);
                 }
             } catch (e) {
-                console.warn('Tag persistence failed after document update:', e);
-                // You can optionally set a non-blocking toast here.
+                console.warn("Tag persistence failed after document update:", e);
+            } finally {
+                setPendingTags([]); // clear either way
             }
 
             setSuccessMsg("Document updated successfully!");

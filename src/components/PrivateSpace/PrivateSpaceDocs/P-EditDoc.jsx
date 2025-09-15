@@ -8,6 +8,7 @@ import { UnsavedChangesModal } from "@/components/common/UnsavedChangesModal";
 import { usePrivateSpaceStore } from "@/store/usePrivateSpaceStore";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
+import { addPrivateTag } from "@/lib/tagsApi";
 
 import AddToCalendar from "@/components/Calendar/AddToCalendar";
 import dayjs from 'dayjs'
@@ -93,6 +94,7 @@ export default function PrivateEditDoc() {
   const [tags, setTags] = useState([]);
   const [availableTags, setAvailableTags] = useState([]);
   const [newTag, setNewTag] = useState("");
+  const [pendingTags, setPendingTags] = useState([]); // new tags to persist
   const [notes, setNotes] = useState("");
   const [privateNote, setPrivateNote] = useState("");
   const [vaultCode, setVaultCode] = useState("");
@@ -292,29 +294,28 @@ export default function PrivateEditDoc() {
     [availableTags, tags]
   );
 
-  // ✅ Add tag (Private scope, space-scoped, deduped server-side)
-  const handleTagAdd = async () => {
-    const raw = String(newTag || '').trim()
-    if (!raw) return
+  // Helper. Warn about unsaved changes if navigating away
+  const existsCI = (arr, val) =>
+    arr.some(t => String(t).toLowerCase() === String(val).toLowerCase());
 
-    const { data: { user } = {} } = await supabase.auth.getUser()
-    if (!user?.id) { console.error('Not signed in'); return }
-    if (!effectiveSpaceId) { setErrorMsg('No active private space selected.'); return }
+  //  Add tag (Workspace scope, deduped server-side)
+  const handleTagAdd = () => {
+    const raw = String(newTag || "").trim();
+    if (!raw) return;
 
-    const { data: row, error } = await addPrivateTag(supabase, {
-      name: raw,
-      privateSpaceId: effectiveSpaceId,
-      userId: user.id,
-    })
-    if (error) { console.error(error); return }
+    // add to selected tags
+    setTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
 
-    const existsCI = (arr, val) =>
-      arr.some(t => String(t).toLowerCase() === String(val).toLowerCase())
+    // show in dropdown immediately (local-only)
+    setAvailableTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
 
-    setAvailableTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
-    setTags(prev => existsCI(prev, row.name) ? prev : [...prev, row.name])
-    setNewTag('')
-  }
+    // mark as “pending persist” only if not already known by backend list
+    if (!existsCI(availableTags, raw)) {
+      setPendingTags(prev => (existsCI(prev, raw) ? prev : [...prev, raw]));
+    }
+
+    setNewTag("");
+  };
 
   // DnD
   const handleFileDrop = (e) => {
@@ -695,6 +696,28 @@ export default function PrivateEditDoc() {
       console.error(updateError);
       setErrorMsg("Failed to update document.");
     } else {
+      // Only now persist any *new* tags to vault_tags (Private scope)
+      try {
+        if (pendingTags.length) {
+          const { data: { user } = {} } = await supabase.auth.getUser();
+          if (user?.id && activeSpaceId) {
+            await Promise.allSettled(
+              pendingTags.map((name) =>
+                addPrivateTag(supabase, {
+                  name,                   // keep user's casing in UI; backend normalizes slug
+                  privateSpaceId: activeSpaceId,
+                  userId: user.id,
+                })
+              )
+            );
+          }
+          setPendingTags([]); // clear either way
+        }
+      } catch (e) {
+        console.warn("Tag persistence (post-update) failed:", e);
+        // non-blocking; document update already succeeded
+      }
+
       setSuccessMsg("Document updated successfully!");
       setFilesToRemove([]);
       setHasUnsavedChanges(false);

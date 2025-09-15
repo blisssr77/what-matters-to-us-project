@@ -17,7 +17,7 @@ export function useCalendarFilters() {
   const setTagSlugs = useCallback((tagSlugs) => setFilters({ tagSlugs: Array.isArray(tagSlugs) ? tagSlugs.map(slug) : [] }), [setFilters]);
   const setMineOnly = useCallback((mineOnly) => setFilters({ mineOnly: !!mineOnly }), [setFilters]);
 
-  // ✅ sources (the ones your sidebar calls)
+  //  sources (the ones your sidebar calls)
   const setIncludeWorkspace = useCallback(
     (val) => setFilters({ includeWorkspace: !!val }),
     [setFilters]

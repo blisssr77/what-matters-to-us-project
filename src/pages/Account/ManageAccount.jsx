@@ -266,7 +266,7 @@ export default function ManageAccount() {
         setWorkspaceCode(""); 
         setWorkspaceConfirm("");
         setCodes((c) => ({ ...c, workspace: true }));
-        return { ok: true, msg: "Workspace code created successfully ✅" };
+        return { ok: true, msg: "Workspace code created successfully " };
     };
 
 
@@ -312,7 +312,7 @@ export default function ManageAccount() {
         setWorkspaceCurrent("");
         setWorkspaceCode("");
         setWorkspaceConfirm("");
-        return { ok: true, msg: "Workspace code updated & content rotated ✅" };
+        return { ok: true, msg: "Workspace code updated & content rotated " };
     };
 
 
@@ -332,7 +332,7 @@ export default function ManageAccount() {
         setPrivateCode(""); 
         setPrivateConfirm("");
         setCodes((c) => ({ ...c, private: true }));
-        return { ok: true, msg: "Private code created successfully ✅" };
+        return { ok: true, msg: "Private code created successfully " };
     };
 
 
@@ -369,7 +369,7 @@ export default function ManageAccount() {
         if (error) return { ok: false, msg: error.message || "Update failed" };
 
         setPrivateCurrent(""); setPrivateCode(""); setPrivateConfirm("");
-        return { ok: true, msg: "Private code updated & content rotated ✅" };
+        return { ok: true, msg: "Private code updated & content rotated " };
     };
 
     /* ────────────────── Password status & rules ────────────────── */
