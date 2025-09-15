@@ -20,14 +20,14 @@ export default function CalendarToolbar({ onToday, onPrev, onNext }) {
     <div className="sticky top-0 z-10 bg-gray-100/80 backdrop-blur border-b">
       <div className="flex items-center gap-3 px-4 py-2">
         {/* Today + nav */}
-        <button onClick={onToday} className="px-3 py-1.5 rounded border bg-white hover:bg-gray-50 text-sm text-gray-700">Today</button>
+        <button onClick={onToday} className="px-3 py-1.5 rounded border bg-white hover:bg-gray-50 text-xs text-gray-700">Today</button>
         <div className="flex items-center">
-          <button onClick={onPrev} className="p-1.5 rounded border bg-white hover:bg-gray-50 text-gray-700"><ChevronLeft size={18} /></button>
-          <button onClick={onNext} className="ml-2 p-1.5 rounded border bg-white hover:bg-gray-50 text-gray-700"><ChevronRight size={18} /></button>
+          <button onClick={onPrev} className="p-1.5 rounded border bg-white hover:bg-gray-50 text-xs text-gray-700"><ChevronLeft size={16} /></button>
+          <button onClick={onNext} className="ml-2 p-1.5 rounded border bg-white hover:bg-gray-50 text-xs text-gray-700"><ChevronRight size={16} /></button>
         </div>
 
         {/* Range */}
-        <div className="text-lg font-semibold text-gray-800">{rangeLabel}</div>
+        <div className="text-md font-bold text-gray-800">{rangeLabel}</div>
 
         {/* spacer */}
         <div className="flex-1" />
@@ -39,7 +39,7 @@ export default function CalendarToolbar({ onToday, onPrev, onNext }) {
             value={filters.search || ''}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search"
-            className="pl-8 pr-3 py-1.5 rounded border bg-white text-sm w-52 focus:outline-none text-gray-700"
+            className="pl-8 pr-3 py-1.5 rounded border bg-white text-xs w-52 focus:outline-none text-gray-700"
           />
         </div>
 
@@ -49,7 +49,7 @@ export default function CalendarToolbar({ onToday, onPrev, onNext }) {
             <button
               key={v}
               onClick={() => setView(v)}
-              className={`px-3 py-1.5 text-sm ${view===v ? 'bg-gray-900 text-white' : 'hover:bg-gray-50'}`}
+              className={`px-3 py-1.5 text-xs ${view===v ? 'bg-gray-900 text-white' : 'hover:bg-gray-50'}`}
             >
               {v[0].toUpperCase()+v.slice(1)}
             </button>
@@ -58,7 +58,7 @@ export default function CalendarToolbar({ onToday, onPrev, onNext }) {
 
         {/* calendar icon – future quick-create */}
         <button className="ml-2 p-2 rounded border bg-white hover:bg-gray-50 text-gray-700">
-          <CalendarIcon size={16} />
+          <CalendarIcon size={15} />
         </button>
       </div>
     </div>

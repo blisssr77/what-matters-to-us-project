@@ -66,13 +66,13 @@ export const useCalendarStore = create(
       setSelectedEventId: (id) => set({ selectedEventId: id }),
       clearSelected: () => set({ selectedEventId: null }),
 
-      // ---------- Workspace filtering for calendar ----------
-      selectedWorkspaceIds: [],        // array of workspace IDs (strings)
-      showAllWorkspaces: true,         // when true, ignore selectedWorkspaceIds
+      // ---------- Workspace filtering ----------
+      selectedWorkspaceIds: [],        // [] means "All Workspaces"
+      showAllWorkspaces: true,
 
       setSelectedWorkspaceIds: (ids = []) => set({
         selectedWorkspaceIds: Array.from(new Set(ids.map(String))),
-        showAllWorkspaces: ids.length === 0 ? true : false,
+        showAllWorkspaces: ids.length === 0,
       }),
       toggleWorkspaceId: (id) => {
         const cur = new Set(get().selectedWorkspaceIds.map(String));
@@ -81,7 +81,7 @@ export const useCalendarStore = create(
         else cur.add(key);
         set({
           selectedWorkspaceIds: Array.from(cur),
-          showAllWorkspaces: cur.size === 0 ? true : false,
+          showAllWorkspaces: cur.size === 0,
         });
       },
       setShowAllWorkspaces: (flag) => set({
@@ -89,15 +89,55 @@ export const useCalendarStore = create(
         ...(flag ? { selectedWorkspaceIds: [] } : null),
       }),
 
+      // ------------------------------------------- Private Space filtering -------------------------------------------
+      selectedPrivateSpaceIds: [],     // [] means "All Private Spaces"
+      showAllPrivateSpaces: true,
+
+      setSelectedPrivateSpaceIds: (ids = []) => set({
+        selectedPrivateSpaceIds: Array.from(new Set(ids.map(String))),
+        showAllPrivateSpaces: ids.length === 0,
+      }),
+      togglePrivateSpaceId: (id) => {
+        const cur = new Set(get().selectedPrivateSpaceIds.map(String));
+        const key = String(id);
+        if (cur.has(key)) cur.delete(key);
+        else cur.add(key);
+        set({
+          selectedPrivateSpaceIds: Array.from(cur),
+          showAllPrivateSpaces: cur.size === 0,
+        });
+      },
+      setShowAllPrivateSpaces: (flag) => set({
+        showAllPrivateSpaces: !!flag,
+        ...(flag ? { selectedPrivateSpaceIds: [] } : null),
+      }),
+
+      // ---------- Convenience flags for scope (sidebar switches) ----------
+      setIncludeWorkspace: (val) =>
+        set({ filters: { ...get().filters, includeWorkspace: !!val } }),
+      setIncludePrivate: (val) =>
+        set({ filters: { ...get().filters, includePrivate: !!val } }),
+
       // ---------- Derived helpers ----------
-      // Returns events filtered by current filters; call inside a component:
-      // const events = useCalendarStore(selectFilteredEvents);
       _filterEvents: () => {
-        const { events, filters, currentUserId } = get();
+        const {
+          events,
+          filters,
+          currentUserId,
+          selectedWorkspaceIds,
+          selectedPrivateSpaceIds,
+          showAllWorkspaces,
+          showAllPrivateSpaces,
+        } = get();
+
         const s = slug(filters.search || '');
+        const wsSet = new Set(selectedWorkspaceIds.map(String));
+        const psSet = new Set(selectedPrivateSpaceIds.map(String));
 
         return events.filter((ev) => {
           const x = ev.extendedProps || {};
+
+          // Text search
           const title = String(ev.title || '');
           const titleMatch = s ? slug(title).includes(s) : true;
 
@@ -112,7 +152,7 @@ export const useCalendarStore = create(
               ? filters.statuses.includes(x.status)
               : true;
 
-          // tags: expect x.tags as text[]; compare via slug
+          // tags: expect x.tags as text[]
           const tagOk =
             filters.tagSlugs && filters.tagSlugs.length
               ? (Array.isArray(x.tags)
@@ -125,23 +165,65 @@ export const useCalendarStore = create(
             ? currentUserId && String(x.created_by || '') === String(currentUserId)
             : true;
 
-          return titleMatch && assigneeOk && statusOk && tagOk && mineOk;
+          // scope filtering (workspace/private)
+          // We try to infer by presence of ids; if not present, we don't exclude.
+          const wsId = x.workspace_id != null ? String(x.workspace_id) : null;
+          const psId = x.private_space_id != null ? String(x.private_space_id) : null;
+
+          // If workspace scope is OFF, drop workspace-scoped events.
+          const wsScopeOk = filters.includeWorkspace
+            ? (
+                // if we have workspace selection enforced:
+                showAllWorkspaces || !wsId ? true : wsSet.has(wsId)
+              )
+            : (
+                // workspace disabled → exclude those that clearly belong to a workspace
+                wsId ? false : true
+              );
+
+          // If private scope is OFF, drop private-scoped events.
+          const psScopeOk = filters.includePrivate
+            ? (
+                showAllPrivateSpaces || !psId ? true : psSet.has(psId)
+              )
+            : (
+                psId ? false : true
+              );
+
+          // Optional visibility toggles
+          const publicOnlyOk = filters.showPublicOnly ? x.is_vaulted !== true : true;
+          const vaultedOnlyOk = filters.showVaultedOnly ? x.is_vaulted === true : true;
+
+          return (
+            titleMatch &&
+            assigneeOk &&
+            statusOk &&
+            tagOk &&
+            mineOk &&
+            wsScopeOk &&
+            psScopeOk &&
+            publicOnlyOk &&
+            vaultedOnlyOk
+          );
         });
       },
     }),
     {
-      name: 'wm-calendar-store', // localStorage key
+      name: 'wm-calendar-store',
       partialize: (state) => ({
         view: state.view,
         filters: state.filters,
+        // persist selections so the sidebar feels sticky
         selectedWorkspaceIds: state.selectedWorkspaceIds,
         showAllWorkspaces: state.showAllWorkspaces,
+        selectedPrivateSpaceIds: state.selectedPrivateSpaceIds,
+        showAllPrivateSpaces: state.showAllPrivateSpaces,
       }),
     }
   )
 );
 
-// Selector that returns filtered events (memo-friendly with Zustand)
+// Selector that returns filtered events
 export const selectFilteredEvents = (state) => state._filterEvents();
 
 // Convenience selectors

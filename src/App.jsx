@@ -2,6 +2,8 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import AuthPage from "./components/Auth/AuthPage";
 import Dashboard from "./pages/Dashboard";
 import ManageAccount from "./pages/Account/ManageAccount";
+import CalendarPage from "./pages/CalendarPage";
+
 // Importing components for the Private Vault
 import PrivateDocList from "./pages/PrivateSpace/P-DocList";
 import PrivateUploadDoc from "./components/PrivateSpace/PrivateSpaceDocs/P-UploadDoc";
@@ -10,6 +12,7 @@ import PrivateViewNote from "./components/PrivateSpace/PrivateSpaceDocs/P-ViewNo
 import PrivateEditNote from "./components/PrivateSpace/PrivateSpaceDocs/P-EditNote";
 import PrivateViewDoc from "./components/PrivateSpace/PrivateSpaceDocs/P-ViewDoc";
 import PrivateEditDoc from "./components/PrivateSpace/PrivateSpaceDocs/P-EditDoc";
+
 // Importing components for the Workspace Vault
 import WorkspaceVaultList from "./pages/Workspace/W-DocList";
 import WorkspaceUploadDoc from "./components/Workspace/WorkspaceDocs/UploadDoc";
@@ -19,7 +22,6 @@ import WorkspaceEditNote from "./components/Workspace/WorkspaceDocs/EditNote";
 import WorkspaceViewDoc from "./components/Workspace/WorkspaceDocs/ViewDoc";
 import WorkspaceEditDoc from "./components/Workspace/WorkspaceDocs/EditDoc";
 import WorkspaceTags from "./components/Workspace/WorkspaceDocs/WorkspaceTags";
-import WCalendarPage from "./pages/Workspace/W-CalendarPage";
 
 function App() {
   return (
@@ -27,6 +29,7 @@ function App() {
       <Routes>
         <Route path="/" element={<AuthPage />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/account/manage" element={<ManageAccount />} />
         {/* Private Vault Routes */}
         <Route path="/privatespace/vaults" element={<PrivateDocList />} />
@@ -46,7 +49,6 @@ function App() {
         <Route path="/workspace/vaults/doc-view/:id" element={<WorkspaceViewDoc />} />
         <Route path="/workspace/vaults/doc-edit/:id" element={<WorkspaceEditDoc />} />
         <Route path="/workspace/vaults/tags" element={<WorkspaceTags />} />
-        <Route path="/workspace/calendar" element={<WCalendarPage />} />
        
       </Routes>
     </Router>

@@ -17,7 +17,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isBetween);
 
-export default function WCalendarPage() {
+export default function CalendarPage() {
   // --- pull the real fields from the Zustand store
   const view        = useCalendarStore(s => s.view);
   const range       = useCalendarStore(s => s.range);      // { from, to } (ISO or null)

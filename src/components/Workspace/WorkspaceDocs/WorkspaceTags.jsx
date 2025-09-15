@@ -195,7 +195,7 @@ export default function WorkspaceTags() {
                         filtered.map(tag => (
                         <tr
                             key={tag.id}
-                            className="hover:bg-gray-50"
+                            className="hover:bg-gray-50 text-xs"
                             onClick={() => setSelectedId(tag.id)}
                         >
                             <td className="p-2 align-middle">
@@ -215,7 +215,7 @@ export default function WorkspaceTags() {
                                 className="inline-block w-3 h-3 rounded"
                                 style={{ backgroundColor: tag.color || '#e5e7eb' }}
                                 />
-                                <span className="font-bold text-gray-800">{tag.name}</span>
+                                <span className="text-gray-800">{tag.name}</span>
                                 {/* {tag.slug ? (
                                 <span className="text-xs text-gray-400">/{tag.slug}</span>
                                 ) : null} */}
@@ -230,13 +230,13 @@ export default function WorkspaceTags() {
                             <div className="inline-flex items-center gap-2">
                                 <button
                                 onClick={(e) => { e.stopPropagation(); handleEdit(tag); }}
-                                className="px-2 py-1 rounded border border-gray-300 hover:bg-gray-50"
+                                className="px-2 py-1 text-xs rounded border border-gray-300 hover:bg-gray-50"
                                 >
                                 Edit
                                 </button>
                                 <button
                                 onClick={(e) => { e.stopPropagation(); handleDelete(tag); }}
-                                className="px-2 py-1 rounded border border-gray-300 hover:bg-gray-50 text-red-600"
+                                className="px-2 py-1 text-xs rounded border border-gray-300 hover:bg-gray-50 text-red-600"
                                 >
                                 Delete
                                 </button>

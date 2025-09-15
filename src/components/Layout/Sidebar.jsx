@@ -55,6 +55,8 @@ export default function Sidebar() {
 
         <ul className="space-y-1">
           {navLink("Dashboard", <LayoutDashboard size={18} />, "/dashboard", "text-sm")}
+          {navLink("Calendar", <CalendarDays size={18} />, "/calendar", "text-sm")}
+
 
           <hr className="my-6 border-gray-800" />
 
@@ -90,7 +92,7 @@ export default function Sidebar() {
               >
                 {navLink("Projects Planner", <FolderKanban size={16} />, "/workspace/projects", "text-xs")}
                 {navLink("Messenger", <MessageCircle size={16} />, "/workspace/messenger", "text-xs")}
-                {navLink("Calendar", <CalendarDays size={16} />, "/workspace/calendar", "text-xs")}
+                {/* {navLink("Calendar", <CalendarDays size={16} />, "/workspace/calendar", "text-xs")} */}
                 {navLink("Docs", <Lock size={16} />, "/workspace/vaults", "text-xs")}
                 {navLink("Tags", <FileText size={16} />, "/workspace/vaults/tags", "text-xs")}
 
@@ -131,10 +133,11 @@ export default function Sidebar() {
                 className="ml-5 border-l border-gray-800 pl-3 space-y-1 text-xs"
               >
                 {navLink("Projects Planner", <FolderKanban size={16} />, "/privatespace/projects", "text-xs")}
-                {navLink("Messenger", <MessageCircle size={16} />, "/privatespace/messenger", "text-xs")}
+                {/* {navLink("Messenger", <MessageCircle size={16} />, "/privatespace/messenger", "text-xs")} */}
                 {/* {navLink("Calendar", <CalendarDays size={16} />, "/privatespace/calendar", "text-xs")} */}
                 {/* {navLink("Documents", <FileText size={16} />, "/privatespace/documents", "text-xs")} */}
                 {navLink("Docs", <Lock size={16} />, "/privatespace/vaults", "text-xs")}
+                {navLink("Tags", <FileText size={16} />, "/privatespace/vaults/tags", "text-xs")}
               </motion.ul>
             )}
           </AnimatePresence>
