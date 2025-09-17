@@ -102,7 +102,7 @@ export default function PrivateUploadNote() {
   const [newTag, setNewTag] = useState("");
   const [pendingTags, setPendingTags] = useState([]); // New state for tags to be added
 
-  // 🔹 Use the PRIVATE SPACE STORE (single source of truth)
+  // Use the PRIVATE SPACE STORE (single source of truth)
   const activeSpaceId = usePrivateSpaceStore((s) => s.activeSpaceId);
   const setActiveSpaceId = usePrivateSpaceStore((s) => s.setActiveSpaceId);
 

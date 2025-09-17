@@ -113,69 +113,37 @@ const WorkspaceUploadNote = () => {
     const [editRow, setEditRow] = useState(null); // for future use if editing existing rows
 
     // Fetch and set active workspace on mount
-    // 1) On mount, pick an active workspace ID for this user
+    // Keep name in sync for header/debug
     useEffect(() => {
+        if (!activeWorkspaceId) { setWsName(''); return; }
         (async () => {
-            const { data: { user } = {} } = await supabase.auth.getUser();
-            if (!user?.id) return;
-
-            const { data, error } = await supabase
-            .from('workspace_members')
-            .select('workspace_id, created_at, is_admin, sort_order')
-            .eq('user_id', user.id)                         // profiles.id == auth.users.id
-            .order('sort_order', { ascending: true, nullsLast: true })
-            .order('is_admin', { ascending: false, nullsLast: true })
-            .order('created_at', { ascending: false })
-            .limit(1)
+        const { data, error } = await supabase
+            .from('workspaces')
+            .select('name')
+            .eq('id', activeWorkspaceId)
             .maybeSingle();
-
-            if (error) {
-                console.error('membership check error:', error);
-                return;
-            }
-            if (data?.workspace_id) {
-                setActiveWorkspaceId(data.workspace_id);
-                console.log('Active Workspace ID:', data.workspace_id);
-            } else {
-                console.warn('⚠️ No workspace found for user.');
-            }
-        })();
-    }, [setActiveWorkspaceId]);
-
-    // 2) Whenever the active ID changes, fetch its name
-    useEffect(() => {
-        if (!activeWorkspaceId) {
-            setWsName("");
-            return;
-        }
-        (async () => {
-            const { data, error } = await supabase
-            .from("workspaces")
-            .select("name")
-            .eq("id", activeWorkspaceId)
-            .single();
-
-            setWsName(error ? "" : data?.name ?? "");
+        setWsName(error ? '' : (data?.name || ''));
         })();
     }, [activeWorkspaceId]);
 
-    // 3) On mount, also fetch the user's default workspace (if any)
+    // Debug
+    useEffect(() => {
+        console.log('W-UploadNote — activeWorkspaceId:', activeWorkspaceId, 'name:', wsName);
+    }, [activeWorkspaceId, wsName]);
+
+    // Fetch tags for this workspace (optionally filter by section='Workspace')
     useEffect(() => {
         (async () => {
-            const { data, error } = await supabase.rpc('get_default_workspace');
-            if (error) {
-                console.error('get_default_workspace error:', error);
-                return;
-            }
-                const row = data?.[0];
-            if (row?.workspace_id) {
-                setActiveWorkspaceId(row.workspace_id);
-                setWsName(row.name || '');
-            } else {
-                console.warn('⚠️ No workspace found for user.');
-            }
+        if (!activeWorkspaceId) { setAvailableTags([]); return; }
+        const { data, error } = await supabase
+            .from('vault_tags')
+            .select('name')
+            .eq('workspace_id', activeWorkspaceId);
+            // .eq('section', 'Workspace') // uncomment if you scope by section
+        if (error) { console.error('tag fetch failed:', error); setAvailableTags([]); return; }
+        setAvailableTags([...new Set((data || []).map(t => t.name))]);
         })();
-    }, [setActiveWorkspaceId]);
+    }, [activeWorkspaceId]);
 
     // Message timeout for success/error
     useEffect(() => {
@@ -230,11 +198,18 @@ const WorkspaceUploadNote = () => {
         setNewTag("");
     };
 
-    // Handle note upload-------------------------------------------
+    // ------------------------------------------- Handle note upload -------------------------------------------
     const handleCreate = async () => {
         setUploading(true)
         setSuccessMsg('')
         setErrorMsg('')
+
+        // basic validation
+        if (!activeWorkspaceId) {
+            setUploading(false);
+            setErrorMsg('No active workspace selected yet. Please wait a moment and try again.');
+            return;
+        }
 
         // auth
         const { data: userData } = await supabase.auth.getUser()
@@ -536,8 +511,9 @@ const WorkspaceUploadNote = () => {
                 />
 
                 <button
+                    type="button"
                     onClick={handleCreate}
-                    disabled={uploading}
+                    disabled={!activeWorkspaceId || uploading}
                     className="btn-secondary w-full mt-4"
                 >
                     {uploading ? "Creating..." : "Upload Note"}
