@@ -1,10 +1,69 @@
 import dayjs from 'dayjs'
 
 const HOUR_PX = 64;
+const MIN_HEIGHT = 28;
+const OVERLAP_GAP_PX = 2;
 
-// ---------- helpers ----------
+// ---------------------------------------- helpers --------------------------------------------------
 const minsSinceMidnight = (d) => d.hour() * 60 + d.minute();
 
+// Convert #RRGGBB or #RGB to rgba(r,g,b,alpha)
+function hexToRgba(hex, alpha = 0.85) {
+  if (!hex) return `rgba(37,99,235,${alpha})`; // default blue
+  let h = hex.replace('#', '');
+  if (h.length === 3) h = h.split('').map(ch => ch + ch).join('');
+  const int = parseInt(h, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// Lay out one day's segments into non-overlapping columns (lanes)
+function layoutDaySegments(items) {
+  // items: [{ id, segStart, segEnd, top, height, event }]
+  const byStart = [...items].sort((a, b) =>
+    a.segStart.valueOf() - b.segStart.valueOf() ||
+    a.segEnd.valueOf() - b.segEnd.valueOf()
+  );
+
+  let active = [];       // [{ end, lane, item }]
+  let clusterId = 0;
+  const clusterMax = new Map();
+
+  for (const it of byStart) {
+    const startMs = it.segStart.valueOf();
+
+    // Remove finished events. NOTE: end <= start means NO overlap.
+    active = active.filter(a => a.end > startMs);
+
+    // New cluster when active goes empty
+    if (active.length === 0) clusterId += 1;
+
+    // Smallest available lane index
+    const used = new Set(active.map(a => a.lane));
+    let lane = 0;
+    while (used.has(lane)) lane++;
+
+    active.push({ end: it.segEnd.valueOf(), lane, item: it });
+    it.lane = lane;
+    it.cluster = clusterId;
+
+    const prevMax = clusterMax.get(clusterId) ?? 0;
+    clusterMax.set(clusterId, Math.max(prevMax, lane + 1));
+  }
+
+  // Compute left/width per cluster
+  const maxByCluster = Object.fromEntries(clusterMax);
+  for (const it of byStart) {
+    const lanes = Math.max(1, maxByCluster[it.cluster] || 1);
+    it.widthPct = 100 / lanes;
+    it.leftPct = it.lane * it.widthPct;
+  }
+  return byStart;
+}
+
+// Clip a start/end range to fit within a single day
 function clipToDay(start, end, day) {
   const dayStart = day.startOf('day');
   const dayEnd   = day.endOf('day');
@@ -174,28 +233,56 @@ export default function CalendarGridWeek({ startOfWeek, events = [], onEventClic
 
             {/* timed segments for this day */}
             {timed.flatMap(e => {
-              const segs = buildSegmentsForEvent(e, weekStart);
-              return segs
-                .filter(s => s.dayIndex === dayIdx)
-                .map(s => {
+              // Collect this day’s segments first
+              const dayItems = [];
+              for (const e of timed) {
+                const segs = buildSegmentsForEvent(e, weekStart);
+                for (const s of segs) {
+                  if (s.dayIndex !== dayIdx) continue;
                   const top = (minsSinceMidnight(s.segStart) / 60) * HOUR_PX;
                   const heightMin = Math.max(1, s.segEnd.diff(s.segStart, 'minute'));
-                  const height = Math.max(28, (heightMin / 60) * HOUR_PX);
+                  const height = Math.max(MIN_HEIGHT, (heightMin / 60) * HOUR_PX);
+                  dayItems.push({
+                    id: `${e.id}-${dayIdx}-${s.segStart.valueOf()}`,
+                    segStart: s.segStart,
+                    segEnd: s.segEnd,
+                    top,
+                    height,
+                    event: e,
+                  });
+                }
+              }
 
-                  return (
-                    <div
-                      key={`${e.id}-${dayIdx}-${s.segStart.valueOf()}`}
-                      onClick={() => onEventClick?.(e)}
-                      className="absolute left-1 right-1 rounded px-2 py-1 text-[12px] font-medium text-white shadow cursor-pointer"
-                      style={{ top, height, background: e.color || '#2563eb' }}
-                    >
-                      <div className="leading-tight whitespace-normal break-words">{e.title}</div>
-                      <div className="text-[10px] opacity-80 mt-0.5">
-                        {s.segStart.format('h:mm a')} – {s.segEnd.format('h:mm a')}
-                      </div>
+              // Lay them out in lanes (side-by-side)
+              const laidOut = layoutDaySegments(dayItems);
+
+              return laidOut.map(it => {
+                const e = it.event;
+                const bg = hexToRgba(e.color || '#2563eb', 0.85); // slight transparency
+                const border = hexToRgba(e.color || '#2563eb', 1);
+
+                return (
+                  <div
+                    key={it.id}
+                    onClick={() => onEventClick?.(e)}
+                    className="absolute rounded px-2 py-1 text-[12px] font-medium text-white shadow cursor-pointer"
+                    style={{
+                      top: it.top,
+                      height: it.height,
+                      // side-by-side columns with a tiny gap
+                      left: `calc(${it.leftPct}% + ${OVERLAP_GAP_PX}px)`,
+                      width: `calc(${it.widthPct}% - ${OVERLAP_GAP_PX * 2}px)`,
+                      background: bg,
+                      borderLeft: `3px solid ${border}`,
+                    }}
+                  >
+                    <div className="leading-tight whitespace-normal break-words">{e.title}</div>
+                    <div className="text-[10px] opacity-90 mt-0.5">
+                      {it.segStart.format('h:mm a')} – {it.segEnd.format('h:mm a')}
                     </div>
-                  );
-                });
+                  </div>
+                );
+              });
             })}
           </div>
         ))}
