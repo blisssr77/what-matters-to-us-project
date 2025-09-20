@@ -26,6 +26,11 @@ export default function CalendarPage() {
   const setEvents   = useCalendarStore(s => s.setEvents);
 
   const { filters } = useCalendarFilters();
+  // subscribe to scope selections so queries refire
+  const selectedWorkspaceIds    = useCalendarStore(s => s.selectedWorkspaceIds);
+  const showAllWorkspaces       = useCalendarStore(s => s.showAllWorkspaces);
+  const selectedPrivateSpaceIds = useCalendarStore(s => s.selectedPrivateSpaceIds);
+  const showAllPrivateSpaces    = useCalendarStore(s => s.showAllPrivateSpaces);
 
   // --- navigation helpers
   const [quick, setQuick] = useState(null);
@@ -33,6 +38,7 @@ export default function CalendarPage() {
   const onCloseQuick = useCallback(() => setQuick(null), []);
   const canSeeVaulted = true;
 
+  // ---- editing/navigation handlers (edit, route to editor) -------------
   const onEdit = useCallback((e) => {
     // route wherever your editor is; example:
     if (e.scope === 'workspace') {
@@ -70,35 +76,22 @@ export default function CalendarPage() {
       const tz = dayjs.tz.guess(); // e.g. "America/Los_Angeles"
       const startISO = safeStart.tz(tz).startOf('day').toISOString();
       const endISO   = safeEnd.tz(tz).endOf('day').toISOString();
-
       const collected = [];
 
-      const { selectedWorkspaceIds, showAllWorkspaces } = useCalendarStore.getState();
-
-        if (filters.includeWorkspace) {
-        let q = supabase
-            .from('workspace_calendar_items_secure')
-            .select('*')
-            .lt('start_at', endISO)
-            .or(`end_at.is.null,end_at.gte.${startISO}`);
-
-        if (!showAllWorkspaces && selectedWorkspaceIds.length) {
-            q = q.in('workspace_id', selectedWorkspaceIds);
-        }
-
-        const { data, error } = await q;
-        // ... push to collected
-        }
-
-      // Workspace items — overlap predicate
+      // WORKSPACE items (filtered by selection)
       if (filters.includeWorkspace) {
-        const { data, error } = await supabase
+        let q = supabase
           .from('workspace_calendar_items_secure')
           .select('*')
           .lt('start_at', endISO)
           .or(`end_at.is.null,end_at.gte.${startISO}`);
 
-        if (!error && data) {
+        if (!showAllWorkspaces && selectedWorkspaceIds.length) {
+          q = q.in('workspace_id', selectedWorkspaceIds);
+        }
+
+        const { data, error } = await q;
+        if (!error && Array.isArray(data)) {
           collected.push(
             data.map(r => ({
               ...r,
@@ -106,18 +99,25 @@ export default function CalendarPage() {
               color: r.calendar_color || '#2563eb',
             }))
           );
+        } else if (error) {
+          console.error('workspace query error:', error);
         }
       }
 
-      // Private items — same overlap
+      // PRIVATE items (filtered by selection)
       if (filters.includePrivate) {
-        const { data, error } = await supabase
+        let q = supabase
           .from('private_calendar_items_secure')
           .select('*')
           .lt('start_at', endISO)
           .or(`end_at.is.null,end_at.gte.${startISO}`);
 
-        if (!error && data) {
+        if (!showAllPrivateSpaces && selectedPrivateSpaceIds.length) {
+          q = q.in('private_space_id', selectedPrivateSpaceIds);
+        }
+
+        const { data, error } = await q;
+        if (!error && Array.isArray(data)) {
           collected.push(
             data.map(r => ({
               ...r,
@@ -125,6 +125,8 @@ export default function CalendarPage() {
               color: r.calendar_color || '#7c3aed',
             }))
           );
+        } else if (error) {
+          console.error('private query error:', error);
         }
       }
 
@@ -138,6 +140,10 @@ export default function CalendarPage() {
     safeEnd.valueOf(),
     filters.includePrivate,
     filters.includeWorkspace,
+    selectedWorkspaceIds,
+    showAllWorkspaces,
+    selectedPrivateSpaceIds,
+    showAllPrivateSpaces,
     setEvents,
   ]);
 

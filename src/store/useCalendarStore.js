@@ -159,7 +159,7 @@ export const useCalendarStore = create(
           }
 
           // If both scopes enabled, union; if only one, use that; if none, show nothing
-          if (useWS && usePR) return passWS || passPR;
+          if (useWS && usePR) return passWS && passPR;
           if (useWS) return passWS;
           if (usePR) return passPR;
 
