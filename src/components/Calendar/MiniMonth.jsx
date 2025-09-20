@@ -14,14 +14,15 @@ export default function MiniMonth({
   onMonthChange,
 }) {
   // local controlled month (normalized to 1st of month)
-  const [curMonth, setCurMonth] = useState(month.startOf('month'))
-  const [showPicker, setShowPicker] = useState(false)
-  const popRef = useRef(null)
+  const [curMonth, setCurMonth] = useState(month.startOf('month'));
+  const [showPicker, setShowPicker] = useState(false);
+  const [selectedDay, setSelectedDay] = useState(null);
+  const popRef = useRef(null);
 
   // keep in sync if parent changes month prop
   useEffect(() => {
-    setCurMonth(month.startOf('month'))
-  }, [month])
+    setCurMonth(month.startOf('month'));
+  }, [month]);
 
   const start = useMemo(
     () => curMonth.startOf('month').startOf('week'),
@@ -40,7 +41,7 @@ export default function MiniMonth({
       cur = cur.add(1, 'day')
     }
     return list
-  }, [start, end])
+  }, [start, end]);
 
   // notify parent when visible month changes
   const emitMonthChange = useCallback((m) => {
@@ -120,20 +121,27 @@ export default function MiniMonth({
       {/* Days grid */}
       <div className="grid grid-cols-7 gap-1">
         {days.map((d) => {
-          const isToday = d.isSame(dayjs(), 'day')
-          const isCurMonth = d.month() === curMonth.month()
+          const isToday = d.isSame(dayjs(), 'day');
+          const isCurMonth = d.month() === curMonth.month();
+          const isSelected = !!selectedDay && d.isSame(selectedDay, 'day');
           return (
             <button
-              key={d.format('YYYY-MM-DD')}  // stable key
-              onClick={() => onDayClick?.(d)}
+              key={d.format('YYYY-MM-DD')}
+              onClick={() => {
+                setSelectedDay(d);
+                onDayClick?.(d);
+              }}
               className={[
                 'aspect-square rounded text-xs transition-colors',
-                isToday
+                isSelected
                   ? 'bg-blue-600 text-white'
-                  : isCurMonth
-                    ? 'hover:bg-gray-100 text-gray-800'
-                    : 'text-gray-400 hover:bg-gray-50',
+                  : isToday
+                    ? 'bg-blue-100 text-blue-700'
+                    : isCurMonth
+                      ? 'hover:bg-gray-100 text-gray-800'
+                      : 'text-gray-400 hover:bg-gray-50',
               ].join(' ')}
+              aria-pressed={isSelected}
             >
               {d.date()}
             </button>
@@ -167,6 +175,7 @@ export default function MiniMonth({
             </button>
           </div>
 
+          {/* Months grid */}
           <div className="grid grid-cols-3 gap-2">
             {monthsShort.map((m, idx) => {
               const picked = curMonth.year() === pickerYear && curMonth.month() === idx
