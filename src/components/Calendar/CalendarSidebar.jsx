@@ -20,15 +20,17 @@ async function loadMyPrivateSpace() {
   let res = await supabase
     .from('private_spaces')
     .select('id, name')
-    .eq('owner_id', user.id)
-    .maybeSingle()
+    .eq('created_by', user.id)
+    .order('sort_order', { ascending: true, nullsLast: true })
+    .order('created_at', { ascending: true });
 
   if (res.error || !res.data) {
     res = await supabase
       .from('private_spaces')
       .select('id, name')
-      .eq('user_id', user.id)
-      .maybeSingle()
+      .eq('created_by', user.id)
+      .order('sort_order', { ascending: true, nullsLast: true })
+      .order('created_at', { ascending: true });
   }
 
   return res.data || null
@@ -45,6 +47,16 @@ export default function CalendarSidebar() {
   const includePrivate   = !!filters.includePrivate
   const showPublicOnly   = !!filters.showPublicOnly
   const showVaultedOnly  = !!filters.showVaultedOnly
+
+  // pulling from the store so the sidebar can initialize scope state
+  const selectedWorkspaceIds     = useCalendarStore(s => s.selectedWorkspaceIds);
+  const setShowAllWorkspaces     = useCalendarStore(s => s.setShowAllWorkspaces);
+  const setSelectedWorkspaceIds  = useCalendarStore(s => s.setSelectedWorkspaceIds);
+
+  const selectedPrivateSpaceIds  = useCalendarStore(s => s.selectedPrivateSpaceIds);
+  const setShowAllPrivateSpaces  = useCalendarStore(s => s.setShowAllPrivateSpaces);
+  const setSelectedPrivateSpaceIds = useCalendarStore(s => s.setSelectedPrivateSpaceIds);
+
 
   // visible month control
   const visibleStart = useCalendarStore(s => s.range.from)
@@ -113,12 +125,21 @@ export default function CalendarSidebar() {
           <input
             type="checkbox"
             checked={includeWorkspace}
-            onChange={(e)=> setFilters({ includeWorkspace: e.target.checked })}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setFilters({ includeWorkspace: checked });
+              // initialize scope state when turning on
+              if (checked) {
+                if ((selectedWorkspaceIds || []).length === 0) {
+                  setShowAllWorkspaces(true);       // start with “All Workspaces”
+                }
+              }
+            }}
           />
           Workspace
         </label>
 
-        {/* Agile dropdown only when Workspace is on */}
+        {/* Dropdown only when Workspace is ON */}
         {includeWorkspace && (
           <div className="mt-2">
             <WorkspaceSelect />
@@ -130,14 +151,25 @@ export default function CalendarSidebar() {
           <input
             type="checkbox"
             checked={includePrivate}
-            onChange={(e)=> setFilters({ includePrivate: e.target.checked })}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setFilters({ includePrivate: checked });
+              // initialize scope state when turning on
+              if (checked) {
+                if ((selectedPrivateSpaceIds || []).length === 0) {
+                  setShowAllPrivateSpaces(true);     // start with “All My Private Spaces”
+                }
+              }
+            }}
           />
-          {myPrivate?.name || 'My Private'}
+          {/* Keep the label simple; you support multiple private spaces */}
+          My Private
         </label>
-        {/* Private dropdown only when Private is on */}
+
+        {/* Dropdown only when Private is ON */}
         {includePrivate && (
           <div className="mt-2">
-            <PrivateSpaceSelect/>
+            <PrivateSpaceSelect />
           </div>
         )}
 

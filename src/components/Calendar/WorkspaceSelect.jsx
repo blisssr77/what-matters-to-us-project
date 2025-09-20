@@ -17,36 +17,38 @@ export default function WorkspaceSelect({ className = "" }) {
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [q, setQ] = useState(""); // search query
-
+  const [q, setQ] = useState("");
   const btnRef = useRef(null);
   const [rect, setRect] = useState(null);
-  const [focusIdx, setFocusIdx] = useState(-1); // -1 = header row (“All Workspaces”)
+  const [focusIdx, setFocusIdx] = useState(-1);
 
-  // Load workspaces available to the user
+  // ✅ Load only the current user's workspaces
   useEffect(() => {
     let mounted = true;
     (async () => {
       setLoading(true);
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      if (!user?.id) { if (mounted) { setItems([]); setLoading(false); } return; }
+
       const { data, error } = await supabase
-        .from("workspace_members")
-        .select("workspace_id, workspaces(name)")
-        .order("created_at", { ascending: true });
+        .from('workspaces')
+        .select('id, name')
+        .eq('created_by', user.id) // correct owner field
+        .order('sort_order', { ascending: true, nullsLast: true })
+        .order('created_at', { ascending: true });
 
       if (!mounted) return;
-      const list = (error ? [] : data || []).map((r) => ({
-        id: r.workspace_id,
-        name: r.workspaces?.name || "Untitled",
-      }));
+      const list = (!error && Array.isArray(data))
+        ? data.map(r => ({ id: String(r.id), name: r.name || 'Untitled' }))
+        : [];
       list.sort((a, b) => a.name.localeCompare(b.name));
       setItems(list);
       setLoading(false);
     })();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
+  // Workspace label
   const label = useMemo(() => {
     if (showAllWorkspaces) return "All Workspaces";
     if (!selectedWorkspaceIds?.length) return "Choose workspaces";
@@ -57,67 +59,60 @@ export default function WorkspaceSelect({ className = "" }) {
     return `${selectedWorkspaceIds.length} workspaces`;
   }, [showAllWorkspaces, selectedWorkspaceIds, items]);
 
+  // Open/close menu
   const openMenu = () => {
     const el = btnRef.current;
     if (el) setRect(el.getBoundingClientRect());
-    setFocusIdx(-1); // focus header first
+    setFocusIdx(-1);
     setOpen(true);
   };
   const closeMenu = () => setOpen(false);
 
-  // Filtered list from query
+  // Filtered items
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return items;
     return items.filter((i) => i.name.toLowerCase().includes(s));
   }, [q, items]);
 
-  // Reset focus if filter changes
+  // Reset focus index when filtering changes
   useEffect(() => {
     setFocusIdx(filtered.length ? 0 : -1);
   }, [q]); // eslint-disable-line
 
-  // Keyboard handling
+  // Mouse/keyboard: ensure any selection disables "All"
+  const toggleId = (id) => {
+    if (showAllWorkspaces) setShowAllWorkspaces(false);
+    toggleWorkspaceId(String(id));
+  };
+
+  // Keyboard handling (kept)
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => {
       const total = filtered.length;
-      if (e.key === "Escape") {
+      if (e.key === "Escape") { e.preventDefault(); closeMenu(); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); setFocusIdx((i) => Math.min(i + 1, total - 1)); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); setFocusIdx((i) => Math.max(i - 1, -1)); }
+      else if (e.key === "Enter") {
         e.preventDefault();
-        closeMenu();
-      } else if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setFocusIdx((i) => Math.min(i + 1, total - 1));
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setFocusIdx((i) => Math.max(i - 1, -1));
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        if (focusIdx === -1) {
-          setShowAllWorkspaces(!showAllWorkspaces);
-        } else if (filtered[focusIdx]) {
-          if (showAllWorkspaces) setShowAllWorkspaces(false);
-          toggleWorkspaceId(filtered[focusIdx].id);
-        }
+        if (focusIdx === -1) setShowAllWorkspaces(!showAllWorkspaces);
+        else if (filtered[focusIdx]) toggleId(filtered[focusIdx].id);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, focusIdx, filtered, showAllWorkspaces, setShowAllWorkspaces, toggleWorkspaceId]);
+  }, [open, focusIdx, filtered, showAllWorkspaces, setShowAllWorkspaces]);
 
+  // Dropdown position
   const popStyle = useMemo(() => {
     if (!rect) return {};
-    return {
-      position: "fixed",
-      top: rect.bottom + 6,
-      left: rect.left,
-      width: rect.width,
-    };
+    return { position: "fixed", top: rect.bottom + 6, left: rect.left, width: rect.width };
   }, [rect]);
 
   const isSelected = (id) => selectedWorkspaceIds.includes(String(id));
 
-  const showSearch = items.length >= 20; // set to true to always show search
+  const showSearch = items.length >= 20;
 
   // Clear selections → back to “All Workspaces”
   const handleClear = () => {
@@ -201,13 +196,13 @@ export default function WorkspaceSelect({ className = "" }) {
               ) : filtered.length ? (
                 filtered.map((ws, idx) => {
                   const focused = idx === focusIdx;
-                  const selected = isSelected(ws.id);
+                  const selected = isSelected(String(ws.id));
                   return (
                     <button
                       key={ws.id}
                       type="button"
                       role="option"
-                      aria-selected={selected}
+                      aria-selected={selected && !showAllWorkspaces}
                       className={clsx(
                         "w-full flex items-center justify-between px-3 py-2 text-sm",
                         showAllWorkspaces ? "opacity-50" : "",
@@ -216,11 +211,15 @@ export default function WorkspaceSelect({ className = "" }) {
                       onMouseEnter={() => setFocusIdx(idx)}
                       onClick={() => {
                         if (showAllWorkspaces) setShowAllWorkspaces(false);
-                        toggleWorkspaceId(ws.id);
+                        toggleWorkspaceId(String(ws.id)); // ← coerce to string
                       }}
                     >
                       <div className="flex items-center gap-2 truncate">
-                        <input type="checkbox" readOnly checked={selected && !showAllWorkspaces} />
+                        <input
+                          type="checkbox"
+                          readOnly
+                          checked={selected && !showAllWorkspaces}
+                        />
                         <span className="truncate">{ws.name}</span>
                       </div>
                       {selected && !showAllWorkspaces && (

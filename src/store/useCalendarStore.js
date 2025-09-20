@@ -2,13 +2,13 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 // tiny helper so tag filters work whether you pass "Design" or "design"
-const slug = (s = '') =>
-  String(s)
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[^\w\s-]/g, '')
-    .trim()
-    .replace(/\s+/g, '-');
+// const slug = (s = '') =>
+//   String(s)
+//     .toLowerCase()
+//     .normalize('NFKD')
+//     .replace(/[^\w\s-]/g, '')
+//     .trim()
+//     .replace(/\s+/g, '-');
 
 const defaultFilters = {
   search: '',
@@ -66,7 +66,7 @@ export const useCalendarStore = create(
       setSelectedEventId: (id) => set({ selectedEventId: id }),
       clearSelected: () => set({ selectedEventId: null }),
 
-      // ---------- Workspace filtering ----------
+      // ------------------------------------------- Workspace filtering -------------------------------------------
       selectedWorkspaceIds: [],        // [] means "All Workspaces"
       showAllWorkspaces: true,
 
@@ -118,93 +118,52 @@ export const useCalendarStore = create(
       setIncludePrivate: (val) =>
         set({ filters: { ...get().filters, includePrivate: !!val } }),
 
-      // ---------- Derived helpers ----------
       _filterEvents: () => {
         const {
-          events,
-          filters,
-          currentUserId,
-          selectedWorkspaceIds,
-          selectedPrivateSpaceIds,
+          events = [],
+          filters = {},
+          selectedWorkspaceIds = [],
+          selectedPrivateSpaceIds = [],
           showAllWorkspaces,
           showAllPrivateSpaces,
         } = get();
 
-        const s = slug(filters.search || '');
-        const wsSet = new Set(selectedWorkspaceIds.map(String));
-        const psSet = new Set(selectedPrivateSpaceIds.map(String));
+        const useWS = !!filters.includeWorkspace;
+        const usePR = !!filters.includePrivate;
 
-        return events.filter((ev) => {
-          const x = ev.extendedProps || {};
+        const wsSet = new Set((selectedWorkspaceIds || []).map(String));
+        const prSet = new Set((selectedPrivateSpaceIds || []).map(String));
 
-          // Text search
-          const title = String(ev.title || '');
-          const titleMatch = s ? slug(title).includes(s) : true;
+        return (events || []).filter((ev) => {
+          const evWsId = ev?.workspace_id != null ? String(ev.workspace_id) : null;
+          const evPrId = ev?.private_space_id != null ? String(ev.private_space_id) : null;
 
-          // assignee
-          const assigneeOk = filters.assigneeId
-            ? String(x.assignee_id || '') === String(filters.assigneeId)
-            : true;
+          // workspace pass
+          let passWS = false;
+          if (useWS) {
+            if (showAllWorkspaces) {
+              passWS = evWsId !== null; // any workspace event
+            } else {
+              passWS = evWsId !== null && wsSet.has(evWsId);
+            }
+          }
 
-          // status
-          const statusOk =
-            filters.statuses && filters.statuses.length
-              ? filters.statuses.includes(x.status)
-              : true;
+          // private pass
+          let passPR = false;
+          if (usePR) {
+            if (showAllPrivateSpaces) {
+              passPR = evPrId !== null; // any private event
+            } else {
+              passPR = evPrId !== null && prSet.has(evPrId);
+            }
+          }
 
-          // tags: expect x.tags as text[]
-          const tagOk =
-            filters.tagSlugs && filters.tagSlugs.length
-              ? (Array.isArray(x.tags)
-                  ? x.tags.map(slug).some((tg) => filters.tagSlugs.includes(tg))
-                  : false)
-              : true;
+          // If both scopes enabled, union; if only one, use that; if none, show nothing
+          if (useWS && usePR) return passWS || passPR;
+          if (useWS) return passWS;
+          if (usePR) return passPR;
 
-          // mineOnly
-          const mineOk = filters.mineOnly
-            ? currentUserId && String(x.created_by || '') === String(currentUserId)
-            : true;
-
-          // scope filtering (workspace/private)
-          // We try to infer by presence of ids; if not present, we don't exclude.
-          const wsId = x.workspace_id != null ? String(x.workspace_id) : null;
-          const psId = x.private_space_id != null ? String(x.private_space_id) : null;
-
-          // If workspace scope is OFF, drop workspace-scoped events.
-          const wsScopeOk = filters.includeWorkspace
-            ? (
-                // if we have workspace selection enforced:
-                showAllWorkspaces || !wsId ? true : wsSet.has(wsId)
-              )
-            : (
-                // workspace disabled → exclude those that clearly belong to a workspace
-                wsId ? false : true
-              );
-
-          // If private scope is OFF, drop private-scoped events.
-          const psScopeOk = filters.includePrivate
-            ? (
-                showAllPrivateSpaces || !psId ? true : psSet.has(psId)
-              )
-            : (
-                psId ? false : true
-              );
-
-          // Optional visibility toggles
-          const publicOnlyOk = filters.showPublicOnly ? x.is_vaulted !== true : true;
-          const vaultedOnlyOk = filters.showVaultedOnly ? x.is_vaulted === true : true;
-
-          return (
-            titleMatch &&
-            assigneeOk &&
-            statusOk &&
-            tagOk &&
-            mineOk &&
-            wsScopeOk &&
-            psScopeOk &&
-            publicOnlyOk &&
-            vaultedOnlyOk
-          );
+          return false;
         });
       },
     }),
