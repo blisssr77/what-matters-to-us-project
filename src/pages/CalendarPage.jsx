@@ -49,7 +49,21 @@ export default function CalendarPage() {
     }
   }, []);
 
-  // ---- derive a safe range (prevents .startOf on undefined) -----------------
+  // ----------------- helper to compute start/end for a given view + anchor -----------------
+  const periodFor = useCallback((v, anchor) => {
+    const a = dayjs(anchor);
+    if (v === 'day') {
+      return { start: a.startOf('day'), end: a.endOf('day') };
+    }
+    if (v === 'month') {
+      // month grid often wants the full matrix (sun–sat wrap)
+      return { start: a.startOf('month').startOf('week'), end: a.endOf('month').endOf('week') };
+    }
+    // week
+    return { start: a.startOf('week'), end: a.endOf('week') };
+  }, []);
+
+  // ----------------- derive a safe range (prevents .startOf on undefined) -----------------
   const { safeStart, safeEnd } = useMemo(() => {
     const now = dayjs();
     const start = range?.from ? dayjs(range.from) : now.startOf('week');
@@ -57,18 +71,38 @@ export default function CalendarPage() {
     return { safeStart: start, safeEnd: end };
   }, [range]);
 
-  // ---- navigation handlers (today / prev / next) ----------------------------
-  const goToWeek = useCallback((anchor) => {
-    const start = dayjs(anchor).startOf('week');
-    const end   = start.endOf('week');
+  // ----------------- navigation handlers (today / prev / next) -----------------
+  // navigate using current view
+  const goTo = useCallback((anchor) => {
+    const { start, end } = periodFor(view, anchor);
     setRange({ from: start.toISOString(), to: end.toISOString() });
-  }, [setRange]);
+  }, [periodFor, setRange, view]);
 
-  const onToday = useCallback(() => goToWeek(dayjs()), [goToWeek]);
-  const onPrev  = useCallback(() => goToWeek(safeStart.subtract(1, 'week')), [goToWeek, safeStart]);
-  const onNext  = useCallback(() => goToWeek(safeStart.add(1, 'week')),       [goToWeek, safeStart]);
+  const onToday = useCallback(() => goTo(dayjs()), [goTo]);
+  const onPrev  = useCallback(() => {
+    const delta =
+      view === 'day'   ? { d: 1 } :
+      view === 'month' ? { M: 1 } :
+                         { w: 1 };
+   const anchor =
+     view === 'day'   ? safeStart.subtract(delta.d, 'day') :
+     view === 'month' ? safeStart.subtract(delta.M, 'month') :
+                        safeStart.subtract(delta.w, 'week');
+   goTo(anchor);
+  }, [goTo, safeStart, view]);
+  const onNext  = useCallback(() => {
+    const delta =
+      view === 'day'   ? { d: 1 } :
+      view === 'month' ? { M: 1 } :
+                          { w: 1 };
+    const anchor =
+      view === 'day'   ? safeStart.add(delta.d, 'day') :
+      view === 'month' ? safeStart.add(delta.M, 'month') :
+                          safeStart.add(delta.w, 'week');
+    goTo(anchor);
+  }, [goTo, safeStart, view]);
 
-  // ---- fetch items whenever range / filters change --------------------------
+  // ------------------------------ fetch items whenever range / filters change --------------------------
   useEffect(() => {
     let cancelled = false;
 
@@ -147,7 +181,7 @@ export default function CalendarPage() {
     setEvents,
   ]);
 
-  // ---- simple client-side filtering ------------------------------
+  // ------------------------------ simple client-side filtering ------------------------------
   const filteredItems = useMemo(() => {
     const q = (filters.search || '').toLowerCase().trim()
     const tagSet = new Set(filters.tags || [])
@@ -158,12 +192,12 @@ export default function CalendarPage() {
         if (filters.showVaultedOnly && !ev.is_vaulted) return false
 
         if (q) {
-        const hay = `${ev.title || ''} ${(ev.tags || []).join(',')}`.toLowerCase()
-        if (!hay.includes(q)) return false
+          const hay = `${ev.title || ''} ${(ev.tags || []).join(',')}`.toLowerCase()
+          if (!hay.includes(q)) return false
         }
         if (tagSet.size) {
-        const evTags = new Set(ev.tags || [])
-        for (const t of tagSet) if (!evTags.has(t)) return false
+          const evTags = new Set(ev.tags || [])
+          for (const t of tagSet) if (!evTags.has(t)) return false
         }
         return true
     })
@@ -182,11 +216,27 @@ export default function CalendarPage() {
           <CalendarToolbar onToday={onToday} onPrev={onPrev} onNext={onNext} />
 
           <div className="flex-1 min-h-0">
-            <CalendarGridWeek
-              startOfWeek={safeStart.startOf('week')}
-              events={filteredItems}
-              onEventClick={setQuick}
-            />
+            {view === 'week' && (
+              <CalendarGridWeek
+                startOfWeek={safeStart.startOf('week')}
+                events={filteredItems}
+                onEventClick={setQuick}
+              />
+            )}
+            {/* {view === 'day' && typeof CalendarGridDay !== 'undefined' && (
+              <CalendarGridDay
+                date={safeStart}
+                events={filteredItems}
+                onEventClick={setQuick}
+              />
+            )}
+            {view === 'month' && typeof CalendarGridMonth !== 'undefined' && (
+              <CalendarGridMonth
+                monthStart={safeStart.startOf('month')}
+                events={filteredItems}
+                onEventClick={setQuick}
+              />
+            )} */}
           </div>
         </section>
       </div>

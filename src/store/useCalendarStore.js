@@ -27,7 +27,7 @@ export const useCalendarStore = create(
     (set, get) => ({
       // ---------- Core state ----------
       range: { from: null, to: null },          // ISO strings
-      view: 'timeGridWeek',                      // 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay'...
+      view: 'week',                      // 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay'...
       filters: defaultFilters,
       currentUserId: null,                       // set from your auth flow (optional)
       events: [],                                // FullCalendar-ready objects
@@ -112,7 +112,7 @@ export const useCalendarStore = create(
         ...(flag ? { selectedPrivateSpaceIds: [] } : null),
       }),
 
-      // ---------- Convenience flags for scope (sidebar switches) ----------
+      // ------------------------------------- Convenience flags for scope (sidebar switches) -------------------------------------
       setIncludeWorkspace: (val) =>
         set({ filters: { ...get().filters, includeWorkspace: !!val } }),
       setIncludePrivate: (val) =>

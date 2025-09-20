@@ -77,11 +77,16 @@ export default function CalendarSidebar() {
     return () => { mounted = false }
   }, [])
 
+  // when clicking a day in the mini-month, adjust range according to current view
   const handleDayClick = (d) => {
-    const start = d.startOf('week')
-    const end   = d.endOf('week')
-    setView('timeGridWeek')
-    setRange({ from: start.toISOString(), to: end.toISOString() })
+    const { view } = useCalendarStore.getState(); // read current view without causing rerender
+    const periodFor = (v, anchor) => {
+      if (v === 'day')   return { start: anchor.startOf('day'),   end: anchor.endOf('day') };
+      if (v === 'month') return { start: anchor.startOf('month').startOf('week'), end: anchor.endOf('month').endOf('week') };
+      return { start: anchor.startOf('week'), end: anchor.endOf('week') };
+   };
+   const { start, end } = periodFor(view, d);
+   setRange({ from: start.toISOString(), to: end.toISOString() });
   }
 
   // Mutually-exclusive visibility toggles
@@ -100,14 +105,14 @@ export default function CalendarSidebar() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="p-3 border-b">
+      {/* <div className="p-3 border-b">
         <button
           type="button"
           className="btn-main w-full inline-flex items-center justify-center gap-2 rounded bg-blue-600 hover:bg-blue-700 text-white py-2 text-sm"
         >
           <Plus size={16}/> Create
         </button>
-      </div>
+      </div> */}
 
       <div className="p-3 border-b">
         <MiniMonth
@@ -136,12 +141,12 @@ export default function CalendarSidebar() {
               }
             }}
           />
-          Workspace
+          My Workspaces
         </label>
 
         {/* Dropdown only when Workspace is ON */}
         {includeWorkspace && (
-          <div className="mt-2">
+          <div className="mt-2 text-gray-700">
             <WorkspaceSelect />
           </div>
         )}
@@ -163,20 +168,20 @@ export default function CalendarSidebar() {
             }}
           />
           {/* Keep the label simple; you support multiple private spaces */}
-          My Private
+          My Private Spaces
         </label>
 
         {/* Dropdown only when Private is ON */}
         {includePrivate && (
-          <div className="mt-2">
+          <div className="mt-2 text-gray-700">
             <PrivateSpaceSelect />
           </div>
         )}
 
         {/* Visibility filter (mutually exclusive) */}
-        <div className="mt-3">
+        <div className="mt-3 text-gray-700 border-t pt-3">
           <h5 className="text-xs font-semibold text-gray-600 uppercase">Visibility</h5>
-          <label className="mt-1 flex items-center gap-2 text-sm">
+          <label className="mt-1 flex items-center gap-2 text-sm pt-1">
             <input
               type="checkbox"
               checked={showPublicOnly}
@@ -184,7 +189,7 @@ export default function CalendarSidebar() {
             />
             Public only
           </label>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm pt-1">
             <input
               type="checkbox"
               checked={showVaultedOnly}
