@@ -26,6 +26,8 @@ export const useCalendarStore = create(
   persist(
     (set, get) => ({
       // ---------- Core state ----------
+      anchorDate: null,                      // ISO string of “selected date”
+      setAnchorDate: (isoOrNull) => set({ anchorDate: isoOrNull }),
       range: { from: null, to: null },          // ISO strings
       view: 'week',                      // 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay'...
       filters: defaultFilters,
@@ -177,6 +179,7 @@ export const useCalendarStore = create(
         showAllWorkspaces: state.showAllWorkspaces,
         selectedPrivateSpaceIds: state.selectedPrivateSpaceIds,
         showAllPrivateSpaces: state.showAllPrivateSpaces,
+        anchorDate: state.anchorDate,
       }),
     }
   )

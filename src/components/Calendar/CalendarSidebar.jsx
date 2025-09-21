@@ -3,9 +3,13 @@ import { Plus } from 'lucide-react'
 import MiniMonth from './MiniMonth'
 import WorkspaceSelect from './WorkspaceSelect'
 import { useCalendarStore } from '@/store/useCalendarStore'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import PrivateSpaceSelect from './PrivateSpaceSelect'
+
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+dayjs.extend(utc); dayjs.extend(timezone);
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -57,14 +61,20 @@ export default function CalendarSidebar() {
   const setShowAllPrivateSpaces  = useCalendarStore(s => s.setShowAllPrivateSpaces);
   const setSelectedPrivateSpaceIds = useCalendarStore(s => s.setSelectedPrivateSpaceIds);
 
-
   // visible month control
-  const visibleStart = useCalendarStore(s => s.range.from)
+  const r = useCalendarStore(s => s.range);
+  
+  const miniAnchor = useMemo(() => {
+    if (!r?.from || !r?.to) return dayjs();
+    const from = dayjs(r.from), to = dayjs(r.to);
+    return from.add(Math.floor(to.diff(from, 'day') / 2), 'day'); // e.g., Wed of the current week
+  }, [r]);
+
   const [month, setMonth] = useState(dayjs())
   useEffect(() => {
-    const base = visibleStart ? dayjs(visibleStart) : dayjs()
+    const base = miniAnchor ? dayjs(miniAnchor) : dayjs()
     setMonth(base.startOf('month'))
-  }, [visibleStart])
+  }, [miniAnchor])
 
   // private space name
   const [myPrivate, setMyPrivate] = useState(null)
@@ -77,17 +87,21 @@ export default function CalendarSidebar() {
     return () => { mounted = false }
   }, [])
 
-  // when clicking a day in the mini-month, adjust range according to current view
+  // Click a day in the mini-month to navigate
   const handleDayClick = (d) => {
-    const { view } = useCalendarStore.getState(); // read current view without causing rerender
-    const periodFor = (v, anchor) => {
-      if (v === 'day')   return { start: anchor.startOf('day'),   end: anchor.endOf('day') };
-      if (v === 'month') return { start: anchor.startOf('month').startOf('week'), end: anchor.endOf('month').endOf('week') };
-      return { start: anchor.startOf('week'), end: anchor.endOf('week') };
-   };
-   const { start, end } = periodFor(view, d);
-   setRange({ from: start.toISOString(), to: end.toISOString() });
-  }
+    const v = useCalendarStore.getState().view;
+    const start = v === 'month'
+      ? dayjs(d).startOf('month').startOf('week')
+      : v === 'day'
+        ? dayjs(d).startOf('day')
+        : dayjs(d).startOf('week');
+    const end = v === 'month'
+      ? dayjs(d).endOf('month').endOf('week')
+      : v === 'day'
+        ? dayjs(d).endOf('day')
+        : dayjs(d).endOf('week');
+    useCalendarStore.getState().setRange({ from: start.toISOString(), to: end.toISOString() });
+  };
 
   // Mutually-exclusive visibility toggles
   const onTogglePublic = (checked) => {
@@ -180,7 +194,7 @@ export default function CalendarSidebar() {
 
         {/* Visibility filter (mutually exclusive) */}
         <div className="mt-3 text-gray-700 border-t pt-3">
-          <h5 className="text-xs font-semibold text-gray-600 uppercase">Visibility</h5>
+          <h5 className="text-xs font-bold text-gray-700 uppercase mb-2">Visibility</h5>
           <label className="mt-1 flex items-center gap-2 text-sm pt-1">
             <input
               type="checkbox"

@@ -1,67 +1,72 @@
 import dayjs from 'dayjs'
 
-const HOUR_PX = 64;
-const MIN_HEIGHT = 28;
-const OVERLAP_GAP_PX = 2;
+import {
+  HOUR_PX, MIN_HEIGHT, OVERLAP_GAP_PX,
+  minsSinceMidnight, segKey, hexToRgba,
+  layoutDaySegments, buildSegmentsForEvent
+} from './gridUtils';
 
 // ---------------------------------------- helpers --------------------------------------------------
-const minsSinceMidnight = (d) => d.hour() * 60 + d.minute();
+
+// Unique key for a segment (for React list)
+// const segKey = (e, dayIdx, s) =>
+//   `${e.scope || 'x'}:${e.id}:${dayIdx}:${s.segStart.valueOf()}:${s.segEnd.valueOf()}`;
 
 // Convert #RRGGBB or #RGB to rgba(r,g,b,alpha)
-function hexToRgba(hex, alpha = 0.85) {
-  if (!hex) return `rgba(37,99,235,${alpha})`; // default blue
-  let h = hex.replace('#', '');
-  if (h.length === 3) h = h.split('').map(ch => ch + ch).join('');
-  const int = parseInt(h, 16);
-  const r = (int >> 16) & 255;
-  const g = (int >> 8) & 255;
-  const b = int & 255;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
+// function hexToRgba(hex, alpha = 0.85) {
+//   if (!hex) return `rgba(37,99,235,${alpha})`; // default blue
+//   let h = hex.replace('#', '');
+//   if (h.length === 3) h = h.split('').map(ch => ch + ch).join('');
+//   const int = parseInt(h, 16);
+//   const r = (int >> 16) & 255;
+//   const g = (int >> 8) & 255;
+//   const b = int & 255;
+//   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+// }
 
 // Lay out one day's segments into non-overlapping columns (lanes)
-function layoutDaySegments(items) {
-  // items: [{ id, segStart, segEnd, top, height, event }]
-  const byStart = [...items].sort((a, b) =>
-    a.segStart.valueOf() - b.segStart.valueOf() ||
-    a.segEnd.valueOf() - b.segEnd.valueOf()
-  );
+// function layoutDaySegments(items) {
+//   // items: [{ id, segStart, segEnd, top, height, event }]
+//   const byStart = [...items].sort((a, b) =>
+//     a.segStart.valueOf() - b.segStart.valueOf() ||
+//     a.segEnd.valueOf() - b.segEnd.valueOf()
+//   );
 
-  let active = [];       // [{ end, lane, item }]
-  let clusterId = 0;
-  const clusterMax = new Map();
+//   let active = [];       // [{ end, lane, item }]
+//   let clusterId = 0;
+//   const clusterMax = new Map();
 
-  for (const it of byStart) {
-    const startMs = it.segStart.valueOf();
+//   for (const it of byStart) {
+//     const startMs = it.segStart.valueOf();
 
-    // Remove finished events. NOTE: end <= start means NO overlap.
-    active = active.filter(a => a.end > startMs);
+//     // Remove finished events. NOTE: end <= start means NO overlap.
+//     active = active.filter(a => a.end > startMs);
 
-    // New cluster when active goes empty
-    if (active.length === 0) clusterId += 1;
+//     // New cluster when active goes empty
+//     if (active.length === 0) clusterId += 1;
 
-    // Smallest available lane index
-    const used = new Set(active.map(a => a.lane));
-    let lane = 0;
-    while (used.has(lane)) lane++;
+//     // Smallest available lane index
+//     const used = new Set(active.map(a => a.lane));
+//     let lane = 0;
+//     while (used.has(lane)) lane++;
 
-    active.push({ end: it.segEnd.valueOf(), lane, item: it });
-    it.lane = lane;
-    it.cluster = clusterId;
+//     active.push({ end: it.segEnd.valueOf(), lane, item: it });
+//     it.lane = lane;
+//     it.cluster = clusterId;
 
-    const prevMax = clusterMax.get(clusterId) ?? 0;
-    clusterMax.set(clusterId, Math.max(prevMax, lane + 1));
-  }
+//     const prevMax = clusterMax.get(clusterId) ?? 0;
+//     clusterMax.set(clusterId, Math.max(prevMax, lane + 1));
+//   }
 
-  // Compute left/width per cluster
-  const maxByCluster = Object.fromEntries(clusterMax);
-  for (const it of byStart) {
-    const lanes = Math.max(1, maxByCluster[it.cluster] || 1);
-    it.widthPct = 100 / lanes;
-    it.leftPct = it.lane * it.widthPct;
-  }
-  return byStart;
-}
+//   // Compute left/width per cluster
+//   const maxByCluster = Object.fromEntries(clusterMax);
+//   for (const it of byStart) {
+//     const lanes = Math.max(1, maxByCluster[it.cluster] || 1);
+//     it.widthPct = 100 / lanes;
+//     it.leftPct = it.lane * it.widthPct;
+//   }
+//   return byStart;
+// }
 
 // Clip a start/end range to fit within a single day
 function clipToDay(start, end, day) {
@@ -136,32 +141,39 @@ function buildDailyWindowFromRange(e, weekStart) {
 }
 
 // Dispatcher
-function buildSegmentsForEvent(e, weekStart) {
-  const hasExplicitDaily =
-    e.calendar_repeat === 'daily' &&
-    e.calendar_window_start &&
-    e.calendar_window_end;
+// function buildSegmentsForEvent(e, weekStart) {
+//   const hasExplicitDaily =
+//     e.calendar_repeat === 'daily' &&
+//     e.calendar_window_start &&
+//     e.calendar_window_end;
 
-  if (hasExplicitDaily) {
-    return buildDailyWindowSegments(e, weekStart);
-  }
+//   if (hasExplicitDaily) {
+//     return buildDailyWindowSegments(e, weekStart);
+//   }
 
-  const hasMultiDayRange =
-    !e.all_day && e.end_at && dayjs(e.end_at).startOf('day').diff(dayjs(e.start_at).startOf('day'), 'day') >= 1;
+//   const hasMultiDayRange =
+//     !e.all_day && e.end_at && dayjs(e.end_at).startOf('day').diff(dayjs(e.start_at).startOf('day'), 'day') >= 1;
 
-  if (hasMultiDayRange) {
-    return buildDailyWindowFromRange(e, weekStart);
-  }
+//   if (hasMultiDayRange) {
+//     return buildDailyWindowFromRange(e, weekStart);
+//   }
 
-  return splitIntoDaySegments(e, weekStart);
-}
+//   return splitIntoDaySegments(e, weekStart);
+// }
 
 export default function CalendarGridWeek({ startOfWeek, events = [], onEventClick }) {
   const weekStart = dayjs(startOfWeek);
   const days = [...Array(7)].map((_, i) => weekStart.add(i, 'day'));
 
   const allDay = events.filter(e => e.all_day);
-  const timed  = events.filter(e => !e.all_day);
+  const timedRaw = events.filter(e => !e.all_day);
+  const seen = new Set();
+  const timed = timedRaw.filter(e => {
+    const k = `${e.scope || 'x'}:${e.id}:${e.start_at}:${e.end_at || ''}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 
   return (
     <div className="h-full flex flex-col">
@@ -185,17 +197,16 @@ export default function CalendarGridWeek({ startOfWeek, events = [], onEventClic
           {allDay.map(e => {
             const start = dayjs(e.start_at);
             const end   = e.end_at ? dayjs(e.end_at) : start;
-            // find first/last day indexes
             const first = Math.max(0, start.diff(weekStart.startOf('day'), 'day'));
             const last  = Math.min(6, end.diff(weekStart.startOf('day'), 'day'));
-            const colStart = 1 + first;         // grid column index inside 7 cols
-            const span     = Math.max(1, last - first + 1);
+            const colStart = 1 + first;
+            const span = Math.max(1, last - first + 1);
 
             return (
               <div
-                key={`allday-${e.id}`}
+                key={`allday:${e.scope || 'x'}:${e.id}:${start.valueOf()}:${(e.end_at ? dayjs(e.end_at) : start).valueOf()}`}
                 className="absolute left-0 right-0 px-1"
-                style={{ top: 4 + (e._rowIndex || 0) * 28 }}  // simple stacking row; optional
+                style={{ top: 4 + (e._rowIndex || 0) * 28 }}
               >
                 <div
                   onClick={() => onEventClick?.(e)}
@@ -232,44 +243,47 @@ export default function CalendarGridWeek({ startOfWeek, events = [], onEventClic
             ))}
 
             {/* timed segments for this day */}
-            {timed.flatMap(e => {
-              // Collect this day’s segments first
+            {(() => {
               const dayItems = [];
-              for (const e of timed) {
-                const segs = buildSegmentsForEvent(e, weekStart);
+              for (const ev of timed) {
+                const segs = buildSegmentsForEvent(ev, weekStart);
                 for (const s of segs) {
                   if (s.dayIndex !== dayIdx) continue;
                   const top = (minsSinceMidnight(s.segStart) / 60) * HOUR_PX;
                   const heightMin = Math.max(1, s.segEnd.diff(s.segStart, 'minute'));
                   const height = Math.max(MIN_HEIGHT, (heightMin / 60) * HOUR_PX);
                   dayItems.push({
-                    id: `${e.id}-${dayIdx}-${s.segStart.valueOf()}`,
+                    id: segKey(ev, dayIdx, s),   // unique key
                     segStart: s.segStart,
                     segEnd: s.segEnd,
                     top,
                     height,
-                    event: e,
+                    event: ev,
                   });
                 }
               }
 
-              // Lay them out in lanes (side-by-side)
               const laidOut = layoutDaySegments(dayItems);
+
+              // if (import.meta.env.DEV) {
+              //   const keys = laidOut.map(x => x.id);
+              //   console.log('keys for day', dayIdx, d.format('YYYY-MM-DD'), keys);
+              //   const dupes = keys.filter((k, i) => keys.indexOf(k) !== i);
+              //   if (dupes.length) console.warn('DUPED KEYS', { dayIdx, dupes });
+              // }
 
               return laidOut.map(it => {
                 const e = it.event;
-                const bg = hexToRgba(e.color || '#2563eb', 0.85); // slight transparency
+                const bg = hexToRgba(e.color || '#2563eb', 0.9);
                 const border = hexToRgba(e.color || '#2563eb', 1);
-
                 return (
                   <div
                     key={it.id}
                     onClick={() => onEventClick?.(e)}
-                    className="absolute rounded px-2 py-1 text-[12px] font-medium text-white shadow cursor-pointer"
+                    className="absolute rounded px-2 py-1 text-[12px] font-medium text-white shadow cursor-pointer hover:shadow-md hover:z-10"
                     style={{
                       top: it.top,
                       height: it.height,
-                      // side-by-side columns with a tiny gap
                       left: `calc(${it.leftPct}% + ${OVERLAP_GAP_PX}px)`,
                       width: `calc(${it.widthPct}% - ${OVERLAP_GAP_PX * 2}px)`,
                       background: bg,
@@ -283,7 +297,7 @@ export default function CalendarGridWeek({ startOfWeek, events = [], onEventClic
                   </div>
                 );
               });
-            })}
+            })()}
           </div>
         ))}
       </div>

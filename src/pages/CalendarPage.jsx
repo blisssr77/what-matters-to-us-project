@@ -11,6 +11,8 @@ import { useCalendarFilters } from '@/hooks/useCalendarFilters';
 import CalendarToolbar from '@/components/Calendar/CalendarToolbar';
 import CalendarSidebar from '@/components/Calendar/CalendarSidebar';
 import CalendarGridWeek from '@/components/Calendar/CalendarGridWeek';
+import CalendarGridDay from '@/components/Calendar/CalendarGridDay';
+import CalendarGridMonth from '@/components/Calendar/CalendarGridMonth';
 import EventQuickView from '@/components/Calendar/EventQuickView';
 
 dayjs.extend(utc);
@@ -24,6 +26,8 @@ export default function CalendarPage() {
   const setRange    = useCalendarStore(s => s.setRange);
   const events      = useCalendarStore(s => s.events);
   const setEvents   = useCalendarStore(s => s.setEvents);
+  const anchorDate  = useCalendarStore(s => s.anchorDate);
+  const setAnchorDate = useCalendarStore(s => s.setAnchorDate);
 
   const { filters } = useCalendarFilters();
   // subscribe to scope selections so queries refire
@@ -37,6 +41,7 @@ export default function CalendarPage() {
   const onEventClick = useCallback((e) => setQuick(e), []);
   const onCloseQuick = useCallback(() => setQuick(null), []);
   const canSeeVaulted = true;
+  const anchor = range?.from ? dayjs(range.from) : dayjs();
 
   // ---- editing/navigation handlers (edit, route to editor) -------------
   const onEdit = useCallback((e) => {
@@ -71,6 +76,20 @@ export default function CalendarPage() {
     return { safeStart: start, safeEnd: end };
   }, [range]);
 
+  // ----------------- derive a monthAnchor (for month view, to highlight current month) -----------------
+  const monthAnchor = useMemo(() => {
+    if (!range?.from || !range?.to) return dayjs();
+    const from = dayjs(range.from);
+    const to = dayjs(range.to);
+    return from.add(Math.floor(to.diff(from, 'day') / 2), 'day');
+  }, [range]);
+
+  // Active anchor for Month = selected anchorDate if set, else middle of range
+  const activeMonthAnchor = useMemo(
+    () => (anchorDate ? dayjs(anchorDate) : monthAnchor),
+    [anchorDate, monthAnchor]
+  );
+
   // ----------------- navigation handlers (today / prev / next) -----------------
   // navigate using current view
   const goTo = useCallback((anchor) => {
@@ -79,28 +98,46 @@ export default function CalendarPage() {
   }, [periodFor, setRange, view]);
 
   const onToday = useCallback(() => goTo(dayjs()), [goTo]);
-  const onPrev  = useCallback(() => {
-    const delta =
-      view === 'day'   ? { d: 1 } :
-      view === 'month' ? { M: 1 } :
-                         { w: 1 };
-   const anchor =
-     view === 'day'   ? safeStart.subtract(delta.d, 'day') :
-     view === 'month' ? safeStart.subtract(delta.M, 'month') :
-                        safeStart.subtract(delta.w, 'week');
-   goTo(anchor);
-  }, [goTo, safeStart, view]);
-  const onNext  = useCallback(() => {
-    const delta =
-      view === 'day'   ? { d: 1 } :
-      view === 'month' ? { M: 1 } :
-                          { w: 1 };
-    const anchor =
-      view === 'day'   ? safeStart.add(delta.d, 'day') :
-      view === 'month' ? safeStart.add(delta.M, 'month') :
-                          safeStart.add(delta.w, 'week');
-    goTo(anchor);
-  }, [goTo, safeStart, view]);
+  // currentAnchor is the date we move forward/back from; depends on view
+  const currentAnchor = useMemo(() => {
+    if (anchorDate) return dayjs(anchorDate)
+    if (!range?.from || !range?.to) return dayjs()
+    // middle of range is a safe fallback
+    const a = dayjs(range.from), b = dayjs(range.to)
+    return a.add(Math.floor(b.diff(a, 'day') / 2), 'day')
+  }, [anchorDate, range])
+
+  const onPrev = useCallback(() => {
+    const a =
+      view === 'day'   ? currentAnchor.subtract(1, 'day')
+      : view === 'month' ? currentAnchor.subtract(1, 'month')
+      : currentAnchor.subtract(1, 'week');
+      setAnchorDate(a.toISOString())
+    const { start, end } = periodFor(view, a)
+    setRange({ from: start.toISOString(), to: end.toISOString() })
+  }, [view, currentAnchor, setAnchorDate, setRange])
+
+
+  const onNext = useCallback(() => {
+    const a =
+      view === 'day'   ? currentAnchor.add(1, 'day')
+      : view === 'month' ? currentAnchor.add(1, 'month')
+      : currentAnchor.add(1, 'week');
+    if (view === 'month') setAnchorDate(a.toISOString());
+    goTo(a);
+  }, [goTo, currentAnchor, view]);
+
+  // ------------------------------ keep range in sync when view changes --------------------------
+  useEffect(() => {
+    const a = view === 'month' ? activeMonthAnchor : safeStart;
+    const { start, end } = periodFor(view, a);
+    const same =
+      range?.from && range?.to &&
+      dayjs(range.from).isSame(start) &&
+      dayjs(range.to).isSame(end);
+    if (!same) setRange({ from: start.toISOString(), to: end.toISOString() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
 
   // ------------------------------ fetch items whenever range / filters change --------------------------
   useEffect(() => {
@@ -216,6 +253,8 @@ export default function CalendarPage() {
           <CalendarToolbar onToday={onToday} onPrev={onPrev} onNext={onNext} />
 
           <div className="flex-1 min-h-0">
+            {/* Calendar grids weekStart on safeStart */}
+            {/* week view */}
             {view === 'week' && (
               <CalendarGridWeek
                 startOfWeek={safeStart.startOf('week')}
@@ -223,20 +262,30 @@ export default function CalendarPage() {
                 onEventClick={setQuick}
               />
             )}
-            {/* {view === 'day' && typeof CalendarGridDay !== 'undefined' && (
+            {/* single day view */}
+            {view === 'day' && (
               <CalendarGridDay
-                date={safeStart}
+                date={safeStart}                // safeStart is already at current anchor
                 events={filteredItems}
                 onEventClick={setQuick}
               />
             )}
-            {view === 'month' && typeof CalendarGridMonth !== 'undefined' && (
+            {/* month view */}
+            {view === 'month' && (
               <CalendarGridMonth
-                monthStart={safeStart.startOf('month')}
+                monthStart={activeMonthAnchor.startOf('month')}
                 events={filteredItems}
+                onDayClick={(d) => {
+                  const dd = dayjs(d);
+                  setAnchorDate(dd.toISOString());
+                  const start = dd.startOf('month').startOf('week');
+                  const end   = dd.endOf('month').endOf('week');
+                  setRange({ from: start.toISOString(), to: end.toISOString() });
+                }}
                 onEventClick={setQuick}
+                selectedDate={activeMonthAnchor}
               />
-            )} */}
+            )}
           </div>
         </section>
       </div>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import dayjs from 'dayjs'
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react'
+import { useCalendarStore } from '@/store/useCalendarStore';
 
 /**
  * Props
@@ -12,6 +13,7 @@ export default function MiniMonth({
   month = dayjs(),
   onDayClick,
   onMonthChange,
+  d,
 }) {
   // local controlled month (normalized to 1st of month)
   const [curMonth, setCurMonth] = useState(month.startOf('month'));
@@ -19,10 +21,33 @@ export default function MiniMonth({
   const [selectedDay, setSelectedDay] = useState(null);
   const popRef = useRef(null);
 
-  // keep in sync if parent changes month prop
+  const { anchorDate } = useCalendarStore();
+  const picked = anchorDate ? dayjs(anchorDate) : null;
+
+  // MiniMonth day click — set both range and anchorDate
+  const handleDayClick = (d) => {
+    const { view, setRange, setAnchorDate } = useCalendarStore.getState();
+    const anchor = dayjs(d);
+    setAnchorDate(anchor.toISOString());
+
+    if (view === 'month') {
+      const start = anchor.startOf('month').startOf('week');
+      const end   = anchor.endOf('month').endOf('week');
+      setAnchorDate(anchor.toISOString());
+      setRange({ from: start.toISOString(), to: end.toISOString() });
+    } else if (view === 'day') {
+      setAnchorDate(anchor.toISOString());
+      setRange({ from: anchor.startOf('day').toISOString(), to: anchor.endOf('day').toISOString() });
+    } else {
+      setAnchorDate(anchor.toISOString());
+      setRange({ from: anchor.startOf('week').toISOString(), to: anchor.endOf('week').toISOString() });
+    }
+  };
+
+  // sync selectedDay to Month when anchorDate changes
   useEffect(() => {
-    setCurMonth(month.startOf('month'));
-  }, [month]);
+    if (picked) setCurMonth(picked.startOf('month'));
+  }, [anchorDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const start = useMemo(
     () => curMonth.startOf('month').startOf('week'),
@@ -124,22 +149,21 @@ export default function MiniMonth({
           const isToday = d.isSame(dayjs(), 'day');
           const isCurMonth = d.month() === curMonth.month();
           const isSelected = !!selectedDay && d.isSame(selectedDay, 'day');
+          const isPicked = picked && d.isSame(picked, 'day');
           return (
             <button
               key={d.format('YYYY-MM-DD')}
               onClick={() => {
                 setSelectedDay(d);
-                onDayClick?.(d);
+                handleDayClick(d)
               }}
               className={[
                 'aspect-square rounded text-xs transition-colors',
-                isSelected
+                isPicked
                   ? 'bg-blue-600 text-white'
                   : isToday
-                    ? 'bg-blue-100 text-blue-700'
-                    : isCurMonth
-                      ? 'hover:bg-gray-100 text-gray-800'
-                      : 'text-gray-400 hover:bg-gray-50',
+                    ? 'ring-2 ring-blue-300 text-gray-900 bg-blue-200 hover:bg-blue-600'
+                    : isCurMonth ? 'hover:bg-gray-100 text-gray-800' : 'text-gray-400 hover:bg-gray-50',
               ].join(' ')}
               aria-pressed={isSelected}
             >
