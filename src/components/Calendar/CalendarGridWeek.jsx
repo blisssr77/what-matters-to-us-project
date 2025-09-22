@@ -1,169 +1,44 @@
 import dayjs from 'dayjs'
+import { useMemo } from 'react'
 
 import {
   HOUR_PX, MIN_HEIGHT, OVERLAP_GAP_PX,
   minsSinceMidnight, segKey, hexToRgba,
-  layoutDaySegments, buildSegmentsForEvent
+  layoutDaySegments, buildSegmentsForEvent,
+  intersectsDay,
 } from './gridUtils';
-
-// ---------------------------------------- helpers --------------------------------------------------
-
-// Unique key for a segment (for React list)
-// const segKey = (e, dayIdx, s) =>
-//   `${e.scope || 'x'}:${e.id}:${dayIdx}:${s.segStart.valueOf()}:${s.segEnd.valueOf()}`;
-
-// Convert #RRGGBB or #RGB to rgba(r,g,b,alpha)
-// function hexToRgba(hex, alpha = 0.85) {
-//   if (!hex) return `rgba(37,99,235,${alpha})`; // default blue
-//   let h = hex.replace('#', '');
-//   if (h.length === 3) h = h.split('').map(ch => ch + ch).join('');
-//   const int = parseInt(h, 16);
-//   const r = (int >> 16) & 255;
-//   const g = (int >> 8) & 255;
-//   const b = int & 255;
-//   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-// }
-
-// Lay out one day's segments into non-overlapping columns (lanes)
-// function layoutDaySegments(items) {
-//   // items: [{ id, segStart, segEnd, top, height, event }]
-//   const byStart = [...items].sort((a, b) =>
-//     a.segStart.valueOf() - b.segStart.valueOf() ||
-//     a.segEnd.valueOf() - b.segEnd.valueOf()
-//   );
-
-//   let active = [];       // [{ end, lane, item }]
-//   let clusterId = 0;
-//   const clusterMax = new Map();
-
-//   for (const it of byStart) {
-//     const startMs = it.segStart.valueOf();
-
-//     // Remove finished events. NOTE: end <= start means NO overlap.
-//     active = active.filter(a => a.end > startMs);
-
-//     // New cluster when active goes empty
-//     if (active.length === 0) clusterId += 1;
-
-//     // Smallest available lane index
-//     const used = new Set(active.map(a => a.lane));
-//     let lane = 0;
-//     while (used.has(lane)) lane++;
-
-//     active.push({ end: it.segEnd.valueOf(), lane, item: it });
-//     it.lane = lane;
-//     it.cluster = clusterId;
-
-//     const prevMax = clusterMax.get(clusterId) ?? 0;
-//     clusterMax.set(clusterId, Math.max(prevMax, lane + 1));
-//   }
-
-//   // Compute left/width per cluster
-//   const maxByCluster = Object.fromEntries(clusterMax);
-//   for (const it of byStart) {
-//     const lanes = Math.max(1, maxByCluster[it.cluster] || 1);
-//     it.widthPct = 100 / lanes;
-//     it.leftPct = it.lane * it.widthPct;
-//   }
-//   return byStart;
-// }
-
-// Clip a start/end range to fit within a single day
-function clipToDay(start, end, day) {
-  const dayStart = day.startOf('day');
-  const dayEnd   = day.endOf('day');
-  const s = start.isAfter(dayStart) ? start : dayStart;
-  const e = end && end.isBefore(dayEnd) ? end : dayEnd;
-  return { s, e };
-}
-
-// 1) existing: split a continuous range into day-sized segments
-function splitIntoDaySegments(e, weekStart) {
-  const start = dayjs(e.start_at);
-  const end   = e.end_at ? dayjs(e.end_at) : start.add(30, 'minute');
-  const segments = [];
-
-  for (let i = 0; i < 7; i++) {
-    const d = weekStart.add(i, 'day');
-    if (start.isBefore(d.endOf('day')) && end.isAfter(d.startOf('day'))) {
-      const { s, e } = clipToDay(start, end, d);
-      segments.push({
-        dayIndex: i,
-        segStart: s,
-        segEnd: e,
-      });
-    }
-  }
-  return segments;
-}
-
-// 2) daily window explicit (from DB/UI fields)
-function buildDailyWindowSegments(e, weekStart) {
-  const firstDay = dayjs(e.start_at).startOf('day');
-  const untilDay = dayjs(e.calendar_repeat_until || e.end_at || e.start_at).startOf('day');
-  const startHM = e.calendar_window_start; // 'HH:mm'
-  const endHM   = e.calendar_window_end;   // 'HH:mm'
-
-  const segments = [];
-  for (let i = 0; i < 7; i++) {
-    const d = weekStart.add(i, 'day');
-    if (d.isBefore(firstDay, 'day') || d.isAfter(untilDay, 'day')) continue;
-
-    const segStart = dayjs(`${d.format('YYYY-MM-DD')} ${startHM}`);
-    const segEnd   = dayjs(`${d.format('YYYY-MM-DD')} ${endHM}`);
-    segments.push({ dayIndex: i, segStart, segEnd });
-  }
-  return segments;
-}
-
-// 3) daily window inferred (fallback when event spans multiple days but
-//    you don't yet persist calendar_window_*). Uses start/end clocks.
-function buildDailyWindowFromRange(e, weekStart) {
-  const start = dayjs(e.start_at);
-  const end   = dayjs(e.end_at);
-  const startHM = start.format('HH:mm');
-  const endHM   = end.format('HH:mm');
-
-  const firstDay = start.startOf('day');
-  const lastDay  = end.startOf('day');
-
-  const segments = [];
-  for (let i = 0; i < 7; i++) {
-    const d = weekStart.add(i, 'day');
-    if (d.isBefore(firstDay, 'day') || d.isAfter(lastDay, 'day')) continue;
-
-    const segStart = dayjs(`${d.format('YYYY-MM-DD')} ${startHM}`);
-    const segEnd   = dayjs(`${d.format('YYYY-MM-DD')} ${endHM}`);
-
-    segments.push({ dayIndex: i, segStart, segEnd });
-  }
-  return segments;
-}
-
-// Dispatcher
-// function buildSegmentsForEvent(e, weekStart) {
-//   const hasExplicitDaily =
-//     e.calendar_repeat === 'daily' &&
-//     e.calendar_window_start &&
-//     e.calendar_window_end;
-
-//   if (hasExplicitDaily) {
-//     return buildDailyWindowSegments(e, weekStart);
-//   }
-
-//   const hasMultiDayRange =
-//     !e.all_day && e.end_at && dayjs(e.end_at).startOf('day').diff(dayjs(e.start_at).startOf('day'), 'day') >= 1;
-
-//   if (hasMultiDayRange) {
-//     return buildDailyWindowFromRange(e, weekStart);
-//   }
-
-//   return splitIntoDaySegments(e, weekStart);
-// }
 
 export default function CalendarGridWeek({ startOfWeek, events = [], onEventClick }) {
   const weekStart = dayjs(startOfWeek);
   const days = [...Array(7)].map((_, i) => weekStart.add(i, 'day'));
+
+  // ---------- dedupe helper by scope + id ----------
+  const uniqByScopeId = (list = []) => {
+    const seen = new Set(); const out = [];
+    for (const e of list) {
+      const k = `${e.scope || 'x'}:${e.id}`;
+      if (!seen.has(k)) { seen.add(k); out.push(e); }
+    }
+    return out;
+  };
+
+  // ---------- all unique events that intersect this week ----------
+  const weekEvents = useMemo(() => {
+    const touchWeek = events.filter(e => days.some(d => intersectsDay(e, d)));
+    return uniqByScopeId(touchWeek);
+  }, [events, weekStart.valueOf()]);
+
+  // ---------- weekly totals ----------
+  const weekTotals = useMemo(() => {
+    const total  = weekEvents.length;
+    const ws     = weekEvents.filter(e => e.scope === 'workspace').length;
+    const pspace = weekEvents.filter(e => e.scope === 'private').length;
+    const pub    = weekEvents.filter(e => !e.is_vaulted).length;
+    const vault  = weekEvents.filter(e =>  e.is_vaulted).length;
+    const allDay = weekEvents.filter(e => e.all_day).length;
+    const timed  = total - allDay;
+    return { total, ws, pspace, pub, vault, allDay, timed };
+  }, [weekEvents]);
 
   const allDay = events.filter(e => e.all_day);
   const timedRaw = events.filter(e => !e.all_day);
@@ -187,6 +62,34 @@ export default function CalendarGridWeek({ startOfWeek, events = [], onEventClic
             </div>
           </div>
         ))}
+      </div>
+
+      {/* ✅ Weekly summary (totals for the whole range) */}
+      <div className="grid grid-cols-[64px_1fr] border-b bg-gray-50/70 text-xs text-gray-700">
+        {/* left gutter label */}
+        <div className="h-8 px-2 flex items-center text-gray-500">Week</div>
+
+        {/* chips */}
+        <div className="h-8 px-2 flex items-center gap-2 flex-wrap">
+          <span className="inline-flex items-center rounded-full bg-gray-800 text-white px-2.5 py-[2px] font-semibold">
+            {weekTotals.total} tasks
+          </span>
+          <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-700 px-2 py-[2px]">
+            {weekTotals.ws} workspaces
+          </span>
+          <span className="inline-flex items-center rounded-full bg-fuchsia-100 text-fuchsia-700 px-2 py-[2px]">
+            {weekTotals.pspace} private spaces
+          </span>
+          <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 px-2 py-[2px]">
+            {weekTotals.pub} public
+          </span>
+          <span className="inline-flex items-center rounded-full bg-slate-200 text-slate-700 px-2 py-[2px]">
+            {weekTotals.vault} vaulted
+          </span>
+          <span className="ml-auto inline-flex items-center text-gray-500">
+            {weekTotals.allDay} all-day · {weekTotals.timed} timed
+          </span>
+        </div>
       </div>
 
       {/* all-day row (supports spans) */}

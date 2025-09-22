@@ -1,22 +1,52 @@
-// src/components/Calendar/CalendarGridDay.jsx
 import dayjs from 'dayjs';
+import { useMemo } from 'react';
 import {
   HOUR_PX, MIN_HEIGHT, OVERLAP_GAP_PX,
   minsSinceMidnight, segKey, hexToRgba,
-  layoutDaySegments, buildSegmentsForEvent
+  layoutDaySegments, buildSegmentsForEvent,
+  intersectsDay,
 } from './gridUtils';
 
 export default function CalendarGridDay({ date, events = [], onEventClick }) {
   const day = dayjs(date).startOf('day');
   const weekStart = day.startOf('week');
-  const allDay = events.filter(e => e.all_day);
-  const timed = events.filter(e => !e.all_day);
+  // Use only events that touch this specific day
+  const dayEvents = useMemo(
+    () => events.filter(e => intersectsDay(e, day)),
+    [events, day.valueOf()]
+  );
+  const allDay = dayEvents.filter(e => e.all_day);
+  const timed  = dayEvents.filter(e => !e.all_day);
+  const publicCount  = dayEvents.filter(e => !e.is_vaulted).length;  // ✅ NEW
+  const vaultedCount = dayEvents.filter(e =>  e.is_vaulted).length;  // ✅ NEW
 
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Header */}
       <div className="border-b px-4 h-10 flex items-center text-sm font-semibold text-gray-800">
         {day.format('dddd, MMM D')}
+      </div>
+
+      {/* Summary bar: how many tasks today (modern chips) */}
+      <div className="border-b bg-gray-50/70 px-3 py-2 flex items-center gap-2 text-xs">
+        <span className="inline-flex items-center rounded-full bg-gray-800 text-white px-2.5 py-[2px] font-semibold">
+          {dayEvents.length} tasks
+        </span>
+        <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-700 px-2 py-[2px]">
+          {dayEvents.filter(e => e.scope === 'workspace').length} workspaces
+        </span>
+        <span className="inline-flex items-center rounded-full bg-fuchsia-100 text-fuchsia-700 px-2 py-[2px]">
+          {dayEvents.filter(e => e.scope === 'private').length} private
+        </span>
+        <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 px-2 py-[2px]">
+          {publicCount} public
+        </span>
+        <span className="inline-flex items-center rounded-full bg-slate-200 text-slate-700 px-2 py-[2px]">
+          {vaultedCount} vaulted
+        </span>
+        <span className="ml-auto inline-flex items-center text-gray-500">
+          {allDay.length} all-day · {timed.length} timed
+        </span>
       </div>
 
       {/* All-day row */}

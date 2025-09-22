@@ -242,8 +242,8 @@ export default function CalendarPage() {
 
   return (
     <Layout noGutters contentBg="bg-gray-100">
-      <div className="h-full grid grid-cols-[280px_1fr]">
-        {/* Left rail */}
+      <div className="h-full grid grid-cols-[220px_1fr]">
+        {/* Left sidebar */}
         <aside className="border-r bg-white">
           <CalendarSidebar />
         </aside>

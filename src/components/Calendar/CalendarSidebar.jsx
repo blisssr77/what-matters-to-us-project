@@ -118,17 +118,17 @@ export default function CalendarSidebar() {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* <div className="p-3 border-b">
+    <div className="h-full flex flex-col text-[13px]">
+      <div className="p-2 border-b">
         <button
           type="button"
-          className="btn-main w-full inline-flex items-center justify-center gap-2 rounded bg-blue-600 hover:bg-blue-700 text-white py-2 text-sm"
+          className="btn-main w-full inline-flex items-center justify-center gap-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white py-1.5 text-xs"
         >
-          <Plus size={16}/> Create
+          <Plus size={14}/> Create
         </button>
-      </div> */}
+      </div>
 
-      <div className="p-3 border-b">
+      <div className="p-2 border-b">
         <MiniMonth
           month={month}
           onDayClick={handleDayClick}
@@ -136,66 +136,71 @@ export default function CalendarSidebar() {
         />
       </div>
 
-      <div className="p-3 space-y-3 overflow-y-auto">
-        <h4 className="text-xs font-bold text-gray-700 uppercase">My calendars</h4>
+      <div className="p-2 space-y-2 overflow-y-auto text-xs">
+        <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-widest">My calendars</h4>
+
 
         {/* Workspace toggle */}
-        <label className="flex items-center gap-2 text-sm text-blue-800">
-          <input
-            type="checkbox"
-            checked={includeWorkspace}
-            onChange={(e) => {
-              const checked = e.target.checked;
-              setFilters({ includeWorkspace: checked });
-              // initialize scope state when turning on
-              if (checked) {
-                if ((selectedWorkspaceIds || []).length === 0) {
-                  setShowAllWorkspaces(true);       // start with “All Workspaces”
+        <div className="space-y-1 text-xs [&_*]:!text-xs">
+          <label className="flex items-center gap-1.5 text-blue-800 py-0.5">
+            <input
+              type="checkbox"
+              checked={includeWorkspace}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setFilters({ includeWorkspace: checked });
+                // initialize scope state when turning on
+                if (checked) {
+                  if ((selectedWorkspaceIds || []).length === 0) {
+                    setShowAllWorkspaces(true);       // start with “All Workspaces”
+                  }
                 }
-              }
-            }}
-          />
-          My Workspaces
-        </label>
+              }}
+            />
+            My Workspaces
+          </label>
 
-        {/* Dropdown only when Workspace is ON */}
-        {includeWorkspace && (
-          <div className="mt-2 text-gray-700">
-            <WorkspaceSelect />
-          </div>
-        )}
+          {/* Dropdown only when Workspace is ON */}
+          {includeWorkspace && (
+            <div className="mt-1 text-xs text-gray-700">
+              <WorkspaceSelect />
+            </div>
+          )}
+        </div>
 
         {/* Private toggle */}
-        <label className="flex items-center gap-2 text-sm text-red-600">
-          <input
-            type="checkbox"
-            checked={includePrivate}
-            onChange={(e) => {
-              const checked = e.target.checked;
-              setFilters({ includePrivate: checked });
-              // initialize scope state when turning on
-              if (checked) {
-                if ((selectedPrivateSpaceIds || []).length === 0) {
-                  setShowAllPrivateSpaces(true);     // start with “All My Private Spaces”
+        <div className="space-y-1 text-xs [&_*]:!text-xs">
+          <label className="flex items-center gap-1.5 text-red-600 py-0.5">
+            <input
+              type="checkbox"
+              checked={includePrivate}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setFilters({ includePrivate: checked });
+                // initialize scope state when turning on
+                if (checked) {
+                  if ((selectedPrivateSpaceIds || []).length === 0) {
+                    setShowAllPrivateSpaces(true);     // start with “All My Private Spaces”
+                  }
                 }
-              }
-            }}
-          />
-          {/* Keep the label simple; you support multiple private spaces */}
-          My Private Spaces
-        </label>
+              }}
+            />
+            {/* Keep the label simple; you support multiple private spaces */}
+            My Private Spaces
+          </label>
 
-        {/* Dropdown only when Private is ON */}
-        {includePrivate && (
-          <div className="mt-2 text-gray-700">
-            <PrivateSpaceSelect />
-          </div>
-        )}
+          {/* Dropdown only when Private is ON */}
+          {includePrivate && (
+            <div className="mt-1 text-gray-700">
+              <PrivateSpaceSelect />
+            </div>
+          )}
+        </div>
 
         {/* Visibility filter (mutually exclusive) */}
-        <div className="mt-3 text-gray-700 border-t pt-3">
-          <h5 className="text-xs font-bold text-gray-700 uppercase mb-2">Visibility</h5>
-          <label className="mt-1 flex items-center gap-2 text-sm pt-1">
+        <div className="mt-2 text-gray-800 border-t pt-2">
+          <h5 className="text-[11px] font-bold uppercase mb-2 tracking-widest">Visibility</h5>
+          <label className="mt-0.5 flex items-center gap-1.5 text-xs mb-2">
             <input
               type="checkbox"
               checked={showPublicOnly}
@@ -203,7 +208,7 @@ export default function CalendarSidebar() {
             />
             Public only
           </label>
-          <label className="flex items-center gap-2 text-sm pt-1">
+          <label className="flex items-center gap-1.5 text-xs mt-0.5 mb-2">
             <input
               type="checkbox"
               checked={showVaultedOnly}

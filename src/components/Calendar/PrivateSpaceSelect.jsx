@@ -158,9 +158,9 @@ export default function PrivateSpaceSelect({ className = "" }) {
                 >
                   <div className="flex items-center gap-2">
                     <input type="checkbox" readOnly checked={!!showAllPrivateSpaces} />
-                    <span className="font-medium">All My Private Spaces</span>
+                    <span className="font-medium text-xs">All My Private Spaces</span>
                   </div>
-                  {showAllPrivateSpaces && <Check size={16} className="text-blue-600" />}
+                  {showAllPrivateSpaces && <Check size={14} className="text-blue-600" />}
                 </button>
 
                 {showSearch && (
@@ -178,8 +178,8 @@ export default function PrivateSpaceSelect({ className = "" }) {
 
               {/* Items */}
               {loading ? (
-                <div className="flex items-center gap-2 px-3 py-3 text-sm text-gray-500">
-                  <Loader2 className="animate-spin" size={16} />
+                <div className="flex items-center gap-2 px-3 py-3 text-xs text-gray-500">
+                  <Loader2 className="animate-spin" size={14} />
                   Loading…
                 </div>
               ) : filtered.length ? (
@@ -193,7 +193,7 @@ export default function PrivateSpaceSelect({ className = "" }) {
                       role="option"
                       aria-selected={selected && !showAllPrivateSpaces}
                       className={clsx(
-                        'w-full flex items-center justify-between px-3 py-2 text-sm',
+                        'w-full flex items-center justify-between px-3 py-2 text-xs',
                         showAllPrivateSpaces ? 'opacity-50' : '',
                         focused ? 'bg-gray-100' : 'hover:bg-gray-50'
                       )}
@@ -215,7 +215,7 @@ export default function PrivateSpaceSelect({ className = "" }) {
                   );
                 })
               ) : (
-                <div className="px-3 py-3 text-sm text-gray-500">No matches.</div>
+                <div className="px-3 py-3 text-xs text-gray-500">No matches.</div>
               )}
 
               {/* Footer */}

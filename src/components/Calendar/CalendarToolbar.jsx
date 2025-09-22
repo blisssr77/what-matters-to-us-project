@@ -91,7 +91,7 @@ export default function CalendarToolbar({ onToday, onPrev, onNext }) {
                 if (v === 'month') setAnchorDate(headerDate.toISOString()); // keep Month anchored
                 setAnchorDate(base.toISOString()); // keep Day/Week anchored
               }}
-              className={`px-3 py-1.5 text-xs ${view===v ? 'bg-gray-900 text-white' : 'hover:bg-gray-50'}`}
+              className={`px-3 py-1.5 text-xs ${view===v ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}
             >
               {v[0].toUpperCase()+v.slice(1)}
             </button>

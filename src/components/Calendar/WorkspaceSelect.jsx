@@ -168,9 +168,9 @@ export default function WorkspaceSelect({ className = "" }) {
                 >
                   <div className="flex items-center gap-2">
                     <input type="checkbox" readOnly checked={!!showAllWorkspaces} />
-                    <span className="font-medium">All Workspaces</span>
+                    <span className="font-medium text-xs">All Workspaces</span>
                   </div>
-                  {showAllWorkspaces && <Check size={16} className="text-blue-600" />}
+                  {showAllWorkspaces && <Check size={14} className="text-blue-600" />}
                 </button>
 
                 {/* Search (only when many workspaces; set showSearch=true to force) */}
@@ -189,8 +189,8 @@ export default function WorkspaceSelect({ className = "" }) {
 
               {/* Items */}
               {loading ? (
-                <div className="flex items-center gap-2 px-3 py-3 text-sm text-gray-500">
-                  <Loader2 className="animate-spin" size={16} />
+                <div className="flex items-center gap-2 px-3 py-3 text-xs text-gray-500">
+                  <Loader2 className="animate-spin" size={14} />
                   Loading…
                 </div>
               ) : filtered.length ? (
@@ -204,7 +204,7 @@ export default function WorkspaceSelect({ className = "" }) {
                       role="option"
                       aria-selected={selected && !showAllWorkspaces}
                       className={clsx(
-                        "w-full flex items-center justify-between px-3 py-2 text-sm",
+                        "w-full flex items-center justify-between px-3 py-2 text-xs",
                         showAllWorkspaces ? "opacity-50" : "",
                         focused ? "bg-gray-100" : "hover:bg-gray-50"
                       )}

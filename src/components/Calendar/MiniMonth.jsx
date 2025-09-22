@@ -104,7 +104,7 @@ export default function MiniMonth({
   return (
     <div className="relative select-none">
       {/* Header */}
-      <div className="flex items-center justify-between mb-2 text-sm font-medium text-gray-700">
+      <div className="flex pr-2 pl-2 items-center justify-between mb-2 text-md font-medium text-gray-800">
         <button
           type="button"
           onClick={goPrev}
