@@ -3,12 +3,7 @@ import dayjs from 'dayjs';
 import { X, Edit, Eye, Lock, Globe, Users, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react';
 import clsx from 'clsx';
 import { useNavigate } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+import { supabase } from '@/lib/supabaseClient'; 
 
 export default function EventQuickView({ event, canSeeVaulted = false, onClose }) {
   if (!event) return null;
@@ -17,30 +12,16 @@ export default function EventQuickView({ event, canSeeVaulted = false, onClose }
   const start = dayjs(event.start_at);
   const end   = event.end_at ? dayjs(event.end_at) : null;
 
-  // ---- vault unlock state ----
-  const [vaultCode, setVaultCode] = useState('');
-  const [unlocking, setUnlocking] = useState(false);
-  const [unlockErr, setUnlockErr] = useState('');
-  // persist unlock per scope to avoid re-prompting
-  const storageKey =
-    event.scope === 'workspace'
-      ? `vault_ok:ws:${event.workspace_id}`
-      : `vault_ok:private`;
-
-  const [unlocked, setUnlocked] = useState(
-    canSeeVaulted || (typeof window !== 'undefined' && sessionStorage.getItem(storageKey) === '1')
-  );
-
   // ---- members (workspace or private) ----
   const [members, setMembers] = useState([]);
   const [showMembers, setShowMembers] = useState(false);
 
+  // load members when event changes
   useEffect(() => {
     let alive = true;
 
     (async () => {
       try {
-        // WORKSPACE members: join to profiles via the explicit FK alias
         if (event.scope === 'workspace' && event.workspace_id) {
           const { data, error } = await supabase
             .from('workspace_members')
@@ -63,11 +44,7 @@ export default function EventQuickView({ event, canSeeVaulted = false, onClose }
             fallback_name: r.name ?? null,
           }));
           setMembers(list);
-          return;
-        }
-
-        // PRIVATE space: show owner (created_by) profile
-        if (event.scope === 'private' && event.private_space_id) {
+        } else if (event.scope === 'private' && event.private_space_id) {
           const { data: ps, error: sErr } = await supabase
             .from('private_spaces')
             .select('created_by')
@@ -89,49 +66,15 @@ export default function EventQuickView({ event, canSeeVaulted = false, onClose }
           if (pErr) { console.warn('load owner profile failed:', pErr); setMembers([]); return; }
 
           setMembers(prof ? [prof] : []);
-          return;
+        } else {
+          if (alive) setMembers([]);
         }
-
-        // Fallback
-        if (alive) setMembers([]);
       } catch {
         if (alive) setMembers([]);
       }
     })();
-
     return () => { alive = false; };
   }, [event?.id, event?.scope, event?.workspace_id, event?.private_space_id, event?.created_by]);
-
-  // ---- vault verify ----
-  const verifyVault = async () => {
-    try {
-      setUnlockErr('');
-      setUnlocking(true);
-      const code = (vaultCode || '').trim();
-      if (!code) { setUnlockErr('Enter your vault code.'); return; }
-
-      let ok = false, rpcErr = null;
-
-      if (event.scope === 'workspace') {
-        const { data, error } = await supabase.rpc('verify_workspace_code', {
-          p_workspace: event.workspace_id,
-          p_code: code,
-        });
-        ok = !!data; rpcErr = error;
-      } else {
-        const { data, error } = await supabase.rpc('verify_user_private_code', { p_code: code });
-        ok = !!data; rpcErr = error;
-      }
-
-      if (rpcErr) { setUnlockErr(rpcErr.message || 'Verification failed.'); return; }
-      if (!ok)    { setUnlockErr('Incorrect code.'); return; }
-
-      setUnlocked(true);
-      if (typeof window !== 'undefined') sessionStorage.setItem(storageKey, '1');
-    } finally {
-      setUnlocking(false);
-    }
-  };
 
   // ---- chips & body ----
   const isPublic   = !event.is_vaulted;
@@ -154,57 +97,34 @@ export default function EventQuickView({ event, canSeeVaulted = false, onClose }
 
   const memberCount = members.length || 0;
 
+  // Body content
   const body = useMemo(() => {
-    if (isPublic) {
+    const publicBody = event.public_note || event.notes || event.summary || '';
+
+    if (!event.is_vaulted) {
       return publicBody
         ? <p className="text-sm text-gray-800 whitespace-pre-wrap">{publicBody}</p>
         : <p className="text-sm text-gray-500">No additional details.</p>;
     }
-    // Vaulted
-    if (!unlocked) {
-      return (
-        <div className="rounded-lg border bg-gray-50 p-3">
-          <div className="flex items-center gap-2 text-sm text-gray-800 font-medium">
-            <Lock size={16}/> This item is vaulted
-          </div>
-          <p className="text-xs text-gray-600 mt-1">
-            Enter your {scopeLabel.toLowerCase()} vault code to unlock.
-          </p>
-          <div className="mt-2 flex items-center gap-2">
-            <input
-              type="password"
-              value={vaultCode}
-              onChange={(e) => setVaultCode(e.target.value)}
-              placeholder="Vault code"
-              className="w-40 rounded border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 text-gray-800"
-            />
-            <button
-              onClick={verifyVault}
-              disabled={unlocking}
-              className={clsx(
-                'inline-flex items-center gap-1 rounded px-2.5 py-1.5 text-sm text-white',
-                unlocking ? 'bg-gray-400' : 'bg-gray-900 hover:bg-black'
-              )}
-            >
-              <ShieldCheck size={14} /> {unlocking ? 'Verifying…' : 'Unlock'}
-            </button>
-          </div>
-          {unlockErr && <div className="text-xs text-red-600 mt-1">{unlockErr}</div>}
-        </div>
-      );
-    }
-    // Unlocked (we don’t decrypt here; show a safe callout + route to doc)
+
+    // Vaulted: do NOT verify here; let the destination page handle it
     return (
-      <div className="rounded-lg border bg-amber-50 p-3">
-        <div className="flex items-center gap-2 text-sm text-amber-900 font-medium">
-          <ShieldCheck size={16}/> Unlocked
+      <div className="rounded-lg border bg-slate-50 p-3">
+        <div className="flex items-center gap-2 text-sm text-gray-900 font-medium">
+          <Lock size={16}/> This item is vaulted
         </div>
-        <p className="text-xs text-amber-800 mt-1">
-          Open the document to view the private content.
+        <p className="text-xs text-gray-700 mt-1">
+          Open to enter your {event.scope === 'workspace' ? 'workspace' : 'private'} vault code.
         </p>
+        {publicBody && (
+          <div className="mt-2">
+            <div className="text-xs font-semibold text-gray-600 mb-1">Public note</div>
+            <div className="text-sm text-gray-800 whitespace-pre-wrap">{publicBody}</div>
+          </div>
+        )}
       </div>
     );
-  }, [isPublic, unlocked, vaultCode, unlocking, unlockErr, scopeLabel, publicBody]);
+  }, [event]);
 
   // Pick best label for a person
   const asHandle = (m) =>
@@ -296,27 +216,14 @@ export default function EventQuickView({ event, canSeeVaulted = false, onClose }
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 pt-1">
-            <a
-              href={viewHref}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded bg-gray-900 text-white hover:bg-black text-sm"
-              onClick={(e) => {
-                e.preventDefault();
-                navigate(viewHref);
-              }}
+            <button
+              type="button"
+              className="btn-2ndOnlyColor inline-flex items-center gap-2 px-3 py-1.5 rounded bg-gray-900 text-white hover:bg-black text-sm"
+              onClick={() => navigate(viewHref, { state: { focusUnlock: event.is_vaulted } })}
             >
-              <Eye size={16} /> View
-            </a>
+              <Eye size={16} /> View/ Edit
+            </button>
 
-            <a
-              href={editHref}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded border hover:bg-gray-50 text-sm text-gray-800"
-              onClick={(e) => {
-                e.preventDefault();
-                navigate(editHref);
-              }}
-            >
-              <Edit size={16} /> Edit
-            </a>
           </div>
         </div>
       </div>

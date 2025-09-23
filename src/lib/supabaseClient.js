@@ -6,37 +6,31 @@ if (!url || !anon) throw new Error('Missing VITE_SUPABASE_URL / VITE_SUPABASE_AN
 
 const g = globalThis;
 
-// Persisted (main) — created immediately
+// ---- HMR-safe singleton (persisted session) ----
 export const supabase =
-  (import.meta.env.DEV && g.__sb_main) ||
+  g.__supabase ||
   createClient(url, anon, {
     auth: {
       persistSession: true,
-      storage: localStorage,
-      storageKey: 'sb-auth-main-v1',
       autoRefreshToken: true,
       detectSessionInUrl: true,
+      // storageKey: 'sb-auth-main', // optional
     },
-  });
+  })
 
-if (import.meta.env.DEV) g.__sb_main = supabase;
+if (!g.__supabase) g.__supabase = supabase
 
-// 🔽 Lazy non-persist: create only when call getSupabaseNoPersist()
-let _noPersist;
+// ---- Optional: lazy non-persist client (use only if needed) ----
 export function getSupabaseNoPersist() {
-  if (!_noPersist) {
-    _noPersist =
-      (import.meta.env.DEV && g.__sb_nopersist) ||
-      createClient(url, anon, {
-        auth: {
-          persistSession: false,
-          storage: sessionStorage,
-          storageKey: 'sb-auth-nopersist-v1',
-          autoRefreshToken: false,
-          detectSessionInUrl: false,
-        },
-      });
-    if (import.meta.env.DEV) g.__sb_nopersist = _noPersist;
-  }
-  return _noPersist;
+  if (g.__supabaseNoPersist) return g.__supabaseNoPersist
+  const client = createClient(url, anon, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storageKey: 'sb-auth-nopersist', // unique key
+    },
+  })
+  g.__supabaseNoPersist = client
+  return client
 }

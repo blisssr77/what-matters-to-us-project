@@ -4,40 +4,33 @@ import MiniMonth from './MiniMonth'
 import WorkspaceSelect from './WorkspaceSelect'
 import { useCalendarStore } from '@/store/useCalendarStore'
 import { useState, useEffect, useMemo } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabaseClient'
+
 import PrivateSpaceSelect from './PrivateSpaceSelect'
 
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 dayjs.extend(utc); dayjs.extend(timezone);
 
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-)
-
 // Load the single private space for the signed-in user (owner_id or user_id)
 async function loadMyPrivateSpace() {
   const { data: { user } = {} } = await supabase.auth.getUser()
   if (!user?.id) return null
 
-  let res = await supabase
+  const { data, error } = await supabase
     .from('private_spaces')
     .select('id, name')
     .eq('created_by', user.id)
     .order('sort_order', { ascending: true, nullsLast: true })
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
 
-  if (res.error || !res.data) {
-    res = await supabase
-      .from('private_spaces')
-      .select('id, name')
-      .eq('created_by', user.id)
-      .order('sort_order', { ascending: true, nullsLast: true })
-      .order('created_at', { ascending: true });
+  if (error) {
+    console.warn('loadMyPrivateSpace error:', error)
+    return null
   }
-
-  return res.data || null
+  return data || null
 }
 
 export default function CalendarSidebar() {
