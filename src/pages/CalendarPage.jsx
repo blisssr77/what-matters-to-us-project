@@ -291,12 +291,14 @@ export default function CalendarPage() {
       </div>
 
       {/* Quick view modal */}
-      <EventQuickView
-        event={quick}
-        canSeeVaulted={canSeeVaulted}
-        onClose={() => setQuick(null)}
-        onEdit={() => { setQuick(null); }}
-      />
+      {quick && (
+        <EventQuickView
+          event={quick}
+          canSeeVaulted={canSeeVaulted}
+          onClose={() => setQuick(null)}
+          onEdit={() => { setQuick(null); }}
+        />
+      )}
     </Layout>
   );
 }
