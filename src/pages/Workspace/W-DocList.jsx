@@ -524,6 +524,16 @@ export default function WorkspaceVaultList() {
                   </p>
                 )}
 
+                {/* Show more/less */}
+                {(titleOverflow[doc.id] || noteOverflow[doc.id]) && (
+                  <button
+                    onClick={(e) => toggleExpand(e, doc.id)}
+                    className="mt-2 inline-flex items-center gap-1 text-[9.5px] px-2 rounded-full border border-gray-300 text-gray-800 hover:border-gray-500 hover:text-purple-500 transition font-semibold"
+                  >
+                    {isExpanded ? "Show less" : "Show more"}
+                  </button>
+                )}
+
                 {/* Tags */}
                 {doc.tags?.length > 0 && (
                   <div className="mt-2 mb-1 flex flex-wrap gap-1">
@@ -536,16 +546,6 @@ export default function WorkspaceVaultList() {
                       </span>
                     ))}
                   </div>
-                )}
-
-                {/* Show more/less */}
-                {(titleOverflow[doc.id] || noteOverflow[doc.id]) && (
-                  <button
-                    onClick={(e) => toggleExpand(e, doc.id)}
-                    className="mt-2 inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border border-gray-300 text-gray-800 hover:border-purple-500 hover:text-purple-600 transition font-semibold"
-                  >
-                    {isExpanded ? "Show less" : "Show more"}
-                  </button>
                 )}
 
                 {/* Meta */}

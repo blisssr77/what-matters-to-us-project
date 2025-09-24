@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, Search, ChevronDown, Lock, Settings, XCircle } from "lucide-react";
+import { Search, ChevronDown, Settings, XCircle } from "lucide-react";
+import { Calendar as CalendarIcon, Lock, FileText } from 'lucide-react';
 import Layout from "@/components/Layout/Layout";
 import WorkspaceTabs from "@/components/Layout/WorkspaceTabs";
 import { usePrivateSpaceStore } from "@/store/usePrivateSpaceStore";
@@ -362,10 +363,24 @@ export default function PrivateDocList() {
         {/* Document Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {filteredDocs.map((doc) => {
-            const hasFiles = Array.isArray(doc.file_metas) && doc.file_metas.length > 0;
-            const isVaulted = !!doc.is_vaulted;
+            const hasFiles   = Array.isArray(doc.file_metas) && doc.file_metas.length > 0;
+            const isVaulted  = !!doc.is_vaulted;
             const isExpanded = !!expanded[doc.id];
-            const canShowMore = (titleOverflow[doc.id] || noteOverflow[doc.id]) && (doc.title || doc.notes);
+
+            // calendar bits
+            const isOnCalendar = !!doc.calendar_enabled;
+            const start        = doc.start_at ? dayjs(doc.start_at) : null;
+            const end          = doc.end_at ? dayjs(doc.end_at) : null;
+            const isAllDay     = !!doc.all_day;
+            const colorDot     = doc.calendar_color || '#2563eb';
+
+            // creator chip (prefer a joined profile object if you fetched it)
+            // supports any of: doc.creator, doc.owner, doc.profile, or flat fields
+            const creator =
+              doc.creator || doc.owner || doc.profile || {
+                username: doc.owner_username || doc.created_by_username,
+                first_name: doc.owner_first_name || doc.created_by_first_name,
+              };
 
             return (
               <div
@@ -377,82 +392,133 @@ export default function PrivateDocList() {
                       : `/privatespace/vaults/note-view/${doc.id}`
                   )
                 }
-                className={`relative cursor-pointer rounded-xl shadow-md p-4 hover:shadow-lg transition border hover:border-purple-700 ${
-                  isVaulted ? "bg-gray-200 border-gray-300" : "bg-white border-purple-200"
-                }`}
+                className={[
+                  'relative cursor-pointer rounded-xl p-4 transition shadow-md hover:shadow-lg border',
+                  isVaulted
+                    ? 'bg-gradient-to-br from-gray-300 to-white border-purple-100 hover:border-gray-700'
+                    : 'bg-white border-purple-200 hover:border-purple-700',
+                ].join(' ')}
               >
-                {/* Title + Icon */}
-                <div className="flex items-center gap-3 mb-3">
-                  {isVaulted ? (
-                    <Lock className="text-purple-600" size={22} />
-                  ) : (
-                    <FileText className="text-purple-500" size={22} />
-                  )}
-                  <div
-                    ref={(el) => (titleRefs.current[doc.id] = el)}
-                    className={`text-md text-black font-bold ${isExpanded ? "" : "line-clamp-5"}`}
-                  >
-                    {doc.title || doc.name || "Untitled"}
+                {/* HEADER: title (left) + badges (right) */}
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  {/* Left: color dot + title */}
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div
+                      className="h-2.5 w-2.5 rounded-full mt-1.5 shrink-0"
+                      style={{ background: isOnCalendar ? colorDot : '#e5e7eb' }}
+                    />
+                    <div
+                      ref={(el) => (titleRefs.current[doc.id] = el)}
+                      className={`text-[15px] leading-snug text-black font-bold ${
+                        isExpanded ? '' : 'line-clamp-4'
+                      }`}
+                    >
+                      {doc.title || doc.name || 'Untitled'}
+                    </div>
+                  </div>
+
+                  {/* Right: badges (wrap nicely; no absolute positioning) */}
+                  <div className="shrink-0 flex flex-wrap justify-end gap-1">
+                    {isOnCalendar ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-600 text-white text-[10px] px-2 py-[2px] shadow">
+                        <CalendarIcon size={12} /> On calendar
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 text-[10px] px-2 py-[2px] border">
+                        <CalendarIcon size={12} /> Not on calendar
+                      </span>
+                    )}
+                    {isVaulted && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 text-purple-700 text-[10px] px-2 py-[2px] border border-purple-200">
+                        <Lock size={12} /> Vaulted
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                {/* Tags */}
-                {doc.tags?.length > 0 && (
-                  <div className="mb-2 text-xs text-gray-800">
-                    Tags:{" "}
-                    {doc.tags.map((tag, index) => (
-                      <React.Fragment key={tag}>
-                        <span className="bg-yellow-50 px-1 rounded">{tag}</span>
-                        {index < doc.tags.length - 1 && ", "}
-                      </React.Fragment>
-                    ))}
-                  </div>
-                )}
+                {/* SUBHEADER: creator + schedule strip */}
+                <div className="justify-end flex flex-wrap items-center gap-2 text-[10px] mb-2">
+                  {(creator?.username || creator?.first_name) && (
+                    <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 px-2 py-[2px] border">
+                      {creator.username ? `@${creator.username}` : (creator.first_name || 'You')}
+                    </span>
+                  )}
+
+                  {isOnCalendar ? (
+                    <>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 px-2 py-[2px] border border-blue-100">
+                        <CalendarIcon size={12} />
+                        {isAllDay
+                          ? (start ? start.format('MMM D, YYYY') : 'All day')
+                          : (start
+                              ? `${start.format('MMM D, YYYY h:mm A')}${
+                                  end ? ` – ${end.format('h:mm A')}` : ''
+                                }`
+                              : 'Scheduled')}
+                      </span>
+                      {doc.calendar_status && (
+                        <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 px-2 py-[2px] border">
+                          {doc.calendar_status}
+                        </span>
+                      )}
+                      {doc.assignee_id && (
+                        <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 px-2 py-[2px] border">
+                          Assigned
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-gray-500">Not scheduled — open to add a time</span>
+                  )}
+                </div>
 
                 {/* Public Note */}
                 {doc.notes && (
                   <p
                     ref={(el) => (noteRefs.current[doc.id] = el)}
-                    className={`text-sm text-gray-800 mb-2 ${isExpanded ? "" : "line-clamp-5"}`}
+                    className={`text-sm mt-2 text-gray-800 ${isExpanded ? '' : 'line-clamp-5'}`}
                   >
                     {doc.notes}
                   </p>
                 )}
 
-                {/* Show more / less (only if one of them overflows) */}
-                {canShowMore && (
+                {/* Show more/less */}
+                {(titleOverflow[doc.id] || noteOverflow[doc.id]) && (
                   <button
                     onClick={(e) => toggleExpand(e, doc.id)}
-                    className="mt-1 inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border border-gray-300 text-gray-800 hover:border-purple-500 hover:text-purple-600 transition mb-2 font-semibold"
+                    className="mt-2 inline-flex items-center gap-1 text-[9.5px] px-2 rounded-full border border-gray-300 text-gray-800 hover:border-gray-500 hover:text-purple-500 transition font-semibold"
                   >
-                    {isExpanded ? "Show less" : "Show more"}
+                    {isExpanded ? 'Show less' : 'Show more'}
                   </button>
                 )}
 
-                {/* Timestamps */}
-                {doc.updated_at && doc.updated_at !== doc.created_at && (
-                  <div className="text-xs text-gray-500 mb-1">
-                    Last Modified:{" "}
-                    {dayjs(doc.updated_at).format("MMM D, YYYY h:mm A")}
+                {/* Tags */}
+                {doc.tags?.length > 0 && (
+                  <div className="mt-2 mb-1 flex flex-wrap gap-1">
+                    {doc.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center rounded-full bg-yellow-50 text-yellow-800 border border-yellow-200 px-2 py-[2px] text-[9.5px]"
+                      >
+                        {tag}
+                      </span>
+                    ))}
                   </div>
                 )}
-                <div className="text-xs text-gray-500">
-                  Uploaded:{" "}
-                  {dayjs(doc.created_at).format("MMM D, YYYY h:mm A")}
-                </div>
 
-                {/* File Flag */}
-                {hasFiles && (
-                  <div className="text-xs text-red-600 font-semibold mt-2">
-                    - Contains file -
-                  </div>
-                )}
-                {/* Vaulted Label */}
-                {isVaulted && (
-                  <div className="absolute top-2 right-2 text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full shadow-sm">
-                    Vaulted
-                  </div>
-                )}
+                {/* Meta */}
+                <div className="mt-2 space-y-1 text-[11px] text-gray-500">
+                  {doc.updated_at && doc.updated_at !== doc.created_at && (
+                    <div>Last modified: {dayjs(doc.updated_at).format('MMM D, YYYY h:mm A')}</div>
+                  )}
+                  <div>Uploaded: {dayjs(doc.created_at).format('MMM D, YYYY h:mm A')}</div>
+                  {(creator?.username || creator?.first_name) && (
+                    <div>
+                      {creator.username ? `@${creator.username}` : (creator.first_name || 'You')}
+                    </div>
+                  )}
+                  {hasFiles && <div className="text-red-600 font-semibold">-Contains file-</div>}
+                </div>
               </div>
             );
           })}
