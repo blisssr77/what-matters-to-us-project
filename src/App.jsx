@@ -12,6 +12,7 @@ import PrivateViewNote from "./components/PrivateSpace/PrivateSpaceDocs/P-ViewNo
 import PrivateEditNote from "./components/PrivateSpace/PrivateSpaceDocs/P-EditNote";
 import PrivateViewDoc from "./components/PrivateSpace/PrivateSpaceDocs/P-ViewDoc";
 import PrivateEditDoc from "./components/PrivateSpace/PrivateSpaceDocs/P-EditDoc";
+import PrivateTags from "./components/PrivateSpace/PrivateSpaceDocs/PriateSpaceTags";
 
 // Importing components for the Workspace Vault
 import WorkspaceVaultList from "./pages/Workspace/W-DocList";
@@ -39,6 +40,7 @@ function App() {
         <Route path="/privatespace/vaults/note-edit/:id" element={<PrivateEditNote />} />
         <Route path="/privatespace/vaults/doc-view/:id" element={<PrivateViewDoc />} />
         <Route path="/privatespace/vaults/doc-edit/:id" element={<PrivateEditDoc />} />
+        <Route path="/privatespace/vaults/tags" element={<PrivateTags />} />
 
         {/* Workspace Vault Routes */}
         <Route path="/workspace/vaults" element={<WorkspaceVaultList />} />

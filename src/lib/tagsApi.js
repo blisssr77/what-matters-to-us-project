@@ -1,11 +1,35 @@
 import { supabase as defaultClient } from './supabaseClient'
 import { slugify } from '@/utils/tagUtils'
 
+// helper: normalize row shapes coming from different RPCs/views
+function normalizeTagRows(rows) {
+  return (rows || []).map(r => ({
+    ...r,
+    // prefer a single unified field the UI can use everywhere
+    space_name:
+      r.space_name ??
+      r.workspace_name ??
+      r.private_space_name ??
+      r.ps_name ??                // just in case you used a short alias
+      '',
+  }));
+}
+
 // --- READ ---
 export async function listWorkspaceTags(workspaceId, client = defaultClient) {
-  // Prefer RPC that enforces membership; falls back to view if needed.
-  return await client.rpc('get_workspace_tag_usage', { p_workspace: workspaceId })
-  // Or: return await client.from('workspace_tag_usage').select('*').eq('workspace_id', workspaceId).order('name')
+  const q = client.from('workspace_tag_usage').select('*').order('name', { ascending: true });
+  const { data, error } = workspaceId ? await q.eq('workspace_id', workspaceId) : await q;
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+export async function listPrivateTags(userId, privateSpaceId = null, client = defaultClient) {
+  const { data, error } = await client.rpc('get_private_tag_usage', {
+    p_user_id: userId,
+    p_private_space_id: privateSpaceId,
+  });
+  if (error) return { data: null, error };
+  return { data: normalizeTagRows(data), error: null };
 }
 
 // --- CREATE (generic) ---
@@ -85,6 +109,17 @@ export async function createWorkspaceTag({ name, color, workspaceId, userId }, c
     name, slug, color: color || null,
     section: 'Workspace',
     workspace_id: workspaceId,
+    created_by: userId,
+  }).select('*').single()
+}
+
+// --- Legacy direct creator (okay to keep, but prefer addPrivateTag above) ---
+export async function createPrivateTag({ name, color, privateSpaceId, userId }, client = defaultClient) {
+  const slug = slugify(name)
+  return await client.from('vault_tags').insert({
+    name, slug, color: color || null,
+    section: 'Private',
+    private_space_id: privateSpaceId || null,
     created_by: userId,
   }).select('*').single()
 }

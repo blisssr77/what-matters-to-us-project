@@ -498,11 +498,11 @@ export default function WorkspaceVaultList() {
                                 }`
                               : "Scheduled")}
                       </span>
-                      {doc.calendar_status && (
+                      {/* {doc.calendar_status && (
                         <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 px-2 py-[2px] border">
                           {doc.calendar_status}
                         </span>
-                      )}
+                      )} */}
                       {doc.assignee_id && (
                         <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 px-2 py-[2px] border">
                           Assigned

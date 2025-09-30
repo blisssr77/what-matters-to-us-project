@@ -6,7 +6,7 @@ import TagEditorModal from '@/components/Tags/TagEditorModal'
 import ConfirmDialog from '@/components/Tags/ConfirmDialog'
 import { supabase } from '@/lib/supabaseClient'
 import { ArrowUpDown, Plus, RefreshCw } from "lucide-react";
-import MergeTagsButton from '@/components/Tags/MergeTagsButton';
+import MergeTagsButton from '@/components/Tags/MergeWTagsButton';
 
 export default function WorkspaceTags() {
     const { activeWorkspaceId } = useWorkspaceStore()
@@ -24,13 +24,16 @@ export default function WorkspaceTags() {
 
     // load tags
     const load = async () => {
-        if (!activeWorkspaceId) return
-        setLoading(true)
-        const { data, error } = await listWorkspaceTags(activeWorkspaceId)
-        if (error) setError(error.message || 'Failed to load tags')
-        setRows(data || [])
-        setLoading(false)
-    }
+        setLoading(true);
+        setError('');
+
+        // pass `null` so the RPC returns tags for all workspaces (membership enforced in SQL)
+        const { data, error } = await listWorkspaceTags(null);
+
+        if (error) setError(error.message || 'Failed to load tags');
+        setRows(data || []);
+        setLoading(false);
+    };
 
     useEffect(() => { load() }, [activeWorkspaceId])
 
@@ -105,22 +108,22 @@ export default function WorkspaceTags() {
                 </div>
                 <div className="flex items-center text-gray-500 gap-2">
                     <button
-                    onClick={load}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded border border-gray-300 text-sm bg-white hover:bg-gray-50"
-                    title="Reload"
+                        onClick={load}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded border border-gray-300 text-sm bg-white hover:bg-gray-50"
+                        title="Reload"
                     >
                     <RefreshCw size={16} /> Reload
                     </button>
                     <MergeTagsButton
-                    className='text-gray-500 inline-flex items-center gap-2 px-3 py-1.5 rounded border border-gray-300 text-sm bg-white hover:bg-gray-50'
-                    workspaceId={activeWorkspaceId}
-                    selectedTagId={selectedId}
-                    tags={filtered}
-                    onMerged={load}
+                        className='text-gray-500 inline-flex items-center gap-2 px-3 py-1.5 rounded border border-gray-300 text-sm bg-white hover:bg-gray-50'
+                        workspaceId={activeWorkspaceId}
+                        selectedTagId={selectedId}
+                        tags={filtered}
+                        onMerged={load}
                     />
                     <button
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded text-white text-sm bg-gradient-to-r from-indigo-800 via-purple-800 to-violet-900 hover:from-indigo-900 hover:to-purple-900 transition"
-                    onClick={handleNew}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded text-white text-sm bg-gradient-to-r from-indigo-800 via-purple-800 to-violet-900 hover:from-indigo-900 hover:to-purple-900 transition"
+                        onClick={handleNew}
                     >
                     <Plus size={16} /> New tag
                     </button>
@@ -139,7 +142,7 @@ export default function WorkspaceTags() {
 
                 {/* Table */}
                 <div className="overflow-x-auto bg-white border rounded shadow-sm">
-                <table className="min-w-full text-sm">
+                <table className="min-w-full text-xs">
                     <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
                         <th className="w-10 p-2"></th>
@@ -230,13 +233,13 @@ export default function WorkspaceTags() {
                             <div className="inline-flex items-center gap-2">
                                 <button
                                 onClick={(e) => { e.stopPropagation(); handleEdit(tag); }}
-                                className="px-2 py-1 text-xs rounded border border-gray-300 hover:bg-gray-50"
+                                className="px-2 py-1 text-xs rounded border text-gray-500 border-gray-300 hover:bg-gray-50"
                                 >
                                 Edit
                                 </button>
                                 <button
                                 onClick={(e) => { e.stopPropagation(); handleDelete(tag); }}
-                                className="px-2 py-1 text-xs rounded border border-gray-300 hover:bg-gray-50 text-red-600"
+                                className="px-2 py-1 text-xs rounded border border-gray-300 hover:bg-gray-50 text-red-700"
                                 >
                                 Delete
                                 </button>
@@ -271,4 +274,4 @@ export default function WorkspaceTags() {
             />
             </Layout>
     )
-    }
+}
