@@ -132,7 +132,7 @@ export default function Sidebar() {
                 exit={{ opacity: 0, height: 0 }}
                 className="ml-5 border-l border-gray-800 pl-3 space-y-1 text-xs"
               >
-                {navLink("Projects Planner", <FolderKanban size={16} />, "/privatespace/projects", "text-xs")}
+                {navLink("Projects Planner", <FolderKanban size={16} />, "/workspace/projects", "text-xs")}
                 {/* {navLink("Messenger", <MessageCircle size={16} />, "/privatespace/messenger", "text-xs")} */}
                 {/* {navLink("Calendar", <CalendarDays size={16} />, "/privatespace/calendar", "text-xs")} */}
                 {/* {navLink("Documents", <FileText size={16} />, "/privatespace/documents", "text-xs")} */}

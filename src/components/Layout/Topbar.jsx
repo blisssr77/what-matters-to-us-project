@@ -60,9 +60,9 @@ export default function Topbar() {
     >
       <h2 className="text-xl font-bold bg-gradient-to-r from-purple-400 via-indigo-400 to-blue-400 bg-clip-text text-transparent animate-pulse-slow">
         {location.pathname.includes("/workspace")
-          ? "Workspace Vaults"
+          ? "Workspace"
           : location.pathname.includes("/private")
-          ? "Private Vaults"
+          ? "Private Space"
           : "Dashboard"}
       </h2>
 

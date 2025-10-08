@@ -43,9 +43,6 @@ export default function PrivateSpaceTags() {
     // pass BOTH userId and spaceId (spaceId can be null to fetch all)
     const { data, error } = await listPrivateTags(user.id, null);
     if (error) setError(error.message || 'Failed to load tags');
-    console.table((data||[]).map(r => ({
-  name: r.name, created_by_name: r.created_by_name, username: r.username
-})));
     setRows(data || []);
     setLoading(false);
   };

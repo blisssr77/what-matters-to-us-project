@@ -60,6 +60,8 @@ export default function AuthPage() {
           id: userId,
           email,
           username: email.split("@")[0],
+          vault_code_set: false,
+          seed_phrase: generateSeedPhrase(),
         });
 
         // Show confirmation message

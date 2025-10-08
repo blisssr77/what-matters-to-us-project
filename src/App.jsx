@@ -12,7 +12,7 @@ import PrivateViewNote from "./components/PrivateSpace/PrivateSpaceDocs/P-ViewNo
 import PrivateEditNote from "./components/PrivateSpace/PrivateSpaceDocs/P-EditNote";
 import PrivateViewDoc from "./components/PrivateSpace/PrivateSpaceDocs/P-ViewDoc";
 import PrivateEditDoc from "./components/PrivateSpace/PrivateSpaceDocs/P-EditDoc";
-import PrivateTags from "./components/PrivateSpace/PrivateSpaceDocs/PriateSpaceTags";
+import PrivateTags from "./pages/PrivateSpace/PriateSpaceTags";
 
 // Importing components for the Workspace Vault
 import WorkspaceVaultList from "./pages/Workspace/W-DocList";
@@ -22,7 +22,9 @@ import WorkspaceViewNote from "./components/Workspace/WorkspaceDocs/ViewNote";
 import WorkspaceEditNote from "./components/Workspace/WorkspaceDocs/EditNote";
 import WorkspaceViewDoc from "./components/Workspace/WorkspaceDocs/ViewDoc";
 import WorkspaceEditDoc from "./components/Workspace/WorkspaceDocs/EditDoc";
-import WorkspaceTags from "./components/Workspace/WorkspaceDocs/WorkspaceTags";
+import WorkspaceTags from "./pages/Workspace/WorkspaceTags";
+import WMessenger from "./pages/Workspace/W-Messenger";
+import WProjectPlanner from "./pages/Workspace/W-ProjectPlanner";
 
 function App() {
   return (
@@ -51,7 +53,8 @@ function App() {
         <Route path="/workspace/vaults/doc-view/:id" element={<WorkspaceViewDoc />} />
         <Route path="/workspace/vaults/doc-edit/:id" element={<WorkspaceEditDoc />} />
         <Route path="/workspace/vaults/tags" element={<WorkspaceTags />} />
-       
+        <Route path="/workspace/messenger" element={<WMessenger />} />
+        <Route path="/workspace/projects" element={<WProjectPlanner />} />
       </Routes>
     </Router>
   );
