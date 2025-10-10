@@ -1,4 +1,3 @@
-// src/hooks/useOnboardingStatus.js
 import { useEffect, useCallback } from 'react';
 import dayjs from 'dayjs';
 import { supabase } from '@/lib/supabaseClient';
