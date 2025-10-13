@@ -18,10 +18,26 @@ export function useOnboardingStatus({ refresh = false } = {}) {
       // 1) current user
       const { data: { user } = {}, error: uErr } = await supabase.auth.getUser();
       if (uErr) throw uErr;
-      if (!user?.id) throw new Error('Not signed in');
+
+      // If not signed in, clear everything and stop
+      if (!user?.id) {
+        setState({
+          loading: false,
+          error: '',
+          hasVaultCode: false,
+          createdFirstDoc: false,
+          connectedCalendar: false,
+          hasProfile: false,
+          emailVerified: false,
+          createdWorkspace: false,
+          createdPrivateSpace: false,
+          lastCheckedAt: dayjs().toISOString(),
+        });
+        return;
+      }
       const uid = user.id;
 
-      // ---- Parallel queries (all safe to run headless/count-only) ----
+      // ---- Parallel queries (scoped to THIS user) ----
       const profPromise = supabase
         .from('profiles_secure')
         .select('id, first_name, last_name, email_verified, vault_code_set')
@@ -29,7 +45,7 @@ export function useOnboardingStatus({ refresh = false } = {}) {
         .maybeSingle();
 
       const myWSCountPromise = supabase
-        .from('workspace_members') // or your “workspaces” table if you prefer ownership
+        .from('workspace_members')
         .select('workspace_id', { count: 'exact', head: true })
         .eq('user_id', uid);
 
@@ -60,15 +76,20 @@ export function useOnboardingStatus({ refresh = false } = {}) {
         .eq('user_id', uid)
         .maybeSingle();
 
+      // 👇 IMPORTANT: scope calendar-enabled counts to THIS user.
+      // If your schema uses a different column (e.g., user_id/owner_id),
+      // replace 'created_by' with that column.
       const wsCalEnabledPromise = supabase
         .from('workspace_calendar_items_secure')
         .select('id', { head: true, count: 'exact' })
-        .eq('calendar_enabled', true);
+        .eq('calendar_enabled', true)
+        .eq('created_by', uid);
 
       const pvCalEnabledPromise = supabase
         .from('private_calendar_items_secure')
         .select('id', { head: true, count: 'exact' })
-        .eq('calendar_enabled', true);
+        .eq('calendar_enabled', true)
+        .eq('created_by', uid);
 
       const [
         { data: prof },
@@ -103,8 +124,7 @@ export function useOnboardingStatus({ refresh = false } = {}) {
       const calendarByItems    = (wsCal?.count ?? 0) > 0 || (pvCal?.count ?? 0) > 0;
       const calendarOK         = calendarBySettings || calendarByItems;
 
-      // “baseline” flags (kept in store too)
-      const profileOK          = !!prof; // or tighten with required fields
+      const profileOK          = !!prof; // tighten if needed
       const emailOK            = !!prof?.email_verified;
       const workspaceOK        = (wsCount?.count ?? 0) > 0;
       const privateSpaceOK     = (psCount?.count ?? 0) > 0;
@@ -136,10 +156,24 @@ export function useOnboardingStatus({ refresh = false } = {}) {
     if (!lastCheckedAt || refresh) load();
   }, [lastCheckedAt, refresh, load]);
 
-  // Optional: refresh on auth changes
+  // Refresh on auth changes. Also clear flags on sign-out to avoid stale UI.
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange(() => {
-      setState({ lastCheckedAt: null }); // trigger a fresh load next render
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        setState({
+          hasVaultCode: false,
+          createdFirstDoc: false,
+          connectedCalendar: false,
+          hasProfile: false,
+          emailVerified: false,
+          createdWorkspace: false,
+          createdPrivateSpace: false,
+          lastCheckedAt: null,
+        });
+      } else {
+        // force a fresh load on next render
+        setState({ lastCheckedAt: null });
+      }
     });
     return () => sub?.subscription?.unsubscribe?.();
   }, [setState]);
@@ -151,7 +185,6 @@ export function useOnboardingStatus({ refresh = false } = {}) {
     createdFirstDoc,
     connectedCalendar,
 
-    // expose baseline flags too
     hasProfile,
     emailVerified,
     createdWorkspace,

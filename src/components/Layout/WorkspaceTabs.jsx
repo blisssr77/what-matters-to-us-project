@@ -136,6 +136,7 @@ export default function WorkspaceTabs({
 
           <button
             onClick={onCreateClick}
+            id="ws-create-btn"
             className="ml-1 h-6 w-6 rounded-md bg-[#15181d] text-gray-300 hover:bg-[#1a1d22] hover:text-white flex items-center justify-center border border-transparent"
             title={createTitle}
           >

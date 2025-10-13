@@ -15,6 +15,71 @@ import CreateWorkspaceModal from "@/components/common/CreateWorkspaceModal";
 import { useWorkspaceActions } from "../../hooks/useWorkspaceActions.js";
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
+
+// Helper component: Arrow pointing to the + button
+const ArrowToPlus = () => (
+  <div className="pointer-events-none absolute -top-6 right-3 flex flex-col items-end">
+    <svg
+      className="w-12 h-12 text-violet-400 animate-bounce"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    >
+      <path d="M6 8c4 4 7 4 12-3" />
+      <path d="M16 5l2-.5-.5 2" />
+    </svg>
+  </div>
+);
+
+// Empty state guide
+// Pass `showVaultNudge={!hasVaultCode}` from your page.
+const EmptyGuide = ({ onCreate, showVaultNudge = false }) => (
+  <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900 to-slate-950 p-6 text-slate-100 ring-1 ring-white/10">
+    {/* Onboarding message (only when user has NOT set a Vault Code) */}
+    {showVaultNudge && (
+      <div className="mb-4 rounded-lg border border-amber-300/40 bg-amber-50/70 p-3 text-amber-900">
+        <p className="text-sm">
+          <strong>Important:</strong> You haven’t set your Vault Code yet. Please visit your{" "}
+          <a href="/dashboard" className="underline font-semibold hover:text-amber-700">
+            Dashboard
+          </a>{" "}
+          to complete onboarding before creating your first workspace.
+        </p>
+      </div>
+    )}
+
+    <div className="flex items-start gap-4 pt-6">
+      <div className="h-10 w-10 shrink-0 rounded-xl bg-violet-600/20 text-violet-300 grid place-items-center ring-1 ring-violet-500/30">
+        <span className="text-lg">✨</span>
+      </div>
+      <div className="min-w-0">
+        <h3 className="text-lg font-semibold">Create your first workspace</h3>
+        <p className="mt-1 text-sm text-slate-300">
+          Workspaces organize your team’s docs, notes, and tags with precise access.
+          Click the <b>+</b> button above to start, or use the button below.
+        </p>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button
+            onClick={onCreate}
+            className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+          >
+            + Create first workspace
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {/* corner glow */}
+    <div className="pointer-events-none absolute -top-24 -right-24 h-48 w-48 rounded-full bg-violet-600/20 blur-3xl" />
+    {/* arrow pointing to + */}
+    <div className="absolute -top-1 right-0 translate-x-6">
+      <ArrowToPlus />
+    </div>
+  </div>
+);
 
 export default function WorkspaceVaultList() {
   const navigate = useNavigate();
@@ -36,6 +101,10 @@ export default function WorkspaceVaultList() {
   const userRole = useUserRole(activeWorkspaceId);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  // Determine if the workspace list is empty
+  const isEmpty = (workspaceList?.length ?? 0) === 0;
+  const { hasVaultCode } = useOnboardingStatus();
   
   // State for document card expansion
   const [expanded, setExpanded] = useState({});
@@ -304,8 +373,16 @@ export default function WorkspaceVaultList() {
       </>
       
       <div className="p-6 max-w-5xl mx-auto text-sm">
+        {isEmpty ? (
+          <EmptyGuide 
+          onCreate={() => setShowCreateWorkspaceModal(true)}
+          showVaultNudge={!hasVaultCode}
+          />
+        ) : (
+          <>
         {/* Buttons Row */}
         <div className="flex justify-end gap-2 mb-4">
+
 
           {/* Upload and Create Buttons */}
           <button
@@ -314,7 +391,6 @@ export default function WorkspaceVaultList() {
           >
             + Upload Document
           </button>
-          <br />
           <button
             onClick={() => navigate("/workspace/vaults/note-upload")}
             className="btn-main"
@@ -564,6 +640,8 @@ export default function WorkspaceVaultList() {
             );
           })}
         </div>
+        </>
+        )}
       </div>
 
       {/* Invite Button for Admins/Owner */}

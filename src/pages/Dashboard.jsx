@@ -32,8 +32,8 @@ export default function Dashboard() {
       { key: "profile",          done: hasProfile,          label: "Complete your profile",      href: "/account/manage",      icon: <BadgeCheck size={16}/> },
       { key: "verify",           done: emailVerified,       label: "Verify your email",          href: "/account/manage",      icon: <LogIn size={16}/> },
       { key: "vault",            done: hasVaultCode,        label: "Set your Vault Code",        href: "/account/manage#vault",icon: <KeyRound size={16}/> },
-      { key: "workspace",        done: createdWorkspace,    label: "Create a Workspace",         href: "/workspace/create",    icon: <Users size={16}/> },
-      { key: "private",          done: createdPrivateSpace, label: "Create your Private Space",  href: "/privatespace/create", icon: <FolderLock size={16}/> },
+      { key: "workspace",        done: createdWorkspace,    label: "Create a Workspace",         href: "/workspace/vaults",    icon: <Users size={16}/> },
+      { key: "private",          done: createdPrivateSpace, label: "Create your Private Space",  href: "/privatespace/vaults", icon: <FolderLock size={16}/> },
       { key: "firstdoc",         done: createdFirstDoc,     label: "Add your first note or doc", href: "/workspace/vaults",    icon: <FileText size={16}/> },
       { key: "calendar",         done: connectedCalendar,   label: "Connect & schedule items",   href: "/calendar",            icon: <CalendarDays size={16}/> },
     ],
@@ -110,7 +110,7 @@ export default function Dashboard() {
               </p>
 
               {/* Progress */}
-              <div className="mt-5 aria-busy={loading">
+              <div className="mt-5 aria-busy={loading}">
                 <div className="flex items-center justify-between text-xs text-slate-400">
                   <span>Setup progress</span>
                   <span className="text-slate-200 font-semibold">{progress}%</span>
@@ -169,19 +169,19 @@ export default function Dashboard() {
               Create together without leaking what matters. Here’s what’s built-in:
             </p>
             <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <Feature
+              {/* <Feature
                 icon={<FileText size={16} />}
                 title="Docs & Notes"
                 desc="Beautiful notes or encrypted docs with tags, attachments and public excerpts."
                 cta="Open Vaults"
                 onClick={() => navigate("/workspace/vaults")}
-              />
+              /> */}
               <Feature
-                icon={<CalendarDays size={16} />}
-                title="Calendar"
-                desc="Day/Week/Month views. See workspace + private items with transparent privacy."
-                cta="Open Calendar"
-                onClick={() => navigate("/calendar")}
+                icon={<FolderLock size={16} />}
+                title="Private Spaces"
+                desc="Your personal vault. Keep sensitive notes/files fully separated and encrypted."
+                cta="My Private Space"
+                onClick={() => navigate("/privatespace")}
               />
               <Feature
                 icon={<Users size={16} />}
@@ -191,13 +191,13 @@ export default function Dashboard() {
                 onClick={() => navigate("/workspaces")}
               />
               <Feature
-                icon={<FolderLock size={16} />}
-                title="Private Spaces"
-                desc="Your personal vault. Keep sensitive notes/files fully separated and encrypted."
-                cta="My Private Space"
-                onClick={() => navigate("/privatespace")}
+                icon={<CalendarDays size={16} />}
+                title="Calendar"
+                desc="Day/Week/Month views. See workspace + private items with transparent privacy."
+                cta="Open Calendar"
+                onClick={() => navigate("/calendar")}
               />
-              <Feature
+              {/* <Feature
                 icon={<Link2 size={16} />}
                 title="Smart Linking"
                 desc="Link docs to tasks, events, or tags. Everything connected, never exposed."
@@ -210,7 +210,7 @@ export default function Dashboard() {
                 desc="Ask for summaries or plans—AI only sees what you allow and nothing else."
                 cta="Enable AI Assist"
                 onClick={() => navigate("/account/manage#ai")}
-              />
+              /> */}
             </div>
           </section>
 
@@ -222,12 +222,12 @@ export default function Dashboard() {
               button="Go to Manage Account"
               onClick={() => navigate("/account/manage")}
             />
-            <Callout
+            {/* <Callout
               title="Create your first encrypted doc"
               desc="Start with a note, then attach files and schedule it on your calendar."
               button="Create Doc"
               onClick={() => navigate("/workspace/vaults/note-upload")}
-            />
+            /> */}
           </section>
         </main>
       </div>
@@ -290,12 +290,12 @@ function SecurityCard({ navigate }) {
         >
           Set Vault Code
         </button>
-        <button
+        {/* <button
           onClick={() => navigate("/security/learn-more")}
           className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
         >
           Learn more
-        </button>
+        </button> */}
       </div>
     </div>
   );

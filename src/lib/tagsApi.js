@@ -16,20 +16,28 @@ function normalizeTagRows(rows) {
 }
 
 // --- READ ---
-export async function listWorkspaceTags(workspaceId, client = defaultClient) {
-  const q = client.from('workspace_tag_usage').select('*').order('name', { ascending: true });
-  const { data, error } = workspaceId ? await q.eq('workspace_id', workspaceId) : await q;
+// Workspace: scope by membership using a SECURITY INVOKER RPC
+export async function listWorkspaceTags(workspaceId = null, client = defaultClient) {
+  const { data, error } = await client.rpc('list_workspace_tags', {
+    p_workspace_id: workspaceId, // pass null to get all workspaces the user can see
+  });
   if (error) return { data: null, error };
   return { data, error: null };
 }
 
-export async function listPrivateTags(userId, privateSpaceId = null, client = defaultClient) {
-  const { data, error } = await client.rpc('get_private_tag_usage', {
-    p_user_id: userId,
-    p_private_space_id: privateSpaceId,
+// Private: scope by the signed-in user via auth.uid() inside the RPC
+// (preferred signature — no userId arg needed)
+export async function listPrivateTags(privateSpaceId = null, client = defaultClient) {
+  const { data, error } = await client.rpc('list_private_tags', {
+    p_private_space_id: privateSpaceId, // null = all my private spaces
   });
   if (error) return { data: null, error };
   return { data: normalizeTagRows(data), error: null };
+}
+
+// Optional backward-compatible wrapper if some code still passes userId:
+export async function listPrivateTagsWithUserId(_userId, privateSpaceId = null, client = defaultClient) {
+  return listPrivateTags(privateSpaceId, client);
 }
 
 // --- CREATE (generic) ---
@@ -121,6 +129,7 @@ export async function createPrivateTag({ name, color, privateSpaceId, userId }, 
     section: 'Private',
     private_space_id: privateSpaceId || null,
     created_by: userId,
+    user_id: userId,
   }).select('*').single()
 }
 
@@ -167,3 +176,4 @@ export async function persistPendingTags(supabase, workspaceId, userId, names = 
     )
   );
 }
+

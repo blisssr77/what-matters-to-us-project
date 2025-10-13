@@ -10,6 +10,72 @@ import { supabase } from "@/lib/supabaseClient";
 import CreatePrivateSpaceModal from "@/components/common/CreatePrivateSpaceModal";
 import PrivateSpaceSettingsModal from "@/components/common/PrivatespaceSettingsModal";
 import { usePrivateSpaceActions } from "@/hooks/usePrivateSpaceActions";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
+
+// Arrow pointing to the + button (Private Space)
+const ArrowToPlusPrivate = () => (
+  <div className="pointer-events-none absolute -top-6 right-3 flex flex-col items-end">
+    <svg
+      className="w-12 h-12 text-violet-400 animate-bounce"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    >
+      <path d="M6 8c4 4 7 4 12-3" />
+      <path d="M16 5l2-.5-.5 2" />
+    </svg>
+  </div>
+);
+
+// Empty state guide (Private Space)
+// Pass `showVaultNudge={!hasVaultCode}` from the page.
+const EmptyGuidePrivate = ({ onCreate, showVaultNudge = false }) => (
+  <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900 to-slate-950 p-6 text-slate-100 ring-1 ring-white/10">
+    {/* Onboarding message: only when Vault Code is NOT set */}
+    {showVaultNudge && (
+      <div className="mb-4 rounded-lg border border-amber-300/40 bg-amber-50/70 p-3 text-amber-900">
+        <p className="text-sm">
+          <strong>Important:</strong> You haven’t set your Vault Code yet. Please visit your{" "}
+          <a href="/dashboard" className="underline font-semibold hover:text-amber-700">
+            Dashboard
+          </a>{" "}
+          to complete onboarding before creating your first private space.
+        </p>
+      </div>
+    )}
+
+    <div className="flex items-start gap-4 pt-6">
+      <div className="h-10 w-10 shrink-0 rounded-xl bg-violet-600/20 text-violet-300 grid place-items-center ring-1 ring-violet-500/30">
+        <span className="text-lg">🔒</span>
+      </div>
+      <div className="min-w-0">
+        <h3 className="text-lg font-semibold">Create your first private space</h3>
+        <p className="mt-1 text-sm text-slate-300">
+          Private spaces are just for you—keep notes and docs separate from team workspaces.
+          Click the <b>+</b> button above to start, or use the button below.
+        </p>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button
+            onClick={onCreate}
+            className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+          >
+            + Create first private space
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {/* corner glow */}
+    <div className="pointer-events-none absolute -top-24 -right-24 h-48 w-48 rounded-full bg-violet-600/20 blur-3xl" />
+    {/* arrow pointing to + */}
+    <div className="absolute -top-1 right-0 translate-x-6">
+      <ArrowToPlusPrivate />
+    </div>
+  </div>
+);
+
 
 export default function PrivateDocList() {
   const navigate = useNavigate();
@@ -28,6 +94,10 @@ export default function PrivateDocList() {
   const setActiveSpaceId = usePrivateSpaceStore((s) => s.setActiveSpaceId);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showPrivateSettings, setShowPrivateSettings] = useState(false);
+
+  // Determine if the workspace list is empty
+  const isEmpty = (PrivateDocList?.length ?? 0) === 0;
+  const { hasVaultCode } = useOnboardingStatus();
 
   // ---------- actions ----------
   const {
@@ -265,6 +335,13 @@ export default function PrivateDocList() {
       />
 
       <div className="p-6 max-w-5xl mx-auto text-sm">
+        {isEmpty ? (
+          <EmptyGuidePrivate 
+          onCreate={() => setShowCreateModal(true)}
+          showVaultNudge={!hasVaultCode}
+          />
+        ) : (
+          <>
         {/* Buttons Row */}
         <div className="flex justify-end gap-2 mb-4">
           <button
@@ -523,6 +600,8 @@ export default function PrivateDocList() {
             );
           })}
         </div>
+        </>
+        )}
       </div>
       
       {/* Private Space Settings Modal */}
