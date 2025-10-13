@@ -123,28 +123,58 @@ export default function WorkspaceTags() {
   const handleNew = () => { setEditInitial(null); setEditOpen(true) }
   const handleEdit = (tag) => { setEditInitial(tag); setEditOpen(true) }
 
-  // save (create or update) — ALWAYS create in activeWorkspaceId
-  const handleSave = async ({ name, color }) => {
-    setEditOpen(false)
-    const { data: { user } = {} } = await supabase.auth.getUser()
-    if (!user?.id) { setError('Not signed in'); return }
-    if (!activeWorkspaceId) { setError('No active workspace'); return }
+  // save (create or update) — supports "applyAllWorkspaces"
+  const handleSave = async ({ name, color, workspaceId, applyAllWorkspaces }) => {
+    setEditOpen(false);
 
+    const { data: { user } = {} } = await supabase.auth.getUser();
+    if (!user?.id) { setError('Not signed in'); return; }
+
+    // EDIT flow stays the same
     if (editInitial) {
-      const { error } = await updateTag(editInitial.id, { name, color })
-      if (error) setError(error.message)
-      else loadTags()
-    } else {
-      const { error } = await createWorkspaceTag({
+        const { error } = await updateTag(editInitial.id, { name, color });
+        if (error) setError(error.message);
+        else loadTags();
+        return;
+    }
+
+    // CREATE flow
+    // If "apply to all" is checked, create in each workspace the user can access
+    if (applyAllWorkspaces) {
+        if (!Array.isArray(workspaceList) || workspaceList.length === 0) {
+            setError('No available workspaces to apply this tag.');
+            return;
+        }
+        const targets = workspaceList.map(w => w.id);
+
+        const results = await Promise.all(
+            targets.map(wid =>
+                createWorkspaceTag({ name, color, workspaceId: wid, userId: user.id })
+            )
+        );
+
+        // Surface any non-duplicate errors (ignore unique-violation 23505)
+        const failures = results.filter(r => r?.error && r.error.code !== '23505');
+            if (failures.length) {
+            setError('Some workspaces failed to add this tag (it may already exist).');
+        }
+        await loadTags();
+        return;
+    }
+
+    // Otherwise, create only in the chosen/active workspace
+    const targetWorkspaceId = workspaceId || activeWorkspaceId;
+    if (!targetWorkspaceId) { setError('No workspace selected'); return; }
+
+    const { error } = await createWorkspaceTag({
         name,
         color,
-        workspaceId: activeWorkspaceId,
+        workspaceId: targetWorkspaceId,
         userId: user.id
-      })
-      if (error) setError(error.message)
-      else loadTags()
-    }
-  }
+    });
+    if (error) setError(error.message);
+    else loadTags();
+    };
 
   // delete
   const handleDelete = async (tag) => setConfirm(tag)
@@ -351,17 +381,15 @@ export default function WorkspaceTags() {
         open={editOpen}
         initial={editInitial ? { ...editInitial, section: 'Workspace' } : null}
         onClose={() => setEditOpen(false)}
-        onSave={({ name, color }) => handleSave({ name, color })}
-        // Only allow creating in the CURRENT workspace on this page:
-        workspaces={[
-          ...(activeWorkspaceId
-            ? [{ id: activeWorkspaceId, name: (workspaceList.find(w => w.id === activeWorkspaceId)?.name) || 'Current workspace' }]
-            : []
-          )
-        ]}
+        onSave={({ name, color, workspaceId, applyAllWorkspaces }) =>
+            handleSave({ name, color, workspaceId, applyAllWorkspaces })
+        }
+        context="workspace"
+        workspaces={workspaceList}
         privateSpaces={[]}
         defaultSection="Workspace"
         initialWorkspaceId={activeWorkspaceId}
+        allowAllWorkspaces
       />
 
       <ConfirmDialog

@@ -132,26 +132,38 @@ export default function PrivateSpaceTags() {
   const handleNew  = () => { setEditInitial(null); setEditOpen(true); };
   const handleEdit = (tag) => { setEditInitial(tag); setEditOpen(true); };
 
-  // create or update — ALWAYS create in the active private space
-  const handleSave = async ({ name, color }) => {
+  // create or update — supports single space or "all private spaces"
+  const handleSave = async ({ name, color, privateSpaceId, applyAllPrivateSpaces }) => {
     setEditOpen(false);
     const { data: { user } = {} } = await supabase.auth.getUser();
     if (!user?.id) { setError('Not signed in'); return; }
-    if (!activeSpaceId) { setError('No active private space'); return; }
-
-    if (editInitial) {
-      const { error } = await updateTag(editInitial.id, { name, color });
-      if (error) setError(error.message);
-      else loadTags();
-    } else {
-      const { error } = await createPrivateTag({
-        name,
-        color,
-        privateSpaceId: activeSpaceId,
-        userId: user.id,
-      });
-      if (error) setError(error.message);
-      else loadTags();
+    try {
+      if (applyAllPrivateSpaces) {
+        // create the tag in every private space for this user
+        // (skip if you have a server-side helper for this)
+        const creates = privateSpaceList.map(ps =>
+          createPrivateTag({ name, color, privateSpaceId: ps.id, userId: user.id })
+        );
+        const results = await Promise.allSettled(creates);
+        const rejected = results.find(r => r.status === 'rejected' || r.value?.error);
+        if (rejected) {
+          const msg = rejected?.reason?.message || rejected?.value?.error?.message || 'Failed to create in some spaces';
+          setError(msg);
+        }
+      } else {
+        const targetSpaceId = privateSpaceId || activeSpaceId;
+        if (!targetSpaceId) { setError('No private space selected'); return; }
+        const { error } = await createPrivateTag({
+          name,
+          color,
+          privateSpaceId: targetSpaceId,
+          userId: user.id,
+        });
+        if (error) throw error;
+      }
+      loadTags();
+    } catch (e) {
+      setError(e?.message || 'Failed to create tag');
     }
   };
 
@@ -341,16 +353,14 @@ export default function PrivateSpaceTags() {
         open={editOpen}
         initial={editInitial ? { ...editInitial, section: 'Private' } : null}
         onClose={() => setEditOpen(false)}
-        onSave={({ name, color }) => handleSave({ name, color })}
+        onSave={({ name, color, privateSpaceId, applyAllPrivateSpaces }) =>
+          handleSave({ name, color, privateSpaceId, applyAllPrivateSpaces })}
+        context="private"
         workspaces={[]}
-        privateSpaces={[
-          ...(activeSpaceId
-            ? [{ id: activeSpaceId, name: (privateSpaceList.find(ps => ps.id === activeSpaceId)?.name) || 'Current private space' }]
-            : []
-          )
-        ]}
+        privateSpaces={privateSpaceList}
         defaultSection="Private"
         initialPrivateSpaceId={activeSpaceId}
+        allowAllPrivate={true}
       />
 
       <ConfirmDialog
