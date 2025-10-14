@@ -11,6 +11,7 @@ import CreatePrivateSpaceModal from "@/components/common/CreatePrivateSpaceModal
 import PrivateSpaceSettingsModal from "@/components/common/PrivatespaceSettingsModal";
 import { usePrivateSpaceActions } from "@/hooks/usePrivateSpaceActions";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
+import { usePvVaultCode } from "@/hooks/usePvVaultCode";
 
 // Arrow pointing to the + button (Private Space)
 const ArrowToPlusPrivate = () => (
@@ -76,7 +77,6 @@ const EmptyGuidePrivate = ({ onCreate, showVaultNudge = false }) => (
   </div>
 );
 
-
 export default function PrivateDocList() {
   const navigate = useNavigate();
 
@@ -95,9 +95,13 @@ export default function PrivateDocList() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showPrivateSettings, setShowPrivateSettings] = useState(false);
 
-  // Determine if the workspace list is empty
+  // ---------- onboarding status ----------
+  const { flagsReady, pvVaultCodeSet } = useOnboardingStatus();
+  // Determine if the private document list is empty
   const isEmpty = (PrivateDocList?.length ?? 0) === 0;
-  const { hasVaultCode } = useOnboardingStatus();
+  // Only show the nudge after flags are ready and explicitly false
+  const showVaultNudge = flagsReady && pvVaultCodeSet === false;
+  const showEmptyGuide = flagsReady && isEmpty;
 
   // ---------- actions ----------
   const {
@@ -335,10 +339,11 @@ export default function PrivateDocList() {
       />
 
       <div className="p-6 max-w-5xl mx-auto text-sm">
-        {isEmpty ? (
-          <EmptyGuidePrivate 
-          onCreate={() => setShowCreateModal(true)}
-          showVaultNudge={!hasVaultCode}
+        {!flagsReady ? null : showEmptyGuide ? (
+          <EmptyGuidePrivate
+            onCreate={() => setShowCreateModal(true)}
+            ready={flagsReady}
+            showVaultNudge={showVaultNudge}
           />
         ) : (
           <>

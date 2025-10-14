@@ -12,6 +12,35 @@ import VaultCodeChecklist, { buildCodeRules } from "./VaultCodeChecklist";
 import { rotateWorkspaceCodeClient } from "@/utils/rotateWorkspaceCodeClient";
 import { rotatePrivateCodeClient } from "@/utils/rotatePrivateCodeClient";
 
+// A separate Supabase client instance that does NOT persist sessions
+function slugifyUsername(s) {
+  return String(s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')     // keep [a-z0-9._-]
+    .replace(/^-+|-+$/g, '')            // trim dashes
+    .slice(0, 24) || null;              // cap length, return null if empty
+}
+// Find an available username by appending numbers if needed
+async function findAvailableUsername(client, base) {
+  const supa = client || supabase;
+  let candidate = slugifyUsername(base) || 'user';
+  let num = 0;
+
+  // try up to N variants: user, user-1, user-2, ...
+  for (let i = 0; i < 50; i += 1) {
+    const check = await supa
+      .from('profiles')
+      .select('id')
+      .eq('username', candidate)
+      .maybeSingle();
+
+    if (!check.data) return candidate; // available
+    num += 1;
+    candidate = `${slugifyUsername(base) || 'user'}-${num}`;
+  }
+  return `user-${crypto.randomUUID().slice(0, 8)}`;
+}
 
 export default function ManageAccount() {
     /* ────────────────── Profile / Basic Info state ────────────────── */
@@ -35,7 +64,7 @@ export default function ManageAccount() {
     /* ────────────────── Vault Codes state ────────────────── */
     const [workspaceCode, setWorkspaceCode] = useState("");
     const [privateCode, setPrivateCode] = useState("");
-    const [codes, setCodes] = useState({ workspace: null, private: null });
+    const [codes, setCodes] = useState({ workspace: undefined, private: undefined });
     const [workspaceCurrent, setWorkspaceCurrent] = useState("");
     const [workspaceConfirm, setWorkspaceConfirm] = useState("");
     const [privateCurrent, setPrivateCurrent] = useState("");
@@ -49,6 +78,55 @@ export default function ManageAccount() {
     const [privateMsg, setPrivateMsg]   = useState(null);
 
     const navigate = useNavigate();
+
+    // Ensure a row exists in `profiles` for the signed-in user.
+    // Optionally merge some fields if you already have them in state.
+    async function ensureProfileExists(patch = {}) {
+        const { data: { user } = {} } = await supabase.auth.getUser();
+        if (!user?.id) return { ok: false, err: new Error('Not signed in') };
+        const uid = user.id;
+
+        // Do we already have a row?
+        const { data: existing, error: selErr } = await supabase
+            .from('profiles')
+            .select('id, username')
+            .eq('id', uid)
+            .maybeSingle();
+        if (selErr) return { ok: false, err: selErr };
+
+        // If exists, optionally patch light fields and return
+        if (existing?.id) {
+            if (Object.keys(patch).length) {
+            await supabase
+                .from('profiles')
+                .update({ ...patch, updated_at: new Date().toISOString() })
+                .eq('id', uid);
+            }
+            return { ok: true };
+        }
+
+        // Need a username because column is NOT NULL
+        // Prefer: provided patch.username → email local-part → uid fallback
+        const rawFromPatch = patch.username;
+        const rawFromEmail = user.email ? user.email.split('@')[0] : null;
+        const base = rawFromPatch || rawFromEmail || `user-${uid.slice(0, 8)}`;
+        const username = await findAvailableUsername(supabase, base);
+
+        const insert = {
+            id: uid,
+            username,                                // <= guaranteed not null
+            first_name: patch.first_name ?? null,
+            last_name: patch.last_name ?? null,
+            updated_at: new Date().toISOString(),
+        };
+
+        const { error: insErr } = await supabase
+            .from('profiles')
+            .upsert(insert, { onConflict: 'id' });
+
+        if (insErr) return { ok: false, err: insErr };
+        return { ok: true };
+    }
 
     /* ────────────────── Get Basic User Info ────────────────── */
     useEffect(() => {
@@ -128,6 +206,23 @@ export default function ManageAccount() {
         getCodes();
     }, []);
 
+    const refreshCodes = async () => {
+        const { data: { user } = {} } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase
+            .from("vault_codes")
+            .select("workspace_code_hash, private_code_hash")
+            .eq("id", user.id)
+            .maybeSingle();
+        setCodes({
+            workspace: !!(data?.workspace_code_hash),
+            private:   !!(data?.private_code_hash),
+        });
+        };
+
+    // after successful create/change:
+    refreshCodes();
+
     /* ────────────────── Helper functions ────────────────── */
     // Password rule checks
     const buildPwRules = (pwd, current) => ({
@@ -146,6 +241,7 @@ export default function ManageAccount() {
     /* ────────────────── Save handlers (wire to Supabase) ────────────────── */
     const saveBasicInfo = async () => {
         if (usernameErr) return;
+        await ensureProfileExists({ first_name: firstName, last_name: lastName, username });
 
         const { data: { user } } = await supabase.auth.getUser();
 
@@ -192,6 +288,10 @@ export default function ManageAccount() {
         e.preventDefault(); // prevent refresh
         setPwErr("");
 
+        // ensure profile exists even if password is changed first
+        const ensured = await ensureProfileExists();
+        if (!ensured.ok) return setPwErr(ensured.err?.message || 'Could not ensure profile');
+
         if (currPwStatus !== "good") return setPwErr("Please confirm your current password first.");
         if (newPw !== confirmPw)    return setPwErr("Passwords do not match.");
         if (newPw === currentPw)    return setPwErr("New password cannot be the same as current password.");
@@ -219,17 +319,6 @@ export default function ManageAccount() {
         return !!ok;
     };
 
-    // Clear remembered vault codes
-    const clearRememberedCodes = async () => {
-            const { data: { user } = {} } = await supabase.auth.getUser();
-            const userId = user?.id ?? "anon";
-            const prefixes = [`ws_vault_code:${userId}:`, `pv_vault_code:${userId}:`];
-            for (const k of Object.keys(localStorage)) {
-                if (prefixes.some((p) => k.startsWith(p))) localStorage.removeItem(k);
-            }
-            sessionStorage.removeItem("vaultCode");
-    };
-
     /** Helper: list workspace ids the current user is a member of */
     async function getUserWorkspaceIds() {
         const { data: { user } = {} } = await supabase.auth.getUser();
@@ -250,23 +339,23 @@ export default function ManageAccount() {
     /* ────────────────── Save Vault Code handlers (wire to Supabase) ────────────────── */
     /* ────────────── CREATE WORKSPACE CODE ────────────── */
     const createWorkspaceCode = async () => {
-        if (!workspaceCode || !workspaceConfirm)
-            return { ok: false, msg: "Enter code and confirmation" };
-        if (workspaceCode !== workspaceConfirm)
-            return { ok: false, msg: "Codes do not match" };
+        if (!workspaceCode || !workspaceConfirm) return { ok: false, msg: 'Enter code and confirmation' };
+        if (workspaceCode !== workspaceConfirm)   return { ok: false, msg: 'Codes do not match' };
+
+        // Ensure a profile row exists first
+        const ensured = await ensureProfileExists();
+        if (!ensured.ok) return { ok: false, msg: ensured.err?.message || 'Could not ensure profile' };
 
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return { ok: false, msg: "User not signed-in" };
+        if (!user) return { ok: false, msg: 'User not signed-in' };
 
-        // Set brand new per-user workspace code hash
         const newCode = workspaceCode.trim();
-        const { error } = await supabase.rpc("set_user_vault_code", { p_code: newCode });
-        if (error) return { ok: false, msg: error.message || "Failed to save code" };
+        const { error } = await supabase.rpc('set_user_vault_code', { p_code: newCode });
+        if (error) return { ok: false, msg: error.message || 'Failed to save code' };
 
-        setWorkspaceCode(""); 
-        setWorkspaceConfirm("");
+        setWorkspaceCode(''); setWorkspaceConfirm('');
         setCodes((c) => ({ ...c, workspace: true }));
-        return { ok: true, msg: "Workspace code created successfully " };
+        return { ok: true, msg: 'Workspace code created successfully ' };
     };
 
 
@@ -277,6 +366,10 @@ export default function ManageAccount() {
             return { ok: false, msg: "All fields are required" };
         if (workspaceCode !== workspaceConfirm)
             return { ok: false, msg: "New codes do not match" };
+
+        // ensure profile
+        const ensured = await ensureProfileExists();
+        if (!ensured.ok) return { ok: false, msg: ensured.err?.message || 'Could not ensure profile' };
 
         const oldCode = workspaceCurrent.trim();
         const newCode = workspaceCode.trim();
@@ -319,20 +412,19 @@ export default function ManageAccount() {
     /* ────────────── CREATE PRIVATE CODE ────────────── */
     /*   Verify old → rotate all privatespaces → set new hash */
     const createPrivateCode = async () => {
-        if (!privateCode || !privateConfirm)
-            return { ok: false, msg: "Enter code and confirmation" };
-        if (privateCode !== privateConfirm)
-            return { ok: false, msg: "Codes do not match" };
+        if (!privateCode || !privateConfirm) return { ok: false, msg: 'Enter code and confirmation' };
+        if (privateCode !== privateConfirm)   return { ok: false, msg: 'Codes do not match' };
 
-        const { error } = await supabase.rpc("set_user_private_code", {
-            p_code: privateCode.trim(),
-        });
-        if (error) return { ok: false, msg: error.message || "Failed to save code" };
+        // ensure profile
+        const ensured = await ensureProfileExists();
+        if (!ensured.ok) return { ok: false, msg: ensured.err?.message || 'Could not ensure profile' };
 
-        setPrivateCode(""); 
-        setPrivateConfirm("");
+        const { error } = await supabase.rpc('set_user_private_code', { p_code: privateCode.trim() });
+        if (error) return { ok: false, msg: error.message || 'Failed to save code' };
+
+        setPrivateCode(''); setPrivateConfirm('');
         setCodes((c) => ({ ...c, private: true }));
-        return { ok: true, msg: "Private code created successfully " };
+        return { ok: true, msg: 'Private code created successfully ' };
     };
 
 
@@ -342,6 +434,10 @@ export default function ManageAccount() {
             return { ok: false, msg: "All fields are required" };
         if (privateCode !== privateConfirm)
             return { ok: false, msg: "New codes do not match" };
+
+         // ensure profile
+        const ensured = await ensureProfileExists();
+        if (!ensured.ok) return { ok: false, msg: ensured.err?.message || 'Could not ensure profile' };
 
         const oldCode = privateCurrent.trim();
         const newCode = privateCode.trim();
@@ -384,8 +480,6 @@ export default function ManageAccount() {
     const prRules = buildCodeRules(privateCode, privateCurrent, 6);
     const prNewOk = prRules.length && prRules.noSpace;
     const prConfirmOk = !!privateConfirm && privateConfirm === privateCode && prNewOk;
-
-
 
     /* ────────────────── UI ────────────────── */
     // Workspace Card
@@ -559,55 +653,7 @@ export default function ManageAccount() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="p-5 bg-gray-50 rounded border">
             <>
-                {codes.workspace === null ? (
-                    /* CREATE form */
-                    <>
-                        <h3 className="font-medium mb-3 text-gray-900">Create a new Workspace vault code</h3>
-
-                        <VaultCodeField
-                            className="text-gray-800"
-                            id="ws-new"
-                            label="Create workspace code"
-                            autoComplete="new-password"
-                            value={workspaceCode}
-                            onChange={(e) => setWorkspaceCode(e.target.value)}
-                            // drive status manually for "new" field
-                            statusProp={!workspaceCode ? "idle" : (wsNewOk ? "good" : "bad")}
-                        />
-
-                        <VaultCodeField
-                            id="ws-confirm"
-                            label="Confirm code"
-                            autoComplete="new-password"
-                            value={workspaceConfirm}
-                            onChange={(e) => setWorkspaceConfirm(e.target.value)}
-                            statusProp={!workspaceConfirm ? "idle" : (wsConfirmOk ? "good" : "bad")}
-                            className="mt-2"
-                        />
-
-                        <VaultCodeChecklist rules={buildCodeRules(workspaceCode, "", 6)} className="mt-2" />
-
-                        <div className="flex justify-end mt-3">
-                            <button
-                                type="button"
-                                className="btn-secondary text-sm"
-                                onClick={async () => {
-                                    const { ok, msg } = await createWorkspaceCode();
-                                    setWorkspaceMsg({ ok, msg });
-                                }}
-                                disabled={!wsNewOk || !wsConfirmOk}
-                            >
-                                Create code
-                            </button>
-                        </div>
-
-                        {workspaceMsg?.ok ? (
-                            <p className="flex justify-center text-xs text-green-600 mt-4">{workspaceMsg.msg}</p>
-                        ) : workspaceMsg?.msg ? (
-                            <p className="flex justify-center text-xs text-red-500 mt-4">{workspaceMsg.msg}</p>
-                        ) : null}
-                    </>
-                ) : (
+                {codes.workspace === undefined ? null : codes.workspace ? (
                     /* CHANGE form (codes.workspace !== null) */
                     <>
                         <h3 className="font-medium mb-4 text-gray-900">Change your Workspace vault code</h3>
@@ -664,122 +710,170 @@ export default function ManageAccount() {
                             <p className="flex justify-center text-xs text-red-500 mt-4">{workspaceMsg.msg}</p>
                         ) : null}
                     </>
+                ) : (
+                    /* CREATE form */
+                    <>
+                        <h3 className="font-medium mb-3 text-gray-900">Create a new Workspace vault code</h3>
+
+                        <VaultCodeField
+                            className="text-gray-800"
+                            id="ws-new"
+                            label="Create workspace code"
+                            autoComplete="new-password"
+                            value={workspaceCode}
+                            onChange={(e) => setWorkspaceCode(e.target.value)}
+                            // drive status manually for "new" field
+                            statusProp={!workspaceCode ? "idle" : (wsNewOk ? "good" : "bad")}
+                        />
+
+                        <VaultCodeField
+                            id="ws-confirm"
+                            label="Confirm code"
+                            autoComplete="new-password"
+                            value={workspaceConfirm}
+                            onChange={(e) => setWorkspaceConfirm(e.target.value)}
+                            statusProp={!workspaceConfirm ? "idle" : (wsConfirmOk ? "good" : "bad")}
+                            className="mt-2 text-gray-800"
+                        />
+
+                        <VaultCodeChecklist rules={buildCodeRules(workspaceCode, "", 6)} className="mt-2" />
+
+                        <div className="flex justify-end mt-3">
+                            <button
+                                type="button"
+                                className="btn-secondary text-sm"
+                                onClick={async () => {
+                                    const { ok, msg } = await createWorkspaceCode();
+                                    setWorkspaceMsg({ ok, msg });
+                                }}
+                                disabled={!wsNewOk || !wsConfirmOk}
+                            >
+                                Create code
+                            </button>
+                        </div>
+
+                        {workspaceMsg?.ok ? (
+                            <p className="flex justify-center text-xs text-green-600 mt-4">{workspaceMsg.msg}</p>
+                        ) : workspaceMsg?.msg ? (
+                            <p className="flex justify-center text-xs text-red-500 mt-4">{workspaceMsg.msg}</p>
+                        ) : null}
+                    </>
                 )}
             </>
         </div>
 
         {/* Private Card */}
         <div className="p-5 bg-gray-50 rounded border">
-            {codes.private === null ? (
-                // CREATE
-                <>
-                <h3 className="font-medium mb-4 text-gray-900">
-                    Create a new Private vault code
-                </h3>
-
-                <VaultCodeField
-                    className="text-gray-800"
-                    id="pr-new"
-                    label="Create private code"
-                    autoComplete="new-password"
-                    value={privateCode}
-                    onChange={(e) => setPrivateCode(e.target.value)}
-                    statusProp={!privateCode ? "idle" : prNewOk ? "good" : "bad"}
-                />
-
-                <VaultCodeField
-                    className="text-gray-800 mt-2"
-                    id="pr-confirm"
-                    label="Confirm code"
-                    autoComplete="new-password"
-                    value={privateConfirm}
-                    onChange={(e) => setPrivateConfirm(e.target.value)}
-                    statusProp={!privateConfirm ? "idle" : prConfirmOk ? "good" : "bad"}
-                />
-
-                <VaultCodeChecklist
-                    rules={buildCodeRules(privateCode, "", 6)}  // neutral for "not same" until current is provided
-                    className="mt-2"
-                />
-
-                <div className="flex justify-end mt-3">
-                    <button
-                    type="button"
-                    className="btn-secondary text-sm"
-                    onClick={async () => {
-                        const { ok, msg } = await createPrivateCode();
-                        setPrivateMsg({ ok, msg });
-                    }}
-                    disabled={!prNewOk || !prConfirmOk}
-                    >
-                    Create code
-                    </button>
-                </div>
-
-                {privateMsg?.ok ? (
-                    <p className="flex justify-center text-xs text-green-600 mt-4">{privateMsg.msg}</p>
-                ) : privateMsg?.msg ? (
-                    <p className="flex justify-center text-xs text-red-500 mt-4">{privateMsg.msg}</p>
-                ) : null}
-                </>
-            ) : (
+            {codes.private === undefined ? null : codes.private ? (
                 // CHANGE
                 <>
-                <h3 className="font-medium mb-4 text-gray-900">
-                    Change your Private vault code
-                </h3>
+                    <h3 className="font-medium mb-4 text-gray-900">
+                        Change your Private vault code
+                    </h3>
 
-                <VaultCodeField
-                    className="text-gray-800"
-                    id="pr-current"
-                    label="Current private vault code"
-                    autoComplete="current-password"
-                    value={privateCurrent}
-                    onChange={(e) => setPrivateCurrent(e.target.value)}
-                    verifyAsync={verifyPrivateCurrent}   // debounced RPC verification + ✓/×/spinner
-                />
+                    <VaultCodeField
+                        className="text-gray-800"
+                        id="pr-current"
+                        label="Current private vault code"
+                        autoComplete="current-password"
+                        value={privateCurrent}
+                        onChange={(e) => setPrivateCurrent(e.target.value)}
+                        verifyAsync={verifyPrivateCurrent}   // debounced RPC verification + ✓/×/spinner
+                    />
 
-                <VaultCodeField
-                    className="text-gray-800 mt-2"
-                    id="pr-new"
-                    label="New code"
-                    autoComplete="new-password"
-                    value={privateCode}
-                    onChange={(e) => setPrivateCode(e.target.value)}
-                    statusProp={!privateCode ? "idle" : prNewOk ? "good" : "bad"}
-                />
+                    <VaultCodeField
+                        className="text-gray-800 mt-2"
+                        id="pr-new"
+                        label="New code"
+                        autoComplete="new-password"
+                        value={privateCode}
+                        onChange={(e) => setPrivateCode(e.target.value)}
+                        statusProp={!privateCode ? "idle" : prNewOk ? "good" : "bad"}
+                    />
 
-                <VaultCodeField
-                    className="text-gray-800 mt-2"
-                    id="pr-confirm"
-                    label="Confirm new code"
-                    autoComplete="new-password"
-                    value={privateConfirm}
-                    onChange={(e) => setPrivateConfirm(e.target.value)}
-                    statusProp={!privateConfirm ? "idle" : prConfirmOk ? "good" : "bad"}
-                />
+                    <VaultCodeField
+                        className="text-gray-800 mt-2"
+                        id="pr-confirm"
+                        label="Confirm new code"
+                        autoComplete="new-password"
+                        value={privateConfirm}
+                        onChange={(e) => setPrivateConfirm(e.target.value)}
+                        statusProp={!privateConfirm ? "idle" : prConfirmOk ? "good" : "bad"}
+                    />
 
-                <VaultCodeChecklist rules={prRules} className="mt-2" />
+                    <VaultCodeChecklist rules={prRules} className="mt-2" />
 
-                <div className="flex justify-end mt-3">
-                    <button
-                    type="button"
-                    className="btn-secondary text-sm"
-                    onClick={async () => {
-                        const { ok, msg } = await changePrivateCode();
-                        setPrivateMsg({ ok, msg });
-                    }}
-                    disabled={!prNewOk || !prConfirmOk}
-                    >
-                    Change code
-                    </button>
-                </div>
+                    <div className="flex justify-end mt-3">
+                        <button
+                        type="button"
+                        className="btn-secondary text-sm"
+                        onClick={async () => {
+                            const { ok, msg } = await changePrivateCode();
+                            setPrivateMsg({ ok, msg });
+                        }}
+                        disabled={!prNewOk || !prConfirmOk}
+                        >
+                        Change code
+                        </button>
+                    </div>
 
-                {privateMsg?.ok ? (
-                    <p className="flex justify-center text-xs text-green-600 mt-4">{privateMsg.msg}</p>
-                ) : privateMsg?.msg ? (
-                    <p className="flex justify-center text-xs text-red-500 mt-4">{privateMsg.msg}</p>
-                ) : null}
+                    {privateMsg?.ok ? (
+                        <p className="flex justify-center text-xs text-green-600 mt-4">{privateMsg.msg}</p>
+                    ) : privateMsg?.msg ? (
+                        <p className="flex justify-center text-xs text-red-500 mt-4">{privateMsg.msg}</p>
+                    ) : null}
+                </>
+                ) : (
+                // CREATE
+                <>
+                    <h3 className="font-medium mb-4 text-gray-900">
+                        Create a new Private vault code
+                    </h3>
+
+                    <VaultCodeField
+                        className="text-gray-800"
+                        id="pr-new"
+                        label="Create private code"
+                        autoComplete="new-password"
+                        value={privateCode}
+                        onChange={(e) => setPrivateCode(e.target.value)}
+                        statusProp={!privateCode ? "idle" : prNewOk ? "good" : "bad"}
+                    />
+
+                    <VaultCodeField
+                        className="text-gray-800 mt-2"
+                        id="pr-confirm"
+                        label="Confirm code"
+                        autoComplete="new-password"
+                        value={privateConfirm}
+                        onChange={(e) => setPrivateConfirm(e.target.value)}
+                        statusProp={!privateConfirm ? "idle" : prConfirmOk ? "good" : "bad"}
+                    />
+
+                    <VaultCodeChecklist
+                        rules={buildCodeRules(privateCode, "", 6)}  // neutral for "not same" until current is provided
+                        className="mt-2"
+                    />
+
+                    <div className="flex justify-end mt-3">
+                        <button
+                        type="button"
+                        className="btn-secondary text-sm"
+                        onClick={async () => {
+                            const { ok, msg } = await createPrivateCode();
+                            setPrivateMsg({ ok, msg });
+                        }}
+                        disabled={!prNewOk || !prConfirmOk}
+                        >
+                        Create code
+                        </button>
+                    </div>
+
+                    {privateMsg?.ok ? (
+                        <p className="flex justify-center text-xs text-green-600 mt-4">{privateMsg.msg}</p>
+                    ) : privateMsg?.msg ? (
+                        <p className="flex justify-center text-xs text-red-500 mt-4">{privateMsg.msg}</p>
+                    ) : null}
                 </>
             )}
         </div>

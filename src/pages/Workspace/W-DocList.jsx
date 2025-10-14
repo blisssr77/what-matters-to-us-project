@@ -101,11 +101,14 @@ export default function WorkspaceVaultList() {
   const userRole = useUserRole(activeWorkspaceId);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  
+
+  const { flagsReady, wsVaultCodeSet } = useOnboardingStatus();
   // Determine if the workspace list is empty
   const isEmpty = (workspaceList?.length ?? 0) === 0;
-  const { hasVaultCode } = useOnboardingStatus();
-  
+  // Only show the nudge after flags are ready and explicitly false
+  const showVaultNudge = flagsReady && wsVaultCodeSet === false;
+  const showEmptyGuide = flagsReady && isEmpty;
+
   // State for document card expansion
   const [expanded, setExpanded] = useState({});
   const [titleOverflow, setTitleOverflow] = useState({});
@@ -358,6 +361,7 @@ export default function WorkspaceVaultList() {
     return !!data; // true if valid
   };
 
+  //=========================================== UI RENDER ===========================================
   return (
     <Layout noGutters>
       {/* Header with Settings Icon */}
@@ -373,10 +377,11 @@ export default function WorkspaceVaultList() {
       </>
       
       <div className="p-6 max-w-5xl mx-auto text-sm">
-        {isEmpty ? (
-          <EmptyGuide 
-          onCreate={() => setShowCreateWorkspaceModal(true)}
-          showVaultNudge={!hasVaultCode}
+        {!flagsReady ? null : showEmptyGuide ? (
+          <EmptyGuide
+            onCreate={() => setShowCreateWorkspaceModal(true)}
+            ready={flagsReady}
+            showVaultNudge={showVaultNudge}
           />
         ) : (
           <>

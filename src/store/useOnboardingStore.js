@@ -20,38 +20,61 @@ const defaults = {
 export const useOnboardingStore = create(
   persist(
     (set, get) => ({
-      // which user these flags belong to
+      // who these flags belong to
       userId: null,
 
       // flags
       ...defaults,
 
-      // loading/error (optional)
+      // ui state
       loading: false,
       error: '',
 
-      // generic setter you already had
-      setState: (patch) => set(patch),
+      // generic setter (supports object or updater fn)
+      setState: (patch) => {
+        if (typeof patch === 'function') set(patch);
+        else if (patch && typeof patch === 'object') set(patch);
+      },
 
-      // optional: keep this if you use it elsewhere
-      setBaselineFlags: (patch) => set(patch),
+      // keep if used elsewhere, but same hardening
+      setBaselineFlags: (patch) => {
+        if (patch && typeof patch === 'object') set(patch);
+      },
 
-      // NEW: fully reset (use on sign-out or before switching users)
-      reset: () => set({ userId: null, ...defaults }),
+      // fully reset (use on sign-out or user switch)
+      reset: () => set({
+        userId: null,
+        ...defaults,
+        loading: false,
+        error: '',
+      }),
 
-      // NEW: set flags coming from the server, *scoped to a user*
-      // If user changed, drop old flags first.
+      // ingest server flags, scoped by user
       setFromServer: (payload, userId) => {
-        const prev = get().userId;
-        if (prev !== userId) {
-          set({ userId, ...defaults, ...payload });
+        if (!payload || typeof payload !== 'object') return;
+
+        const prevUser = get().userId;
+        const common = {
+          ...payload,
+          // always stamp when we accept server state
+          lastCheckedAt: new Date().toISOString(),
+          loading: false,
+          error: '',
+        };
+
+        if (prevUser !== userId) {
+          set({ userId, ...defaults, ...common });
         } else {
-          set({ ...payload });
+          set(common);
         }
       },
     }),
     {
       name: 'onboarding-store-v1',
+      // add versioning so you can migrate persisted keys later if needed
+      version: 1,
+      // migrate: (persisted, version) => persisted,
+
       partialize: (s) => ({
         userId: s.userId,
         hasVaultCode: s.hasVaultCode,
@@ -62,6 +85,7 @@ export const useOnboardingStore = create(
         createdWorkspace: s.createdWorkspace,
         createdPrivateSpace: s.createdPrivateSpace,
         lastCheckedAt: s.lastCheckedAt,
+        // intentionally NOT persisting loading/error
       }),
     }
   )

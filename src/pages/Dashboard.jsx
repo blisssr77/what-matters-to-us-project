@@ -13,7 +13,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   // onboarding status hook
-  const { loading, error, reloadOnboarding } = useOnboardingStatus();
+  const { loading, error, reloadOnboarding, wsVaultCodeSet, pvVaultCodeSet } = useOnboardingStatus();
 
   // onboarding flags from store
   const {
@@ -29,16 +29,27 @@ export default function Dashboard() {
   // Define steps based on onboarding flags
   const steps = useMemo(
     () => [
-      { key: "profile",          done: hasProfile,          label: "Complete your profile",      href: "/account/manage",      icon: <BadgeCheck size={16}/> },
-      { key: "verify",           done: emailVerified,       label: "Verify your email",          href: "/account/manage",      icon: <LogIn size={16}/> },
-      { key: "vault",            done: hasVaultCode,        label: "Set your Vault Code",        href: "/account/manage#vault",icon: <KeyRound size={16}/> },
-      { key: "workspace",        done: createdWorkspace,    label: "Create a Workspace",         href: "/workspace/vaults",    icon: <Users size={16}/> },
-      { key: "private",          done: createdPrivateSpace, label: "Create your Private Space",  href: "/privatespace/vaults", icon: <FolderLock size={16}/> },
-      { key: "firstdoc",         done: createdFirstDoc,     label: "Add your first note or doc", href: "/workspace/vaults",    icon: <FileText size={16}/> },
-      { key: "calendar",         done: connectedCalendar,   label: "Connect & schedule items",   href: "/calendar",            icon: <CalendarDays size={16}/> },
+      { key: "profile",   done: hasProfile,          label: "Complete your profile",      href: "/account/manage",       icon: <BadgeCheck size={16}/> },
+      { key: "verify",    done: emailVerified,       label: "Verify your email",          href: "/account/manage",       icon: <LogIn size={16}/> },
+      { key: "ws-code",   done: !!wsVaultCodeSet,    label: "Set your Workspace Code",    href: "/account/manage#vault", icon: <KeyRound size={16}/> },
+      { key: "pv-code",   done: !!pvVaultCodeSet,    label: "Set your Private Code",      href: "/account/manage#vault", icon: <KeyRound size={16}/> },
+      { key: "workspace", done: createdWorkspace,    label: "Create a Workspace",         href: "/workspace/vaults",     icon: <Users size={16}/> },
+      { key: "private",   done: createdPrivateSpace, label: "Create your Private Space",  href: "/privatespace/vaults",  icon: <FolderLock size={16}/> },
+      { key: "firstdoc",  done: createdFirstDoc,     label: "Add your first note or doc", href: "/workspace/vaults",     icon: <FileText size={16}/> },
+      { key: "calendar",  done: connectedCalendar,   label: "Connect & schedule items",   href: "/calendar",             icon: <CalendarDays size={16}/> },
     ],
-    [hasProfile, emailVerified, hasVaultCode, createdWorkspace, createdPrivateSpace, createdFirstDoc, connectedCalendar]
+    [
+      hasProfile,
+      emailVerified,
+      wsVaultCodeSet,
+      pvVaultCodeSet,
+      createdWorkspace,
+      createdPrivateSpace,
+      createdFirstDoc,
+      connectedCalendar
+    ]
   );
+
   // Load onboarding status on mount
   useEffect(() => {
     reloadOnboarding();

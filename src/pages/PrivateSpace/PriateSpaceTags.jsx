@@ -35,21 +35,32 @@ export default function PrivateSpaceTags() {
 
   // --- load tags (all spaces for this user; server filters by user via RPC)
   const loadTags = async () => {
+    let cancelled = false;
     setLoading(true);
     setError('');
 
-    const { data: { user } = {} } = await supabase.auth.getUser();
-    if (!user?.id) {
-      setRows([]);
-      setError('Not signed in');
-      setLoading(false);
-      return;
+    try {
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      if (!user?.id) {
+        throw new Error('Not signed in');
+      }
+
+      // null => all of THIS user's private-space tags (RPC must scope by auth.uid())
+      const { data, error } = await listPrivateTags(user.id, null);
+      if (error) throw error;
+
+      if (!cancelled) setRows(Array.isArray(data) ? data : []);
+    } catch (e) {
+      if (!cancelled) {
+        setRows([]); // clear on error so “No tags yet.” can render
+        setError(e?.message || 'Failed to load tags');
+      }
+    } finally {
+      if (!cancelled) setLoading(false);
     }
-    // pass spaceId = null to get ALL user’s private-space tags
-    const { data, error } = await listPrivateTags(user.id, null);
-    if (error) setError(error.message || 'Failed to load tags');
-    setRows(data || []);
-    setLoading(false);
+
+    // return a cancel hook if you call this inside useEffect
+    return () => { cancelled = true; };
   };
 
   // --- load private spaces for the current user
@@ -345,7 +356,6 @@ export default function PrivateSpaceTags() {
           </table>
         </div>
 
-        {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
       </div>
 
       {/* Modal: restrict creation to ACTIVE private space */}
