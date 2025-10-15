@@ -596,6 +596,12 @@ export default function ManageAccount() {
                 {basicSaved && (
                     <p className="flex justify-center text-xs text-green-600 mt-2">Profile saved successfully!</p>
                 )}
+                {isCheckingUsername && (
+                    <p className="flex justify-center text-xs text-gray-500 mt-2">Checking username…</p>
+                )}
+                {usernameErr && (
+                    <p className="flex justify-center text-xs text-red-500 mt-2">{usernameErr}</p>
+                )}
                 </div>
             </div>
 

@@ -30,6 +30,11 @@ export default function CalendarPage() {
   const setAnchorDate = useCalendarStore(s => s.setAnchorDate);
 
   const { filters } = useCalendarFilters();
+  // NEW: allowed scopes + current user
+  const allowedWorkspaceIds = useCalendarStore(s => s.allowedWorkspaceIds);
+  const allowedPrivateSpaceIds = useCalendarStore(s => s.allowedPrivateSpaceIds); // in case you gate later
+  const currentUserId = useCalendarStore(s => s.currentUserId);
+  const setAllowedScopes = useCalendarStore(s => s.setAllowedScopes);
   // subscribe to scope selections so queries refire
   const selectedWorkspaceIds    = useCalendarStore(s => s.selectedWorkspaceIds);
   const showAllWorkspaces       = useCalendarStore(s => s.showAllWorkspaces);
@@ -53,6 +58,29 @@ export default function CalendarPage() {
       navigate(`/private/doc/${e.id}?from=calendar`);
     }
   }, []);
+
+  // -------- hydrate allowed scopes on mount/auth change --------
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { user } = {} } = await supabase.auth.getUser();
+      if (!user) return;
+      const uid = user.id;
+
+      const { data: rows, error } = await supabase
+        .from('workspace_members')
+        .select('workspace_id')
+        .eq('user_id', uid);
+
+      if (error) { console.error('memberships error', error); return; }
+
+      const wsIds = (rows ?? []).map(r => r.workspace_id);
+      if (!cancelled) {
+        setAllowedScopes({ workspaceIds: wsIds, currentUserId: uid });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [setAllowedScopes]);
 
   // ----------------- helper to compute start/end for a given view + anchor -----------------
   const periodFor = useCallback((v, anchor) => {
@@ -139,47 +167,48 @@ export default function CalendarPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
 
-  // ------------------------------ fetch items whenever range / filters change --------------------------
+  // ---------------- fetch items when range / filters / allowed change ----------------
   useEffect(() => {
     let cancelled = false;
-
     async function fetchAll() {
-      const tz = dayjs.tz.guess(); // e.g. "America/Los_Angeles"
+      if (!currentUserId) return; // wait until hydrated
+
+      const tz = dayjs.tz.guess();
       const startISO = safeStart.tz(tz).startOf('day').toISOString();
       const endISO   = safeEnd.tz(tz).endOf('day').toISOString();
-      const collected = [];
+      const out = [];
 
-      // WORKSPACE items (filtered by selection)
-      if (filters.includeWorkspace) {
-        let q = supabase
-          .from('workspace_calendar_items_secure')
-          .select('*')
-          .lt('start_at', endISO)
-          .or(`end_at.is.null,end_at.gte.${startISO}`);
+      // WORKSPACE
+      if (filters.includeWorkspace && allowedWorkspaceIds.length) {
+        // final set of workspace ids to query = selection ∩ allowed, or just allowed if "all"
+        const wsPool = showAllWorkspaces
+          ? allowedWorkspaceIds
+          : allowedWorkspaceIds.filter(id => selectedWorkspaceIds.map(String).includes(String(id)));
 
-        if (!showAllWorkspaces && selectedWorkspaceIds.length) {
-          q = q.in('workspace_id', selectedWorkspaceIds);
-        }
+        if (wsPool.length) {
+          let q = supabase
+            .from('workspace_calendar_items_secure')
+            .select('*')
+            .in('workspace_id', wsPool)
+            .lt('start_at', endISO)
+            .or(`end_at.is.null,end_at.gte.${startISO}`);
 
-        const { data, error } = await q;
-        if (!error && Array.isArray(data)) {
-          collected.push(
-            data.map(r => ({
-              ...r,
-              scope: 'workspace',
-              color: r.calendar_color || '#2563eb',
-            }))
-          );
-        } else if (error) {
-          console.error('workspace query error:', error);
+          const { data, error } = await q;
+          if (!error && Array.isArray(data)) {
+            out.push(...data.map(r => ({ ...r, scope: 'workspace', color: r.calendar_color || '#2563eb' })));
+          } else if (error) {
+            console.error('workspace query error:', error);
+          }
         }
       }
 
-      // PRIVATE items (filtered by selection)
+      // PRIVATE (only mine)
       if (filters.includePrivate) {
+        // (optional) if you also gate by allowedPrivateSpaceIds, intersect similarly
         let q = supabase
           .from('private_calendar_items_secure')
           .select('*')
+          .eq('created_by', currentUserId)
           .lt('start_at', endISO)
           .or(`end_at.is.null,end_at.gte.${startISO}`);
 
@@ -189,19 +218,13 @@ export default function CalendarPage() {
 
         const { data, error } = await q;
         if (!error && Array.isArray(data)) {
-          collected.push(
-            data.map(r => ({
-              ...r,
-              scope: 'private',
-              color: r.calendar_color || '#7c3aed',
-            }))
-          );
+          out.push(...data.map(r => ({ ...r, scope: 'private', color: r.calendar_color || '#7c3aed' })));
         } else if (error) {
           console.error('private query error:', error);
         }
       }
 
-      if (!cancelled) setEvents(collected.flat());
+      if (!cancelled) setEvents(out);
     }
 
     fetchAll();
@@ -209,12 +232,14 @@ export default function CalendarPage() {
   }, [
     safeStart.valueOf(),
     safeEnd.valueOf(),
-    filters.includePrivate,
     filters.includeWorkspace,
+    filters.includePrivate,
     selectedWorkspaceIds,
-    showAllWorkspaces,
     selectedPrivateSpaceIds,
+    showAllWorkspaces,
     showAllPrivateSpaces,
+    allowedWorkspaceIds,
+    currentUserId,
     setEvents,
   ]);
 
@@ -238,7 +263,7 @@ export default function CalendarPage() {
         }
         return true
     })
-    }, [events, filters])
+  }, [events, filters])
 
   return (
     <Layout noGutters contentBg="bg-gray-100">

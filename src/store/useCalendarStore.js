@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { supabase } from '@/lib/supabaseClient';
 
 // tiny helper so tag filters work whether you pass "Design" or "design"
 // const slug = (s = '') =>
@@ -22,27 +23,70 @@ const defaultFilters = {
   showVaultedOnly: false,
 };
 
+// Get my workspace ids (membership)
+// const { data: { user } } = await supabase.auth.getUser();
+// const uid = user?.id;
+
+// const { data: myWsRows } = await supabase
+//   .from('workspace_members')
+//   .select('workspace_id')
+//   .eq('user_id', uid);
+
+// const myWorkspaceIds = (myWsRows ?? []).map(r => r.workspace_id);
+
+// // Workspace events: only from my workspaces
+// const { data: wsEvents } = await supabase
+//   .from('workspace_calendar_items_secure')
+//   .select('*')
+//   .in('workspace_id', myWorkspaceIds);
+
+// // Private events: only mine (or your visibility rule)
+// const { data: pvEvents } = await supabase
+//   .from('private_calendar_items_secure')
+//   .select('*')
+//   .eq('created_by', uid);
+
+// // then combine → store.setEvents(mapToFullCalendar([...wsEvents, ...pvEvents]))
+// // ALSO push the allowed ids into the store (below).
+// useCalendarStore.getState().setAllowedScopes({
+//   workspaceIds: myWorkspaceIds,
+//   privateSpaceIds: [], // if you ever gate private spaces, set here
+//   currentUserId: uid,
+// });
+
 export const useCalendarStore = create(
   persist(
     (set, get) => ({
-      // ---------- Core state ----------
-      anchorDate: null,                      // ISO string of “selected date”
-      setAnchorDate: (isoOrNull) => set({ anchorDate: isoOrNull }),
-      range: { from: null, to: null },          // ISO strings
-      view: 'week',                      // 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay'...
+      // core
+      view: 'week',
+      range: { from: null, to: null },
+      anchorDate: null,
       filters: defaultFilters,
-      currentUserId: null,                       // set from your auth flow (optional)
-      events: [],                                // FullCalendar-ready objects
+      events: [],
       loading: false,
       error: null,
-      selectedEventId: null,                     // for modals
+      selectedEventId: null,
 
-      // ---------- Setters ----------
-      setRange: (range) => set({ range }),
+      // current user + allowed scopes (NOT persisted)
+      currentUserId: null,
+      allowedWorkspaceIds: [],
+      allowedPrivateSpaceIds: [],
+
+      // selections (persisted)
+      selectedWorkspaceIds: [],
+      showAllWorkspaces: true,
+      selectedPrivateSpaceIds: [],
+      showAllPrivateSpaces: true,
+
+      // setters
       setView: (view) => set({ view }),
+      setRange: (range) => set({ range }),
+      setAnchorDate: (isoOrNull) => set({ anchorDate: isoOrNull }),
       setFilters: (partial) => set({ filters: { ...get().filters, ...partial } }),
       resetFilters: () => set({ filters: { ...defaultFilters } }),
-      setCurrentUserId: (id) => set({ currentUserId: id }),
+
+      setLoading: (loading) => set({ loading }),
+      setError: (error) => set({ error }),
 
       setEvents: (events = []) => set({ events }),
       upsertEventLocal: (evt) => {
@@ -52,134 +96,91 @@ export const useCalendarStore = create(
         else list.push(evt);
         set({ events: list });
       },
-      updateTimeLocal: ({ id, start, end, allDay }) => {
-        const list = get().events.map((e) =>
-          e.id === id ? { ...e, start, end, allDay } : e
-        );
-        set({ events: list });
-      },
-      removeEventLocal: (id) => {
-        set({ events: get().events.filter((e) => e.id !== id) });
-      },
-
-      setLoading: (loading) => set({ loading }),
-      setError: (error) => set({ error }),
+      updateTimeLocal: ({ id, start, end, allDay }) =>
+        set({ events: get().events.map(e => e.id === id ? { ...e, start, end, allDay } : e) }),
+      removeEventLocal: (id) => set({ events: get().events.filter(e => e.id !== id) }),
 
       setSelectedEventId: (id) => set({ selectedEventId: id }),
       clearSelected: () => set({ selectedEventId: null }),
 
-      // ------------------------------------------- Workspace filtering -------------------------------------------
-      selectedWorkspaceIds: [],        // [] means "All Workspaces"
-      showAllWorkspaces: true,
-
-      setSelectedWorkspaceIds: (ids = []) => set({
-        selectedWorkspaceIds: Array.from(new Set(ids.map(String))),
-        showAllWorkspaces: ids.length === 0,
-      }),
+      setSelectedWorkspaceIds: (ids = []) =>
+        set({ selectedWorkspaceIds: Array.from(new Set(ids.map(String))), showAllWorkspaces: ids.length === 0 }),
       toggleWorkspaceId: (id) => {
         const cur = new Set(get().selectedWorkspaceIds.map(String));
         const key = String(id);
-        if (cur.has(key)) cur.delete(key);
-        else cur.add(key);
-        set({
-          selectedWorkspaceIds: Array.from(cur),
-          showAllWorkspaces: cur.size === 0,
-        });
+        cur.has(key) ? cur.delete(key) : cur.add(key);
+        set({ selectedWorkspaceIds: Array.from(cur), showAllWorkspaces: cur.size === 0 });
       },
-      setShowAllWorkspaces: (flag) => set({
-        showAllWorkspaces: !!flag,
-        ...(flag ? { selectedWorkspaceIds: [] } : null),
-      }),
+      setShowAllWorkspaces: (flag) => set({ showAllWorkspaces: !!flag, ...(flag ? { selectedWorkspaceIds: [] } : null) }),
 
-      // ------------------------------------------- Private Space filtering -------------------------------------------
-      selectedPrivateSpaceIds: [],     // [] means "All Private Spaces"
-      showAllPrivateSpaces: true,
-
-      setSelectedPrivateSpaceIds: (ids = []) => set({
-        selectedPrivateSpaceIds: Array.from(new Set(ids.map(String))),
-        showAllPrivateSpaces: ids.length === 0,
-      }),
+      setSelectedPrivateSpaceIds: (ids = []) =>
+        set({ selectedPrivateSpaceIds: Array.from(new Set(ids.map(String))), showAllPrivateSpaces: ids.length === 0 }),
       togglePrivateSpaceId: (id) => {
         const cur = new Set(get().selectedPrivateSpaceIds.map(String));
         const key = String(id);
-        if (cur.has(key)) cur.delete(key);
-        else cur.add(key);
-        set({
-          selectedPrivateSpaceIds: Array.from(cur),
-          showAllPrivateSpaces: cur.size === 0,
-        });
+        cur.has(key) ? cur.delete(key) : cur.add(key);
+        set({ selectedPrivateSpaceIds: Array.from(cur), showAllPrivateSpaces: cur.size === 0 });
       },
-      setShowAllPrivateSpaces: (flag) => set({
-        showAllPrivateSpaces: !!flag,
-        ...(flag ? { selectedPrivateSpaceIds: [] } : null),
-      }),
+      setShowAllPrivateSpaces: (flag) => set({ showAllPrivateSpaces: !!flag, ...(flag ? { selectedPrivateSpaceIds: [] } : null) }),
 
-      // ------------------------------------- Convenience flags for scope (sidebar switches) -------------------------------------
-      setIncludeWorkspace: (val) =>
-        set({ filters: { ...get().filters, includeWorkspace: !!val } }),
-      setIncludePrivate: (val) =>
-        set({ filters: { ...get().filters, includePrivate: !!val } }),
+      setCurrentUserId: (id) => set({ currentUserId: id }),
+      setAllowedScopes: ({ workspaceIds = [], privateSpaceIds = [], currentUserId = null }) =>
+        set({
+          allowedWorkspaceIds: Array.from(new Set((workspaceIds || []).map(String))),
+          allowedPrivateSpaceIds: Array.from(new Set((privateSpaceIds || []).map(String))),
+          ...(currentUserId ? { currentUserId } : null),
+        }),
 
+      // client filter (fixed union)
       _filterEvents: () => {
         const {
-          events = [],
-          filters = {},
-          selectedWorkspaceIds = [],
-          selectedPrivateSpaceIds = [],
-          showAllWorkspaces,
-          showAllPrivateSpaces,
+          events = [], filters,
+          selectedWorkspaceIds, showAllWorkspaces,
+          selectedPrivateSpaceIds, showAllPrivateSpaces,
+          currentUserId, allowedWorkspaceIds, allowedPrivateSpaceIds,
         } = get();
 
         const useWS = !!filters.includeWorkspace;
         const usePR = !!filters.includePrivate;
 
-        const wsSet = new Set((selectedWorkspaceIds || []).map(String));
-        const prSet = new Set((selectedPrivateSpaceIds || []).map(String));
+        const wsAllowed = new Set((allowedWorkspaceIds || []).map(String));
+        const prAllowed = new Set((allowedPrivateSpaceIds || []).map(String));
+        const wsSelected = new Set((selectedWorkspaceIds || []).map(String));
+        const prSelected = new Set((selectedPrivateSpaceIds || []).map(String));
 
         return (events || []).filter((ev) => {
-          const evWsId = ev?.workspace_id != null ? String(ev.workspace_id) : null;
-          const evPrId = ev?.private_space_id != null ? String(ev.private_space_id) : null;
+          const evWs = ev?.workspace_id != null ? String(ev.workspace_id) : null;
+          const evPr = ev?.private_space_id != null ? String(ev.private_space_id) : null;
 
-          // workspace pass
           let passWS = false;
-          if (useWS) {
-            if (showAllWorkspaces) {
-              passWS = evWsId !== null; // any workspace event
-            } else {
-              passWS = evWsId !== null && wsSet.has(evWsId);
-            }
+          if (useWS && evWs !== null && wsAllowed.has(evWs)) {
+            passWS = showAllWorkspaces || wsSelected.has(evWs);
           }
 
-          // private pass
           let passPR = false;
-          if (usePR) {
-            if (showAllPrivateSpaces) {
-              passPR = evPrId !== null; // any private event
-            } else {
-              passPR = evPrId !== null && prSet.has(evPrId);
-            }
+          if (usePR && evPr !== null && (prAllowed.size ? prAllowed.has(evPr) : true)) {
+            passPR = showAllPrivateSpaces || prSelected.has(evPr);
           }
 
-          // If both scopes enabled, union; if only one, use that; if none, show nothing
-          if (useWS && usePR) return passWS && passPR;
-          if (useWS) return passWS;
-          if (usePR) return passPR;
+          if (filters.mineOnly && currentUserId) {
+            const mine = ev.created_by === currentUserId || ev.assignee_id === currentUserId;
+            if (!mine) return false;
+          }
 
-          return false;
+          return (useWS && passWS) || (usePR && passPR);
         });
       },
     }),
     {
       name: 'wm-calendar-store',
-      partialize: (state) => ({
-        view: state.view,
-        filters: state.filters,
-        // persist selections so the sidebar feels sticky
-        selectedWorkspaceIds: state.selectedWorkspaceIds,
-        showAllWorkspaces: state.showAllWorkspaces,
-        selectedPrivateSpaceIds: state.selectedPrivateSpaceIds,
-        showAllPrivateSpaces: state.showAllPrivateSpaces,
-        anchorDate: state.anchorDate,
+      partialize: (s) => ({
+        view: s.view,
+        filters: s.filters,
+        selectedWorkspaceIds: s.selectedWorkspaceIds,
+        showAllWorkspaces: s.showAllWorkspaces,
+        selectedPrivateSpaceIds: s.selectedPrivateSpaceIds,
+        showAllPrivateSpaces: s.showAllPrivateSpaces,
+        anchorDate: s.anchorDate,
       }),
     }
   )
