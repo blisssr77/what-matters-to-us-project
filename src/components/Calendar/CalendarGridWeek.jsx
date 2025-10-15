@@ -64,7 +64,7 @@ export default function CalendarGridWeek({ startOfWeek, events = [], onEventClic
         ))}
       </div>
 
-      {/* ✅ Weekly summary (totals for the whole range) */}
+      {/*  Weekly summary (totals for the whole range) */}
       <div className="grid grid-cols-[64px_1fr] border-b bg-gray-50/70 text-xs text-gray-700">
         {/* left gutter label */}
         <div className="h-8 px-2 flex items-center text-gray-500">Week</div>

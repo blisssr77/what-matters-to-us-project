@@ -387,7 +387,7 @@ export default function PrivateUploadNote() {
         setPendingTags([]); // clear either way
       }
 
-      setSuccessMsg('✅ Note created successfully!');
+      setSuccessMsg(' Note created successfully!');
       setHasUnsavedChanges(false);
       setTimeout(() => navigate('/privatespace/vaults'), 1200);
     } catch (e) {

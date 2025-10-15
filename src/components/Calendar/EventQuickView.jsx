@@ -1,14 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
-import { X, Edit, Eye, Lock, Globe, Users, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react';
+import { Calendar as CalendarIcon, X, Edit, Eye, Lock, Globe, Users, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react';
 import clsx from 'clsx';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabaseClient'; 
+
+// --- helper: always return the real UUID ---
+function ensureUuid(idLike) {
+  if (!idLike) return null;
+  const s = String(idLike);
+  // our UI ids look like "workspace:<uuid>" or "private:<uuid>"
+  return s.includes(':') ? s.split(':')[1] : s;
+}
 
 export default function EventQuickView({ event, canSeeVaulted = false, onClose }) {
   if (!event) return null;
 
   const navigate = useNavigate();
+  const uuid = ensureUuid(event.dbId ?? event.id);
   const start = dayjs(event.start_at);
   const end   = event.end_at ? dayjs(event.end_at) : null;
 
@@ -89,11 +98,22 @@ export default function EventQuickView({ event, canSeeVaulted = false, onClose }
 
   const publicBody = event.public_note || event.notes || event.summary || '';
 
-  // Pick routes
-  const base = event.scope === 'workspace' ? '/workspace/vaults' : '/privatespace/vaults';
-  const kind = event.is_vaulted ? 'doc' : 'note';
-  const viewHref = `${base}/${kind}-view/${event.id}`;
-  const editHref = `${base}/${kind}-edit/${event.id}`;
+  // Prefer explicit kind if your event has one; else infer from is_vaulted
+  const getKind = (ev) => (ev.kind ? ev.kind : ev.is_vaulted ? "doc" : "note"); 
+  // kind ∈ "doc" | "note"
+
+  // --- routes: build view/edit hrefs ---------------------------
+  const kind = getKind(event); // "doc" or "note"
+
+  const viewHref =
+    event.scope === "workspace"
+      ? `/workspace/vaults/${kind}-view/${uuid}`
+      : `/private/vaults/${kind}-view/${uuid}`;
+
+  const editHref =
+    event.scope === "workspace"
+      ? `/workspace/vaults/${kind}-edit/${uuid}`
+      : `/private/vaults/${kind}-edit/${uuid}`;
 
   const memberCount = members.length || 0;
 
@@ -151,6 +171,7 @@ export default function EventQuickView({ event, canSeeVaulted = false, onClose }
               </span>
             </div>
             <div className="text-xs text-gray-500 mt-0.5">
+              <CalendarIcon size={12} className="inline mb-0.5 text-blue-500" />
               {start.format('ddd, MMM D, h:mm a')}
               {end ? ` – ${end.format('h:mm a')}` : ''}
               {event.all_day ? ' (all day)' : ''}

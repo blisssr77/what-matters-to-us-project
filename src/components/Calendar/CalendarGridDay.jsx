@@ -17,8 +17,8 @@ export default function CalendarGridDay({ date, events = [], onEventClick }) {
   );
   const allDay = dayEvents.filter(e => e.all_day);
   const timed  = dayEvents.filter(e => !e.all_day);
-  const publicCount  = dayEvents.filter(e => !e.is_vaulted).length;  // ✅ NEW
-  const vaultedCount = dayEvents.filter(e =>  e.is_vaulted).length;  // ✅ NEW
+  const publicCount  = dayEvents.filter(e => !e.is_vaulted).length;  //  NEW
+  const vaultedCount = dayEvents.filter(e =>  e.is_vaulted).length;  //  NEW
 
   return (
     <div className="h-full flex flex-col bg-white">

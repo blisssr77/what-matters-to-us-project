@@ -245,26 +245,78 @@ export default function CalendarPage() {
 
   // ------------------------------ simple client-side filtering ------------------------------
   const filteredItems = useMemo(() => {
-    const q = (filters.search || '').toLowerCase().trim()
-    const tagSet = new Set(filters.tags || [])
+    // console.debug('[Calendar] filters:', filters); // DEBUG
+
+    const q = (filters.search || '').toLowerCase().trim();
+    const tagList = filters.tags || filters.tagSlugs || []; // <—
+    const tagSet = new Set(tagList);
+
     return (events || []).filter(ev => {
-        // NEW: public-only filter
-        if (filters.showPublicOnly && ev.is_vaulted) return false
-        // Existing: vaulted-only
-        if (filters.showVaultedOnly && !ev.is_vaulted) return false
+      if (filters.showPublicOnly && ev.is_vaulted) return false;
+      if (filters.showVaultedOnly && !ev.is_vaulted) return false;
 
-        if (q) {
-          const hay = `${ev.title || ''} ${(ev.tags || []).join(',')}`.toLowerCase()
-          if (!hay.includes(q)) return false
-        }
-        if (tagSet.size) {
-          const evTags = new Set(ev.tags || [])
-          for (const t of tagSet) if (!evTags.has(t)) return false
-        }
-        return true
-    })
-  }, [events, filters])
+      if (q) {
+        const hay = `${ev.title || ''} ${(ev.tags || []).join(',')}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (tagSet.size) {
+        const evTags = new Set(ev.tags || []);
+        for (const t of tagSet) if (!evTags.has(t)) return false;
+      }
+      return true;
+    });
+  }, [events, filters]);
 
+  // useEffect(() => {
+  //   // temporarily reset persisted filters to rule out stale state
+  //   const reset = useCalendarStore.getState().resetFilters;
+  //   reset?.();
+  // }, []);
+
+  // ------------------------------ transform to UI events (if needed by your grids) ------------------------------
+  const tzGuess = dayjs.tz.guess();
+  const uiEvents = useMemo(() => {
+    return (filteredItems || []).map(r => {
+      const s = r.start_at ? dayjs(r.start_at) : null;
+      const e = r.end_at   ? dayjs(r.end_at)   : null;
+
+      // Make `end` exclusive so multi-day spans paint through the last day.
+      let endExclusive = null;
+      if (e) {
+        endExclusive = (r.all_day ? e.add(1, 'day').startOf('day')  // all-day → next day 00:00
+                                  : e.add(1, 'minute'));            // timed → tiny bump
+      }
+
+      const scope = r.scope || 'workspace';
+
+      return {
+        ...r,
+        dbId: r.id,                                // <-- keep the raw UUID
+        scope,
+        uiId: `${scope}:${r.id}`,                  // <-- safe UI id (colon won’t appear in UUID)
+        id:   `${scope}:${r.id}`,                  // if your grids expect `id`, keep it here
+        start: s ? s.toDate() : null,
+        end: endExclusive ? endExclusive.toDate() : null,
+        allDay: !!(r.all_day ?? r.allDay),
+        title: r.title || (r.is_vaulted ? '🔐 Vaulted item' : 'Untitled'),
+        color: r.calendar_color || r.color || (scope === 'private' ? '#7c3aed' : '#2563eb'),
+      };
+    });
+  }, [filteredItems]);
+
+  // useEffect(() => {
+  //   console.debug('[Calendar] fetched events:', events.length, events);
+  // }, [events]);
+
+  // useEffect(() => {
+  //   console.debug('[Calendar] filtered items:', filteredItems.length);
+  // }, [filteredItems]);
+
+  // useEffect(() => {
+  //   console.debug('[Calendar] uiEvents:', uiEvents.length, uiEvents.map(e => ({id:e.id, start:e.start, end:e.end, title:e.title})));
+  // }, [uiEvents]);
+
+  // ---------------------------------------------- render --------------------------------------------------- //
   return (
     <Layout noGutters contentBg="bg-gray-100">
       <div className="h-full grid grid-cols-[220px_1fr]">
@@ -283,7 +335,7 @@ export default function CalendarPage() {
             {view === 'week' && (
               <CalendarGridWeek
                 startOfWeek={safeStart.startOf('week')}
-                events={filteredItems}
+                events={uiEvents}
                 onEventClick={setQuick}
               />
             )}
@@ -291,7 +343,7 @@ export default function CalendarPage() {
             {view === 'day' && (
               <CalendarGridDay
                 date={safeStart}                // safeStart is already at current anchor
-                events={filteredItems}
+                events={uiEvents}
                 onEventClick={setQuick}
               />
             )}
@@ -299,7 +351,7 @@ export default function CalendarPage() {
             {view === 'month' && (
               <CalendarGridMonth
                 monthStart={activeMonthAnchor.startOf('month')}
-                events={filteredItems}
+                events={uiEvents}
                 onDayClick={(d) => {
                   const dd = dayjs(d);
                   setAnchorDate(dd.toISOString());

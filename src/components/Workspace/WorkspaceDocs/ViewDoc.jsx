@@ -364,7 +364,7 @@ export default function WorkspaceViewDoc() {
       {/* Delete confirmation modal */}
       {showConfirmPopup && (
         <div className="fixed top-6 right-6 bg-gray-500/20 opacity-90 backdrop-blur-md shadow-md rounded-lg p-4 z-50 text-sm">
-          <p className="mt-10 text-gray-900">
+          <p className="mt-20 text-gray-900">
             Are you sure you want to delete {doc?.title || "this document"}?
             <br />
             This action cannot be undone.

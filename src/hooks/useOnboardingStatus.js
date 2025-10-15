@@ -4,14 +4,14 @@ import { supabase } from '@/lib/supabaseClient';
 import { useOnboardingStore } from '@/store/useOnboardingStore';
 
 export function useOnboardingStatus({ refresh = false } = {}) {
-  // ✅ Select individual fields so their identities are stable
+  //  Select individual fields so their identities are stable
   const { lastCheckedAt, setState } = useOnboardingStore();
 
   // (the rest are read-only for consumers; we don’t need them inside this hook)
   const [wsVaultCodeSet, setWsVaultCodeSet] = useState(null); // null | boolean
   const [pvVaultCodeSet, setPvVaultCodeSet] = useState(null); // null | boolean
 
-  // ✅ Memoized loader depends only on stable setState
+  //  Memoized loader depends only on stable setState
   const load = useCallback(async () => {
     try {
       setState({ loading: true, error: '' });
@@ -161,12 +161,12 @@ export function useOnboardingStatus({ refresh = false } = {}) {
     }
   }, [setState]);
 
-  // ✅ Only run when the timestamp changes or refresh prop toggles
+  //  Only run when the timestamp changes or refresh prop toggles
   useEffect(() => {
     if (!lastCheckedAt || refresh) load();
   }, [lastCheckedAt, refresh, load]);
 
-  // ✅ Auth change: clear on sign-out; trigger fresh load once on other events
+  //  Auth change: clear on sign-out; trigger fresh load once on other events
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {

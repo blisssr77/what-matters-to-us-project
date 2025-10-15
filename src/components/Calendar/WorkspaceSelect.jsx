@@ -22,7 +22,7 @@ export default function WorkspaceSelect({ className = "" }) {
   const [rect, setRect] = useState(null);
   const [focusIdx, setFocusIdx] = useState(-1);
 
-  // ✅ Load only the current user's workspaces
+  //  Load only the current user's workspaces
   useEffect(() => {
     let mounted = true;
     (async () => {

@@ -5,6 +5,7 @@ import WorkspaceSelect from './WorkspaceSelect'
 import { useCalendarStore } from '@/store/useCalendarStore'
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import QuickAddModal from '@/components/calendar/QuickAddModal.jsx'
 
 import PrivateSpaceSelect from './PrivateSpaceSelect'
 
@@ -53,6 +54,8 @@ export default function CalendarSidebar() {
   const selectedPrivateSpaceIds  = useCalendarStore(s => s.selectedPrivateSpaceIds);
   const setShowAllPrivateSpaces  = useCalendarStore(s => s.setShowAllPrivateSpaces);
   const setSelectedPrivateSpaceIds = useCalendarStore(s => s.setSelectedPrivateSpaceIds);
+
+  const [ openQuick, setOpenQuick] = useState(false)
 
   // visible month control
   const r = useCalendarStore(s => s.range);
@@ -109,17 +112,31 @@ export default function CalendarSidebar() {
       showPublicOnly: checked ? false : showPublicOnly
     })
   }
-
+//===================================================== UI =====================================================//
   return (
     <div className="h-full flex flex-col text-[13px]">
-      <div className="p-2 border-b">
-        <button
-          type="button"
-          className="btn-main w-full inline-flex items-center justify-center gap-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white py-1.5 text-xs"
-        >
-          <Plus size={14}/> Create
-        </button>
-      </div>
+      {/* CREATE MODAL */}
+      <>
+        <div className="p-2 border-b">
+          <button
+            type="button"
+            onClick={() => setOpenQuick(true)}
+            className="btn-main w-full inline-flex items-center justify-center gap-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white py-1.5 text-xs"
+          >
+            <Plus size={14}/> Create
+          </button>
+        </div>
+
+        <QuickAddModal
+          open={openQuick}
+          onClose={() => setOpenQuick(false)}
+          onCreated={(row) => {
+            // optional: toast, refresh lists, navigate, etc.
+            setOpenQuick(false);
+          }}
+          defaultScope="workspace" // or "private"
+        />
+      </>
 
       <div className="p-2 border-b">
         <MiniMonth

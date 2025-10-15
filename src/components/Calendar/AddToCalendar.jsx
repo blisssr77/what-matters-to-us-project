@@ -2,29 +2,34 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import tzPlugin from 'dayjs/plugin/timezone'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
+
 dayjs.extend(utc)
 dayjs.extend(tzPlugin)
+dayjs.extend(customParseFormat)  
 
 const COLORS = ['#2563eb','#0ea5e9','#10b981','#f59e0b','#ef4444','#7c3aed','#6b7280']
 
-// Convert date + time to ISO in the user's TZ
+// Convert date + time to ISO in the user's TZ (plain JS, no TS types)
 export function toISO({ date, time = '00:00', allDay, tz }) {
   if (!date) return null
+  const src = time ? `${date} ${time}` : `${date}`
   const base = time
-    ? dayjs.tz(`${date} ${time}`, 'YYYY-MM-DD HH:mm', tz)
-    : dayjs.tz(`${date}`, 'YYYY-MM-DD', tz)
+    ? dayjs.tz(src, 'YYYY-MM-DD HH:mm', tz)
+    : dayjs.tz(src, 'YYYY-MM-DD', tz)
+  if (!base.isValid()) return null
   return (allDay ? base.startOf('day') : base).toISOString()
 }
 
 export default function AddToCalendar({
-  initial = {},              // { calendar_enabled, start_at, end_at, all_day, ... }
+  initial = {},
   defaultColor = '#2563eb',
   isVaulted = false,
   onChange,
 }) {
   const tz = dayjs.tz.guess()
 
-  // --- local UI state
+  // state
   const [enabled, setEnabled]     = useState(false)
   const [allDay, setAllDay]       = useState(false)
   const [color, setColor]         = useState(isVaulted ? '#7c3aed' : defaultColor)
@@ -34,60 +39,76 @@ export default function AddToCalendar({
   const [startTime, setStartTime] = useState('09:00')
   const [endDate, setEndDate]     = useState('')
   const [endTime, setEndTime]     = useState('10:00')
-
-  // guard: once user interacts, don't auto-reinit from props
+  // to avoid triggering onChange on every single keystroke
   const userDirty = useRef(false)
-
-  // mark dirty whenever user changes anything
   const wrap = (setter) => (v) => { userDirty.current = true; setter(v) }
 
-  // Compute a stable key for "did initial change?"
+  // memoized initial key to avoid running init useEffect on every render
   const initialKey = useMemo(() => JSON.stringify(initial ?? {}), [initial])
 
-  // Re-initialize from `initial` only when it truly changes AND user hasn't touched UI
+  // init from initial prop (only if user hasn't changed anything yet)
   useEffect(() => {
     if (userDirty.current) return
 
     const initEnabled =
-      'calendar_enabled' in initial
-        ? !!initial.calendar_enabled
-        : !!initial.enabled
+      'calendar_enabled' in initial ? !!initial.calendar_enabled : !!initial.enabled
 
     const initAllDay = !!(initial.all_day ?? initial.allDay)
     const initColor  = initial.calendar_color ?? initial.color ?? (isVaulted ? '#7c3aed' : defaultColor)
     const initStatus = initial.calendar_status ?? initial.status ?? ''
     const initVis    = initial.calendar_visibility ?? initial.visibility ?? (isVaulted ? 'masked' : 'public')
 
-    const sDate = initial.start_at
-      ? dayjs(initial.start_at).tz(tz).format('YYYY-MM-DD')
-      : ''
-    const sTime = initial.start_at && !initAllDay
-      ? dayjs(initial.start_at).tz(tz).format('HH:mm')
-      : '09:00'
-
-    const eDate = initial.end_at
-      ? dayjs(initial.end_at).tz(tz).format('YYYY-MM-DD')
-      : ''
-    const eTime = initial.end_at && !initAllDay
-      ? dayjs(initial.end_at).tz(tz).format('HH:mm')
-      : '10:00'
+    const s = initial.start_at ? dayjs(initial.start_at).tz(tz) : null
+    const e = initial.end_at   ? dayjs(initial.end_at).tz(tz)   : null
 
     setEnabled(initEnabled)
     setAllDay(initAllDay)
     setColor(initColor)
     setStatus(initStatus)
     setVis(initVis)
-    setStartDate(sDate)
-    setStartTime(sTime)
-    setEndDate(eDate)
-    setEndTime(eTime)
+
+    setStartDate(s && s.isValid() ? s.format('YYYY-MM-DD') : '')
+    setStartTime(s && s.isValid() && !initAllDay ? s.format('HH:mm') : '09:00')
+
+    setEndDate(e && e.isValid() ? e.format('YYYY-MM-DD') : '')
+    setEndTime(e && e.isValid() && !initAllDay ? e.format('HH:mm') : '10:00')
   }, [initialKey, isVaulted, defaultColor, tz])
 
-  // Build normalized payload for parent (pure calc)
+  // Build normalized payload
   const payload = useMemo(() => {
     if (!enabled) return null
-    const startISO = toISO({ date: startDate, time: allDay ? '00:00' : startTime, allDay, tz })
-    const endISO   = endDate ? toISO({ date: endDate, time: allDay ? '23:59' : endTime, allDay, tz }) : null
+
+    // Start
+    const startISO = toISO({
+      date: startDate || null,
+      time: allDay ? '00:00' : (startTime || '00:00'),
+      allDay,
+      tz
+    })
+    // Require a valid start to be considered “ready”
+    if (!startISO) return null
+
+    // End rules:
+    // - allDay & no endDate => same day 23:59
+    // - timed & no end => +1 hour from start (if start valid)
+    let endISO = null
+
+    if (endDate) {
+      endISO = toISO({
+        date: endDate,
+        time: allDay ? '23:59' : (endTime || '00:00'),
+        allDay,
+        tz
+      })
+    } else if (startISO) {
+      const s = dayjs(startISO)
+      if (allDay) {
+        endISO = s.endOf('day').toISOString()
+      } else {
+        endISO = s.add(1, 'hour').toISOString()
+      }
+    }
+
     return {
       calendar_enabled: true,
       start_at: startISO,
@@ -96,11 +117,10 @@ export default function AddToCalendar({
       calendar_color: color || null,
       calendar_status: status || null,
       calendar_visibility: visibility || (isVaulted ? 'masked' : 'public'),
-      // (add recurrence/window here if you use them on this screen)
     }
   }, [enabled, allDay, startDate, startTime, endDate, endTime, color, status, visibility, isVaulted, tz])
 
-  // Notify parent AFTER render
+  // onChange callback
   useEffect(() => {
     onChange?.(payload)
   }, [payload, onChange])
@@ -115,6 +135,7 @@ export default function AddToCalendar({
         </label>
       </div>
 
+      {/* details */}
       {enabled && (
         <>
           <label className="inline-flex items-center gap-2 text-sm text-gray-700">
@@ -122,6 +143,7 @@ export default function AddToCalendar({
             All day
           </label>
 
+          {/* date + time pickers */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
               <label className="text-xs text-gray-500 block">Start</label>
@@ -143,6 +165,7 @@ export default function AddToCalendar({
               </div>
             </div>
 
+            {/* end */}
             <div className="space-y-2">
               <label className="text-xs text-gray-500 block">End (optional)</label>
               <div className="flex gap-2">
@@ -164,6 +187,7 @@ export default function AddToCalendar({
             </div>
           </div>
 
+          {/* color, status, visibility */}
           <div className="space-y-1">
             <label className="text-xs text-gray-500 block">Color</label>
             <div className="flex flex-wrap gap-2">
@@ -187,6 +211,7 @@ export default function AddToCalendar({
             </div>
           </div>
 
+          {/* status + visibility */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-gray-500 block mb-1">Status</label>
@@ -202,6 +227,7 @@ export default function AddToCalendar({
               </select>
             </div>
 
+            {/* visibility */}
             <div>
               <label className="text-xs text-gray-500 block mb-1">Visibility</label>
               <select
