@@ -62,6 +62,57 @@ export default function ManageAccount() {
     const [pwMatchNote, setPwMatchNote] = useState(""); // "", "checking", "good", "bad"
     const [currPwStatus, setCurrPwStatus] = useState(""); // "", "checking", "good", "bad"
     const currPwTimer = useRef(null);
+    const [session, setSession] = useState(null);
+    const [user, setUser] = useState(null);
+    // Get current session and user on mount
+    useEffect(() => {
+        let mounted = true;
+        (async () => {
+            const { data: { session } = {} } = await supabase.auth.getSession();
+            if (mounted) {
+                setSession(session);
+                setUser(session?.user || null);
+            }
+        })();
+        return () => { mounted = false; };
+    }, []);
+    const [hasEmailPassword, setHasEmailPassword] = useState(null);
+    const [authBooted, setAuthBooted] = useState(false);
+
+    // helper to compute provider flag
+    const computeHasEmailProvider = (u) => {
+        const identities = u?.identities || [];
+        return identities.some((i) => i.provider === "email");
+    };
+
+    // detect on mount + on auth changes
+    useEffect(() => {
+        let alive = true;
+
+        (async () => {
+            // getUser() tends to have identities reliably
+            const { data: { user } = {} } = await supabase.auth.getUser();
+            if (!alive) return;
+            if (user) {
+                setHasEmailPassword(computeHasEmailProvider(user));
+            } else {
+                // not signed in — choose a default UI state (probably hide section or default to false)
+                setHasEmailPassword(false);
+            }
+            setAuthBooted(true);
+        })();
+
+        const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+            if (!alive) return;
+            const u = session?.user || null;
+            setHasEmailPassword(u ? computeHasEmailProvider(u) : false);
+        });
+
+        return () => {
+            alive = false;
+            sub.subscription.unsubscribe();
+        };
+    }, []);
 
     /* ────────────────── Vault Codes state ────────────────── */
     const [workspaceCode, setWorkspaceCode] = useState("");
@@ -263,18 +314,43 @@ export default function ManageAccount() {
     };
 
     /* ────────────────── Helper functions ────────────────── */
-    // Password rule checks
-    const buildPwRules = (pwd, current) => ({
+    // normalize to NFKC to prevent unicode tricks
+    const norm = (s) => (s ?? "").trim().normalize("NFKC");
+
+    /**
+     * buildPwRules
+     * @param {string} pwd        New password
+     * @param {string} current    Current password (may be empty/undefined)
+     * @param {object} opts
+     * @param {boolean} opts.requireCompare  If false (e.g., Google/OAuth user), we don't require
+     *                                       the "not same as current" rule to pass.
+     */
+    const buildPwRules = (pwd = "", current = "", opts = { requireCompare: true }) => {
+    const requireCompare = !!opts.requireCompare;
+
+    // Compare only when required AND both fields have values; otherwise null (gray state).
+    const notSameAsCurrent = requireCompare
+        ? (!pwd || !current ? null : norm(pwd) !== norm(current))
+        : true; // treat as satisfied when compare isn't required (OAuth users)
+
+    return {
         lower: /[a-z]/.test(pwd),
         upper: /[A-Z]/.test(pwd),
         number: /[0-9]/.test(pwd),
         special: /[^A-Za-z0-9]/.test(pwd),
         length: pwd.length >= 8,
-        notSameAsCurrent: (!pwd || !current) ? null : pwd !== current,
-    });
-    const pwRulesOk = (pwd, current) => {
-        const r = buildPwRules(pwd, current);
-        return r.lower && r.upper && r.number && r.special && r.length && r.notSameAsCurrent;
+        notSameAsCurrent,
+    };
+    };
+
+    const pwRulesOk = (pwd = "", current = "", opts = { requireCompare: true }) => {
+    const r = buildPwRules(pwd, current, opts);
+    // If compare is required and rule is null (no current typed yet), count as NOT ok.
+    // If compare is not required, we already set it to true above.
+    const compareOK =
+        opts?.requireCompare ? (r.notSameAsCurrent === true) : true;
+
+    return r.lower && r.upper && r.number && r.special && r.length && compareOK;
     };
 
     /* ────────────────── Save handlers (wire to Supabase) ────────────────── */
@@ -321,28 +397,119 @@ export default function ManageAccount() {
         setTimeout(() => setBasicSaved(false), 5000);
     };
 
+    // ------------------------async check for current password (only when we require one)------------------------ //
+    const onChangeCurrentPw = (e) => {
+        const val = e.target.value;
+        setCurrentPw(val);
+        setPwErr("");
 
-    // Change password handler
+        if (!hasEmailPassword) return;              // no need to validate current for Google-only accounts
+        clearTimeout(currPwTimer.current);
+
+        if ((val || "").length < 6) {
+            setCurrPwStatus("");
+            return;
+        }
+
+        setCurrPwStatus("checking");
+        currPwTimer.current = setTimeout(async () => {
+            const { data: { session } = {} } = await supabase.auth.getSession();
+            const email = session?.user?.email;
+            if (!email) { setCurrPwStatus("bad"); return; }
+
+            // use a non-persisting client to avoid nuking current session
+            const { createClient } = await import('@supabase/supabase-js');
+            const supabaseNoPersist = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
+            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+            });
+
+            const { error } = await supabaseNoPersist.auth.signInWithPassword({ email, password: val });
+            setCurrPwStatus(error ? "bad" : "good");
+        }, 700);
+    };
+
+    // ---------------------------------------------- Change password handler ---------------------------------------------- //
     const onSubmitChangePassword = async (e) => {
         e.preventDefault(); // prevent refresh
         setPwErr("");
+        setPwdSaved(false);
 
         // ensure profile exists even if password is changed first
         const ensured = await ensureProfileExists();
-        if (!ensured.ok) return setPwErr(ensured.err?.message || 'Could not ensure profile');
+        if (!ensured.ok) {
+            setPwErr(ensured.err?.message || "Could not ensure profile");
+            return;
+        }
 
-        if (currPwStatus !== "good") return setPwErr("Please confirm your current password first.");
-        if (newPw !== confirmPw)    return setPwErr("Passwords do not match.");
-        if (newPw === currentPw)    return setPwErr("New password cannot be the same as current password.");
-        if (!newOk)                 return setPwErr("Password rules not met.");
+        // get current session/user and detect whether they already have an email/password credential
+        const { data: { session } = {} } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) {
+            setPwErr("Not signed in.");
+            return;
+        }
+        const hasEmailPassword = !!user.identities?.some((id) => id.provider === "email");
 
-        const { error } = await supabase.auth.updateUser({ password: newPw });
-        if (error) return setPwErr(error.message);
+        // Validate inputs
+        if (hasEmailPassword && currPwStatus !== "good") {
+            setPwErr("Please confirm your current password first.");
+            return;
+        }
+        if (newPw !== confirmPw) {
+            setPwErr("Passwords do not match.");
+            return;
+        }
+        if (hasEmailPassword && currentPw && norm(newPw) === norm(currentPw)) {
+            return setPwErr("New password cannot be the same as current password.");
+        }
+        if (!newOk) {
+            setPwErr("Password rules not met.");
+            return;
+        }
 
-        setPwdSaved(true);
-        setCurrentPw(""); setNewPw(""); setConfirmPw("");
-        setCurrPwStatus("");
-        setTimeout(() => setPwdSaved(false), 4000);
+        // Try to set/update the password
+        try {
+            const { error: updErr } = await supabase.auth.updateUser({ password: newPw });
+
+            if (updErr) {
+                // Some projects disallow direct password set for OAuth-only users without an email confirmation step.
+                // In that case, send a password reset/create link instead.
+                const msg = (updErr.message || "").toLowerCase();
+                const requiresEmailFlow =
+                    msg.includes("not allowed") ||
+                    msg.includes("email") && msg.includes("confirmation") ||
+                    msg.includes("use password reset");
+
+                if (!hasEmailPassword && requiresEmailFlow) {
+                    const email = user.email;
+                    if (!email) throw updErr;
+
+                    const { error: mailErr } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: `${window.location.origin}/dashboard`,
+                });
+                if (mailErr) throw mailErr;
+
+                setPwErr("Check your email to finish setting a password.");
+                return;
+            }
+
+            // Otherwise surface the original error
+            setPwErr(updErr.message || "Failed to update password.");
+            return;
+            }
+
+            // Success
+            setPwdSaved(true);
+            setCurrentPw("");
+            setNewPw("");
+            setConfirmPw("");
+            setCurrPwStatus("");
+
+            // auto-clear success badge
+            setTimeout(() => setPwdSaved(false), 4000);
+        } catch (err) {
+            setPwErr(err.message || "Failed to update password.");
+        }
     };
 
     // Verify current vault code
@@ -506,11 +673,11 @@ export default function ManageAccount() {
         return { ok: true, msg: "Private code updated & content rotated " };
     };
 
-    
-
     /* ────────────────── Password status & rules ────────────────── */
-    const rules  = buildPwRules(newPw, currentPw);
-    const newOk  = pwRulesOk(newPw, currentPw);
+    // Build rules for the checklist (don’t require compare until we *know* the flag)
+    const requireCompare = hasEmailPassword === true;
+    const rules = buildPwRules(newPw, currentPw, { requireCompare });
+    const newOk = pwRulesOk(newPw, currentPw, { requireCompare });
     const confirmOk = !!confirmPw && confirmPw === newPw && newOk;
     /* ────────────────── Vault Code status & rules ────────────────── */
     const wsRules = buildCodeRules(workspaceCode, workspaceCurrent, 6);
@@ -606,80 +773,70 @@ export default function ManageAccount() {
             </div>
 
             {/* Password */}
-            <div className="text-gray-800">
-                <h2 className="text-lg font-semibold mb-4">Change password</h2>
+            {authBooted ? (
+                <div className="text-gray-800">
+                    <h2 className="text-lg font-semibold mb-4">
+                    {hasEmailPassword ? 'Change password' : 'Set a password'}
+                    </h2>
 
-                <form onSubmit={onSubmitChangePassword} noValidate className="space-y-3">
-                {/* Current password */}
-                <PasswordField
-                    id="current-password"
-                    name="current-password"
-                    autoComplete="current-password"
-                    label="Current password"
-                    value={currentPw}
-                    onChange={(e) => {
-                        const val = e.target.value;
-                        setCurrentPw(val);
-                        setPwErr("");
-                        clearTimeout(currPwTimer.current);
+                    <form onSubmit={onSubmitChangePassword} noValidate className="space-y-3">
+                    {hasEmailPassword === true && (
+                        <PasswordField
+                            id="current-password"
+                            name="current-password"
+                            autoComplete="current-password"
+                            label="Current password"
+                            value={currentPw}
+                            onChange={onChangeCurrentPw}
+                            status={currPwStatus || "idle"}
+                        />
+                    )}
 
-                        if (val.length < 6) {
-                        setCurrPwStatus("");
-                        return;
-                        }
+                    {/* New + confirm always visible */}
+                    <PasswordField
+                        id="new-password"
+                        name="new-password"
+                        autoComplete="new-password"
+                        label="New password"
+                        value={newPw}
+                        onChange={(e) => { setNewPw(e.target.value); setPwErr(""); }}
+                        status={newPw ? (newOk ? "good" : "bad") : "idle"}
+                    />
 
-                        setCurrPwStatus("checking");
-                        currPwTimer.current = setTimeout(async () => {
-                        const { data: { session } = {} } = await supabase.auth.getSession();
-                        const email = session?.user?.email;
-                        if (!email) return setCurrPwStatus("bad");
+                    <PasswordField
+                        id="confirm-password"
+                        name="confirm-password"
+                        autoComplete="new-password"
+                        label="Confirm new password"
+                        value={confirmPw}
+                        onChange={(e) => { setConfirmPw(e.target.value); setPwErr(""); }}
+                        status={confirmPw ? (confirmOk ? "good" : "bad") : "idle"}
+                    />
 
-                        const { error } = await supabaseNoPersist.auth.signInWithPassword({ email, password: val });
-                        setCurrPwStatus(error ? "bad" : "good");
-                        }, 800);
-                    }}
-                    status={currPwStatus || "idle"}
-                />
+                    {pwErr && <p className="text-xs text-red-500">{pwErr}</p>}
+                    <PasswordChecklist rules={rules} />
 
-                {/* New password */}
-                <PasswordField
-                    id="new-password"
-                    name="new-password"
-                    autoComplete="new-password"
-                    label="New password"
-                    value={newPw}
-                    onChange={(e) => { setNewPw(e.target.value); setPwErr(""); }}
-                    status={newPw ? (newOk ? "good" : "bad") : "idle"}
-                />
+                    <div className="flex items-center justify-between">
+                        {hasEmailPassword === false && (
+                        <p className="text-[11px] text-blue-600">
+                            You signed in with Google. Set a password to also log in with email.
+                        </p>
+                        )}
+                        <button type="submit" className="btn-secondary text-sm">
+                            {hasEmailPassword ? 'Update password' : 'Set password'}
+                        </button>
+                    </div>
 
-                {/* Confirm new password */}
-                <PasswordField
-                    id="confirm-password"
-                    name="confirm-password"
-                    autoComplete="new-password"  // recommended for confirm field too
-                    label="Confirm new password"
-                    value={confirmPw}
-                    onChange={(e) => { setConfirmPw(e.target.value); setPwErr(""); }}
-                    status={confirmPw ? (confirmOk ? "good" : "bad") : "idle"}
-                />
-
-                {/* Rules + error */}
-                {pwErr && <p className="text-xs text-red-500">{pwErr}</p>}
-                <PasswordChecklist rules={rules} />
-
-                <div className="flex justify-end">
-                    <button type="submit" className="btn-secondary text-sm">
-                    Update password
-                    </button>
+                    {pwdSaved && (
+                        <p className="flex justify-center text-xs text-green-600 mt-2">
+                            Password {hasEmailPassword ? 'updated' : 'set'} successfully!
+                        </p>
+                    )}
+                    </form>
                 </div>
-
-                {pwdSaved && (
-                    <p className="flex justify-center text-xs text-green-600 mt-2">
-                    Password updated successfully!
-                    </p>
-                )}
-                </form>
-            </div>
+                ) : (
+                <div className="text-sm text-gray-500">Loading…</div>
+            )}
         </div>
 
         {/* ==================================================== Vault Codes ============================================= */}

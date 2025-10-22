@@ -8,46 +8,36 @@ async function ensureProfile(user) {
   if (!user?.id) return;
   const uid = user.id;
 
-  // derive what we want to persist
   const patchFromAuth = {
     email: user.email ?? null,
-    // mark verified if auth knows it is confirmed
     ...(user.email_confirmed_at ? { email_verified: true } : {}),
   };
 
-  // does a row exist?
   const { data: existing, error: selErr, status } = await supabase
     .from('profiles')
     .select('id, email_verified')
     .eq('id', uid)
     .maybeSingle();
-
   if (selErr && status !== 406) throw selErr;
 
   if (existing?.id) {
-    // update lightweight fields every time we sign in (keeps email + verified fresh)
     const { error: updErr } = await supabase
       .from('profiles')
-      .update({
-        ...patchFromAuth,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ ...patchFromAuth, updated_at: new Date().toISOString() })
       .eq('id', uid);
     if (updErr) throw updErr;
     return;
   }
 
-  // insert on first sign-in after verification (or first password login)
   const insertRow = {
     id: uid,
     username: (user.email?.split('@')[0]) || `user-${uid.slice(0, 8)}`,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    email_verified: !!user.email_confirmed_at,   // true if they arrived via verified link
+    email_verified: !!user.email_confirmed_at,
     ...patchFromAuth,
-    vault_code_set: false,                       // keep your defaults
+    vault_code_set: false,
   };
-
   const { error: insErr } = await supabase.from('profiles').insert(insertRow);
   if (insErr) throw insErr;
 }
@@ -84,20 +74,14 @@ export default function AuthPage() {
   // On mount: if already signed in, go to dashboard.
   // Also subscribe to real transitions and navigate on SIGNED_IN.
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange(async (evt, session) => {
-      if (evt === "SIGNED_IN" && session?.user) {
-        try {
-          await ensureProfile(user, {
-            vault_code_set: false,
-            seed_phrase: generateSeedPhrase(),
-            // no created_at here (insert path handles it)
-          });
-        } catch {}
-        navigate("/dashboard", { replace: true });
-      }
-    });
-    return () => sub.subscription.unsubscribe();
-  }, [navigate]);
+  const { data: sub } = supabase.auth.onAuthStateChange(async (evt, session) => {
+    if (evt === "SIGNED_IN" && session?.user) {
+      try { await ensureProfile(session.user); } catch {}
+      navigate("/dashboard", { replace: true });
+    }
+  });
+  return () => sub.subscription.unsubscribe();
+}, [navigate]);
 
   // Submit handler for login/signup
   const handleSubmit = async (e) => {
@@ -116,7 +100,6 @@ export default function AuthPage() {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
 
-        // ensure profile; navigate (also handled by onAuthStateChange)
         try {
           await ensureProfile(data.user, {
             created_at: new Date().toISOString(),
@@ -128,27 +111,95 @@ export default function AuthPage() {
         return;
       }
 
-      // --- SIGN UP ---
-      // hard sign-out first (leftover sessions are the #1 cause of “stuck”)
-      try { await supabase.auth.signOut(); } catch {}
+      // ---------- SIGN UP (robust against Google-first emails) ----------
+      // 1) Preflight: try a login to detect existing accounts
+      const loginProbe = await supabase.auth.signInWithPassword({ email, password });
+      if (!loginProbe.error) {
+        // They already have a password account; just send them in.
+        try {
+          await ensureProfile(loginProbe.data.user);
+        } catch {}
+        navigate("/dashboard", { replace: true });
+        return;
+      } else {
+        const msg = (loginProbe.error.message || "").toLowerCase();
+        if (msg.includes("invalid login credentials")) {
+          // Email likely exists already (possibly via Google), but the password is wrong or not set.
+          // -> Do NOT call signUp; show a friendly error with next steps.
+          setConfirmationEmailSent(false);
+          setError(
+            "This email already has an account. Try “Continue with Google” for this email, or request a magic link."
+          );
+          setIsLogin(true);
+          return;
+        }
+      }
 
+      // 2) No existing password account detected; try a real signUp.
+      try { await supabase.auth.signOut(); } catch {}
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { emailRedirectTo: `${window.location.origin}/dashboard` },
       });
-      if (error) throw error;
 
-      // No session yet — show banner & switch to login
-      setConfirmationEmailSent(true);
-      setIsLogin(true);
+      if (error) {
+        setConfirmationEmailSent(false);
+        const emsg = (error.message || '').toLowerCase();
+        if (emsg.includes("already registered") || error.code === "email_exists" || error.status === 400) {
+          setError("This email is already registered. Use “Log in” or “Continue with Google”.");
+          setIsLogin(true);
+        } else {
+          setError(error.message);
+        }
+        return;
+      }
+
+      // 3) If your project requires email confirmations, data.session is typically null.
+      // Only show the banner if we truly got a clean signUp.
+      if (!data?.session) {
+        setError(null);
+        setConfirmationEmailSent(true);
+        setIsLogin(true);
+        return;
+      }
+
+      // (Uncommon) If autoconfirm is enabled and we got a session immediately:
+      try {
+        await ensureProfile(data.user, {
+          created_at: new Date().toISOString(),
+          vault_code_set: false,
+          seed_phrase: generateSeedPhrase(),
+        });
+      } catch {}
+      navigate("/dashboard", { replace: true });
     } catch (err) {
       console.error("Auth error:", err);
+      setConfirmationEmailSent(false);
       setError(err.message || "Authentication error");
     } finally {
-      setLoading(false);   // ← always clears the “Loading…” button
+      setLoading(false);
     }
   };
+
+  // Send a magic link to the given email
+  async function sendMagicLink() {
+    setError(null);
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: formData.email,
+        options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+      });
+      if (error) throw error;
+      setConfirmationEmailSent(true);
+      setIsLogin(true);
+    } catch (e) {
+      setError(e.message || "Failed to send magic link");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   // Google OAuth → redirect straight to /dashboard after provider flow
   const handleGoogleLogin = async () => {
@@ -234,7 +285,7 @@ export default function AuthPage() {
                   </div>
                 )}
 
-                {confirmationEmailSent && (
+                {confirmationEmailSent && !error && (
                   <div className="text-emerald-600 text-sm text-center">
                     📧 Verification email sent to {formData.email}. Use the link to log in.
                   </div>
@@ -276,6 +327,7 @@ export default function AuthPage() {
                       className="text-purple-600 hover:underline"
                       onClick={() => {
                         setError(null);
+                        setConfirmationEmailSent(false);
                         setIsLogin(true);
                       }}
                     >
@@ -300,6 +352,20 @@ export default function AuthPage() {
                 />
                 <span className="text-gray-800">Google</span>
               </button>
+
+              {error?.toLowerCase()?.includes('already') && (
+                <div className="mt-2 text-center">
+                  <button
+                    type="button"
+                    onClick={sendMagicLink}
+                    disabled={loading || !formData.email}
+                    className="text-sm text-indigo-600 hover:underline disabled:opacity-60"
+                  >
+                    Or get a one-time magic link
+                  </button>
+                </div>
+              )}
+
             </div>
           </div>
 
