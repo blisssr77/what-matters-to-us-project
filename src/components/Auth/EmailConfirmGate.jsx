@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 import ResendEmailButton from "./ResendEmailButton";
@@ -6,40 +6,64 @@ import ResendEmailButton from "./ResendEmailButton";
 export default function EmailConfirmGate({ children }) {
   const [verified, setVerified] = useState(null);
   const navigate = useNavigate();
+  const updateOnceRef = useRef(false);
 
+  // Check email verification status on mount and on auth state changes
   useEffect(() => {
     const checkVerification = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
+      console.debug('[Gate] checkVerification');
+      const { data: { session } } = await supabase.auth.getSession();
       const user = session?.user;
-      const confirmedAt = user?.email_confirmed_at || user?.confirmed_at;
+      if (!user) { setVerified(false); return; }
 
-      if (confirmedAt || user?.app_metadata?.provider === "google") {
-        setVerified(true);
-        navigate("/dashboard"); //  Redirect if confirmed
-      } else {
-        setVerified(false);
+      // A) Supabase native (email/password) confirmation
+      const confirmedAt = user.email_confirmed_at || user.confirmed_at;
+
+      // B) Your app-level flag
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('email_verified')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const isVerified = Boolean(confirmedAt || prof?.email_verified);
+      setVerified(isVerified);
+
+      // If verified, and app-level flag not set, set it now
+      // Optionally set your app flag once, but do not navigate here.
+      if (isVerified && !updateOnceRef.current) {
+        updateOnceRef.current = true;
+        try {
+          await supabase
+            .from('profiles')
+            .update({ email_verified: true, updated_at: new Date().toISOString() })
+            .eq('id', user.id);
+        } catch (e) {
+          console.warn('profiles.email_verified update failed:', e);
+        }
       }
-    };
 
-    checkVerification();
+      checkVerification();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      const user = session?.user;
-      const confirmedAt = user?.email_confirmed_at || user?.confirmed_at;
+      const { data: sub } = supabase.auth.onAuthStateChange(async (_evt, session) => {
+        console.debug('[Gate] onAuthStateChange');
+        const u = session?.user;
+        if (!u) return;
+        const confirmedAt = u.email_confirmed_at || u.confirmed_at;
+        const { data: prof } = await supabase
+          .from('profiles').select('email_verified').eq('id', u.id).maybeSingle();
+        const isVerified = Boolean(confirmedAt || prof?.email_verified);
+        if (isVerified) {
+          setVerified(true);
+          navigate('/dashboard');
+        }
+        if (!isVerified) setVerified(false);
+      });
 
-      if (confirmedAt) {
-        setVerified(true);
-        navigate("/dashboard");
-      }
-    });
-
-    return () => {
-      listener.subscription.unsubscribe();
+      return () => sub.subscription.unsubscribe();
     };
   }, [navigate]);
+  
 
   if (verified === null) return <p className="text-center mt-10">Checking...</p>;
 

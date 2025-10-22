@@ -521,7 +521,7 @@ export default function ManageAccount() {
     const prNewOk = prRules.length && prRules.noSpace;
     const prConfirmOk = !!privateConfirm && privateConfirm === privateCode && prNewOk;
 
-    /* ────────────────── UI ────────────────── */
+    /* ────────----------------------------────────── UI ─────------------------------------------------------───────────── */
     // Workspace Card
     return (
         <Layout>

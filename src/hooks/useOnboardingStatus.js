@@ -133,8 +133,15 @@ export function useOnboardingStatus({ refresh = false } = {}) {
       const calendarByItems    = (wsCal?.count ?? 0) > 0 || (pvCal?.count ?? 0) > 0;
       const calendarOK         = calendarBySettings || calendarByItems;
 
-      const profileOK          = !!prof;
-      const emailOK            = !!prof?.email_verified;
+      const hasNames = Boolean(
+        (prof?.first_name ?? '').trim() &&
+        (prof?.last_name ?? '').trim()
+      );
+
+      const emailOK = Boolean(prof?.email_verified);
+
+      const profileOK          = hasNames; 
+      const emailVerified      = emailOK;
       const workspaceOK        = (wsCount?.count ?? 0) > 0;
       const privateSpaceOK     = (psCount?.count ?? 0) > 0;
 
@@ -148,7 +155,7 @@ export function useOnboardingStatus({ refresh = false } = {}) {
         createdFirstDoc: firstDocExists,
         connectedCalendar: calendarOK,
         hasProfile: profileOK,
-        emailVerified: emailOK,
+        emailVerified,
         createdWorkspace: workspaceOK,
         createdPrivateSpace: privateSpaceOK,
         lastCheckedAt: dayjs().toISOString(),

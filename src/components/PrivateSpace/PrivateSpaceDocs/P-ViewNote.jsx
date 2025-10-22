@@ -105,12 +105,13 @@ export default function PrivateViewNote() {
             // reset private view state on load
             setPrivateJson(null)
             setPrivateHtml('')
-            setDecryptErr?.('')          // remove this if you don't have decryptErr state
+            setDecryptErr?.('')
+            setErrorMsg('')
             setCodeEntered(false)
 
             // Non-vaulted → viewable right away
             if (!data.is_vaulted) {
-            setCodeEntered(true)
+                setCodeEntered(true)
             }
 
             // PUBLIC viewer (prefer HTML column)
@@ -136,7 +137,13 @@ export default function PrivateViewNote() {
     const handleDecrypt = async (maybeCode, isFromRememberedStorage = false) => {
         const code = String(maybeCode ?? vaultCode ?? '').trim()
 
-        if (!noteData?.is_vaulted) { setCodeEntered(true); return }
+        // If not vaulted, nothing to decrypt here; don't flip views from this handler.
+        if (!noteData?.is_vaulted) {
+            setErrorMsg('This note is not vaulted.')
+            return
+        }
+
+        // if (!noteData?.is_vaulted) { setCodeEntered(true); return }
         if (!code) { setErrorMsg('Please enter your Vault Code.'); return }
 
         setLoading(true)
@@ -163,8 +170,9 @@ export default function PrivateViewNote() {
         const fmt = noteData?.private_note_format || 'tiptap_json'
 
         if (!ciphertext || !ivToUse) {
-            setErrorMsg('This note has no encrypted content to decrypt.')
-            setCodeEntered(true)
+            setErrorMsg('') // clear form-level error
+            setDecryptErr('This note has no encrypted content to decrypt.')
+            setCodeEntered(true)   // show the Private (vaulted) note section
             setLoading(false)
             return
         }
@@ -231,6 +239,12 @@ export default function PrivateViewNote() {
 
     // derived states
     const loadingNote = noteData === null
+
+    const ciphertext =
+        noteData?.private_note_ciphertext || noteData?.encrypted_note || null
+    const ivToUse =
+        noteData?.private_note_iv || noteData?.note_iv || noteData?.iv || null
+    const nothingToDecrypt = isVaulted && !(ciphertext && ivToUse)
 
     // ======================================================== RENDER ========================================================
     return (
@@ -338,6 +352,7 @@ export default function PrivateViewNote() {
                                     />
                                     Remember code for 15 min
                                 </label>
+                                
                                 <button
                                 onClick={() => handleDecrypt()}
                                 disabled={loading}
@@ -347,7 +362,7 @@ export default function PrivateViewNote() {
                                 </button>
                             </div>
 
-                            {errorMsg && <p className="text-sm text-red-500 mt-2">{errorMsg}</p>}
+                            {errorMsg && <p className="text-sm text-red-400 mt-2" role="alert" aria-live="assertive">{errorMsg}</p>}
                             </>
                         ) : (
                             <>
@@ -357,7 +372,7 @@ export default function PrivateViewNote() {
                                     <div className="text-gray-800 mb-1 text-sm font-bold">Private note:</div>
 
                                     {decryptErr ? (
-                                        <div className="text-xs text-red-600 mb-2">{decryptErr}</div>
+                                        <div className="text-xs text-red-400 mb-2">{decryptErr}</div>
                                     ) : (privateJson || privateHtml) ? (
                                         <ReadOnlyViewer
                                         json={privateJson}
