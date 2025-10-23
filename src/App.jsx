@@ -4,6 +4,7 @@ import Dashboard from "./pages/Dashboard";
 import ManageAccount from "./pages/Account/ManageAccount";
 import CalendarPage from "./pages/CalendarPage";
 import Verify from "./components/Auth/Verify";
+import AuthPasswordRecover from "./pages/Account/AuthPasswordRecover";
 
 // Importing components for the Private Vault
 import PrivateDocList from "./pages/PrivateSpace/P-DocList";
@@ -36,7 +37,8 @@ function App() {
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/account/manage" element={<ManageAccount />} />
         <Route path="/verify" element={<Verify />} />
-        
+        <Route path="/auth/recover" element={<AuthPasswordRecover />} />
+
         {/* Private Vault Routes */}
         <Route path="/privatespace/vaults" element={<PrivateDocList />} />
         <Route path="/privatespace/vaults/file-upload" element={<PrivateUploadDoc />} />

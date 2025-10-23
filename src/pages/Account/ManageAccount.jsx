@@ -12,6 +12,12 @@ import VaultCodeChecklist, { buildCodeRules } from "./VaultCodeChecklist";
 import { rotateWorkspaceCodeClient } from "@/utils/rotateWorkspaceCodeClient";
 import { rotatePrivateCodeClient } from "@/utils/rotatePrivateCodeClient";
 
+// Local storage flag for whether user has email/password provider
+const EMAIL_PW_FLAG = 'wm_has_email_pw';
+const readEmailPwFlag = () => localStorage.getItem(EMAIL_PW_FLAG) === '1';
+const setEmailPwFlag = (v) => v ? localStorage.setItem(EMAIL_PW_FLAG, '1')
+                                : localStorage.removeItem(EMAIL_PW_FLAG);
+
 // A separate Supabase client instance that does NOT persist sessions
 function slugifyUsername(s) {
   return String(s || '')
@@ -40,6 +46,18 @@ async function findAvailableUsername(client, base) {
     candidate = `${slugifyUsername(base) || 'user'}-${num}`;
   }
   return `user-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+// Probe email/password sign-in without affecting current session
+async function probeEmailPassword(email, password) {
+  const { createClient } = await import('@supabase/supabase-js');
+  const temp = createClient(
+    import.meta.env.VITE_SUPABASE_URL,
+    import.meta.env.VITE_SUPABASE_ANON_KEY,
+    { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+  );
+  const { data, error } = await temp.auth.signInWithPassword({ email, password });
+  return { ok: !!data?.user, error };
 }
 
 export default function ManageAccount() {
@@ -76,43 +94,85 @@ export default function ManageAccount() {
         })();
         return () => { mounted = false; };
     }, []);
+
+    // detect whether user has email/password provider
     const [hasEmailPassword, setHasEmailPassword] = useState(null);
     const [authBooted, setAuthBooted] = useState(false);
+    const [hasEmailPasswordOverride, setHasEmailPasswordOverride] = useState(readEmailPwFlag());
 
     // helper to compute provider flag
     const computeHasEmailProvider = (u) => {
-        const identities = u?.identities || [];
-        return identities.some((i) => i.provider === "email");
+        const ids = u?.identities || [];
+        return ids.some(i => i.provider === "email");
     };
 
-    // detect on mount + on auth changes
     useEffect(() => {
         let alive = true;
 
-        (async () => {
-            // getUser() tends to have identities reliably
+        async function loadAuthShape() {
             const { data: { user } = {} } = await supabase.auth.getUser();
             if (!alive) return;
-            if (user) {
-                setHasEmailPassword(computeHasEmailProvider(user));
-            } else {
-                // not signed in — choose a default UI state (probably hide section or default to false)
-                setHasEmailPassword(false);
-            }
+
+            const providersSayEmail = user ? computeHasEmailProvider(user) : false;
+            // <- persist override wins when providers lag
+            const finalHas = providersSayEmail || readEmailPwFlag();
+
+            setHasEmailPassword(finalHas);
             setAuthBooted(true);
-        })();
+
+            console.log("[ManageAccount] providers:", user?.app_metadata?.providers, user?.identities);
+        }
+
+        loadAuthShape();
 
         const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
             if (!alive) return;
             const u = session?.user || null;
-            setHasEmailPassword(u ? computeHasEmailProvider(u) : false);
+            const providersSayEmail = u ? computeHasEmailProvider(u) : false;
+            const finalHas = providersSayEmail || readEmailPwFlag();
+            setHasEmailPassword(finalHas);
         });
+
+        const onFocus = () => loadAuthShape();
+        window.addEventListener("focus", onFocus);
+
+        // keep multiple tabs in sync with the flag
+        const onStorage = (e) => {
+            if (e.key === EMAIL_PW_FLAG) {
+            setHasEmailPassword(readEmailPwFlag() || computeHasEmailProvider((supabase.auth.getUser()?.data||{}).user));
+            setHasEmailPasswordOverride(readEmailPwFlag());
+            }
+        };
+        window.addEventListener('storage', onStorage);
 
         return () => {
             alive = false;
             sub.subscription.unsubscribe();
+            window.removeEventListener("focus", onFocus);
+            window.removeEventListener("storage", onStorage);
         };
     }, []);
+
+    // Send password setup link for Google-only accounts
+    const [setupSent, setSetupSent] = useState(false);
+
+    async function sendPasswordSetupLink() {
+        setPwErr("");
+        setSetupSent(false);
+        try {
+            const { data: { user } = {} } = await supabase.auth.getUser();
+            if (!user?.email) throw new Error("No email found for this account.");
+
+            const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+            redirectTo: `${window.location.origin}/auth/recover`,
+            });
+            if (error) throw error;
+
+            setSetupSent(true);
+        } catch (e) {
+            setPwErr(e.message || "Failed to send password setup email.");
+        }
+    }
 
     /* ────────────────── Vault Codes state ────────────────── */
     const [workspaceCode, setWorkspaceCode] = useState("");
@@ -450,6 +510,20 @@ export default function ManageAccount() {
         }
         const hasEmailPassword = !!user.identities?.some((id) => id.provider === "email");
 
+        // If the account is Google-only, send a password-setup email and exit
+        if (!hasEmailPassword) {
+          try {
+            const { error: mailErr } = await supabase.auth.resetPasswordForEmail(user.email, {
+              redirectTo: `${window.location.origin}/auth/recover`,
+            });
+            if (mailErr) throw mailErr;
+            setPwErr("Check your email to finish setting a password.");
+          } catch (err) {
+            setPwErr(err.message || "Failed to send password setup email.");
+          }
+          return;
+        }
+
         // Validate inputs
         if (hasEmailPassword && currPwStatus !== "good") {
             setPwErr("Please confirm your current password first.");
@@ -491,14 +565,17 @@ export default function ManageAccount() {
 
                 setPwErr("Check your email to finish setting a password.");
                 return;
-            }
+                }
 
-            // Otherwise surface the original error
-            setPwErr(updErr.message || "Failed to update password.");
-            return;
+                // Otherwise surface the original error
+                setPwErr(updErr.message || "Failed to update password.");
+                return;
             }
 
             // Success
+            setEmailPwFlag(true);              // <-- persist that we now have email/password
+            setHasEmailPassword(true);
+            setHasEmailPasswordOverride(true);
             setPwdSaved(true);
             setCurrentPw("");
             setNewPw("");
@@ -511,6 +588,12 @@ export default function ManageAccount() {
             setPwErr(err.message || "Failed to update password.");
         }
     };
+
+    // async function refreshAuthUser() {
+    //     const { data: { user } } = await supabase.auth.getUser();
+    //     console.log('[refreshAuthUser]', user?.identities, user?.app_metadata);
+    //     setHasEmailPassword(computeHasEmailProvider(user));
+    // }
 
     // Verify current vault code
     const verifyWorkspaceCurrent = async (val) => {
@@ -688,6 +771,8 @@ export default function ManageAccount() {
     const prNewOk = prRules.length && prRules.noSpace;
     const prConfirmOk = !!privateConfirm && privateConfirm === privateCode && prNewOk;
 
+    const showEmailPasswordUI = (hasEmailPassword === true) || hasEmailPasswordOverride;
+
     /* ────────----------------------------────────── UI ─────------------------------------------------------───────────── */
     // Workspace Card
     return (
@@ -776,11 +861,13 @@ export default function ManageAccount() {
             {authBooted ? (
                 <div className="text-gray-800">
                     <h2 className="text-lg font-semibold mb-4">
-                    {hasEmailPassword ? 'Change password' : 'Set a password'}
+                    {showEmailPasswordUI ? "Change password" : "Set a password"}
                     </h2>
 
+                    {showEmailPasswordUI ? (
+                    /* ---------- CHANGE PASSWORD FORM (email/password exists) ---------- */
                     <form onSubmit={onSubmitChangePassword} noValidate className="space-y-3">
-                    {hasEmailPassword === true && (
+                        {/* Current password */}
                         <PasswordField
                             id="current-password"
                             name="current-password"
@@ -790,53 +877,74 @@ export default function ManageAccount() {
                             onChange={onChangeCurrentPw}
                             status={currPwStatus || "idle"}
                         />
-                    )}
 
-                    {/* New + confirm always visible */}
-                    <PasswordField
-                        id="new-password"
-                        name="new-password"
-                        autoComplete="new-password"
-                        label="New password"
-                        value={newPw}
-                        onChange={(e) => { setNewPw(e.target.value); setPwErr(""); }}
-                        status={newPw ? (newOk ? "good" : "bad") : "idle"}
-                    />
+                        {/* New password */}
+                        <PasswordField
+                            id="new-password"
+                            name="new-password"
+                            autoComplete="new-password"
+                            label="New password"
+                            value={newPw}
+                            onChange={(e) => { setNewPw(e.target.value); setPwErr(""); }}
+                            status={newPw ? (newOk ? "good" : "bad") : "idle"}
+                        />
 
-                    <PasswordField
-                        id="confirm-password"
-                        name="confirm-password"
-                        autoComplete="new-password"
-                        label="Confirm new password"
-                        value={confirmPw}
-                        onChange={(e) => { setConfirmPw(e.target.value); setPwErr(""); }}
-                        status={confirmPw ? (confirmOk ? "good" : "bad") : "idle"}
-                    />
+                        {/* Confirm new password */}
+                        <PasswordField
+                            id="confirm-password"
+                            name="confirm-password"
+                            autoComplete="new-password"
+                            label="Confirm new password"
+                            value={confirmPw}
+                            onChange={(e) => { setConfirmPw(e.target.value); setPwErr(""); }}
+                            status={confirmPw ? (confirmOk ? "good" : "bad") : "idle"}
+                        />
 
-                    {pwErr && <p className="text-xs text-red-500">{pwErr}</p>}
-                    <PasswordChecklist rules={rules} />
+                        {pwErr && <p className="text-xs text-red-500">{pwErr}</p>}
+                        <PasswordChecklist rules={rules} />
 
-                    <div className="flex items-center justify-between">
-                        {hasEmailPassword === false && (
+                        <div className="flex items-center justify-end">
+                        <button type="submit" className="btn-secondary text-sm">
+                            Update password
+                        </button>
+                        </div>
+
+                        {pwdSaved && (
+                            <p className="flex justify-center text-xs text-green-600 mt-2">
+                                Password updated successfully!
+                            </p>
+                        )}
+                    </form>
+                    ) : (
+                    /* ---------- SET PASSWORD CTA (Google-only) ---------- */
+                    <div className="space-y-3">
                         <p className="text-[11px] text-blue-600">
-                            You signed in with Google. Set a password to also log in with email.
+                        You signed in with Google. Set a password to also log in with email.
+                        </p>
+
+                        {pwErr && <p className="text-xs text-red-500">{pwErr}</p>}
+                        {setupSent && (
+                        <p className="text-xs text-emerald-600">
+                            Check your email for a link to set your password.
                         </p>
                         )}
-                        <button type="submit" className="btn-secondary text-sm">
-                            {hasEmailPassword ? 'Update password' : 'Set password'}
-                        </button>
-                    </div>
 
-                    {pwdSaved && (
-                        <p className="flex justify-center text-xs text-green-600 mt-2">
-                            Password {hasEmailPassword ? 'updated' : 'set'} successfully!
-                        </p>
+                        <div className="flex items-center justify-end">
+                        <button
+                            type="button"
+                            onClick={sendPasswordSetupLink}
+                            className="btn-secondary text-sm"
+                        >
+                            Email me a link
+                        </button>
+                        </div>
+                    </div>
                     )}
-                    </form>
                 </div>
                 ) : (
                 <div className="text-sm text-gray-500">Loading…</div>
             )}
+
         </div>
 
         {/* ==================================================== Vault Codes ============================================= */}
