@@ -14,7 +14,7 @@ import PrivateViewNote from "./components/PrivateSpace/PrivateSpaceDocs/P-ViewNo
 import PrivateEditNote from "./components/PrivateSpace/PrivateSpaceDocs/P-EditNote";
 import PrivateViewDoc from "./components/PrivateSpace/PrivateSpaceDocs/P-ViewDoc";
 import PrivateEditDoc from "./components/PrivateSpace/PrivateSpaceDocs/P-EditDoc";
-import PrivateTags from "./pages/PrivateSpace/PriateSpaceTags";
+import PrivateTags from "./pages/PrivateSpace/PrivateSpaceTags";
 
 // Importing components for the Workspace Vault
 import WorkspaceVaultList from "./pages/Workspace/W-DocList";
