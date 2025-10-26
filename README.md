@@ -13,6 +13,12 @@ A lightweight, privacy‑first workspace for **notes, docs, tasks, and calendars
 
 ---
 
+## 🔗 Live
+
+- Production: https://what-matters-to-us-project-git-docs-9c3906-robin-chaes-projects.vercel.app/
+
+---
+
 ## ✨ Highlights
 
 - **Modern React (Vite) + Tailwind UI** with a friendly, minimal look and feel.
