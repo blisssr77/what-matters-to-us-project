@@ -7,7 +7,7 @@ import {
   updateTag,
   deleteTag,
 } from '@/lib/tagsApi';
-import TagEditorModal from '@/components/Tags/TagEditorModal';
+import TagEditorModal from '@/components/Tags/TagEditorModal.jsx';
 import ConfirmDialog from '@/components/Tags/ConfirmDialog';
 import { supabase } from '@/lib/supabaseClient';
 import { ArrowUpDown, Plus, RefreshCw } from 'lucide-react';
