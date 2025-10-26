@@ -169,9 +169,7 @@ Ensure your Supabase **Site URL** points to your local dev origin during testing
 
 ## 🏷️ Branding Snippet
 
-<h1 className="text-2xl font-bold bg-gradient-to-r from-purple-500 via-indigo-200 to-blue-500 bg-clip-text text-transparent animate-pulse-slow">
-  WhatMatters
-</h1>
+![WhatMatters](docs/banner.png)
 
 ---
 
