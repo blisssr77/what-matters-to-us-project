@@ -5,7 +5,7 @@ import WorkspaceSelect from './WorkspaceSelect'
 import { useCalendarStore } from '@/store/useCalendarStore'
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import QuickAddModal from '@/components/calendar/QuickAddModal.jsx'
+import QuickAddModal from '@/components/Calendar/QuickAddModal.jsx'
 
 import PrivateSpaceSelect from './PrivateSpaceSelect'
 
