@@ -15,7 +15,7 @@ A lightweight, privacy‑first workspace for **notes, docs, tasks, and calendars
 
 ## 🔗 Live
 
-- Production: https://what-matters-to-us-project-git-docs-9c3906-robin-chaes-projects.vercel.app/
+- Production: https://what-matters-to-us-project-ov13.vercel.app
 
 ---
 
