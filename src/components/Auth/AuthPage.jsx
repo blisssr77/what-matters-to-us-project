@@ -97,46 +97,30 @@ export default function AuthPage() {
       }
 
       if (isLogin) {
+        // ----- LOGIN -----
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-
-        try {
-          await ensureProfile(data.user, {
-            created_at: new Date().toISOString(),
-            vault_code_set: false,
-            seed_phrase: generateSeedPhrase(),
-          });
-        } catch {}
-        navigate("/dashboard", { replace: true });
-        return;
-      }
-
-      // ---------- SIGN UP (robust against Google-first emails) ----------
-      // 1) Preflight: try a login to detect existing accounts
-      const loginProbe = await supabase.auth.signInWithPassword({ email, password });
-      if (!loginProbe.error) {
-        // They already have a password account; just send them in.
-        try {
-          await ensureProfile(loginProbe.data.user);
-        } catch {}
-        navigate("/dashboard", { replace: true });
-        return;
-      } else {
-        const msg = (loginProbe.error.message || "").toLowerCase();
-        if (msg.includes("invalid login credentials")) {
-          // Email likely exists already (possibly via Google), but the password is wrong or not set.
-          // -> Do NOT call signUp; show a friendly error with next steps.
-          setConfirmationEmailSent(false);
-          setError(
-            "This email already has an account. Try “Continue with Google” for this email, or request a magic link."
-          );
-          setIsLogin(true);
+        if (error) {
+          // Map common messages to friendly text
+          const msg = (error.message || "").toLowerCase();
+          if (msg.includes("email not confirmed")) {
+            setError("Please confirm your email before logging in.");
+          } else if (msg.includes("invalid login credentials")) {
+            setError("Invalid email or password.");
+          } else {
+            setError(error.message);
+          }
           return;
         }
+
+        try { await ensureProfile(data.user); } catch {}
+        navigate("/dashboard", { replace: true });
+        return;
       }
 
-      // 2) No existing password account detected; try a real signUp.
-      try { await supabase.auth.signOut(); } catch {}
+      // ----- SIGN UP (no pre-login probe) -----
+      // (Optional) clear any lingering session so the signUp callback runs cleanly
+      try { await supabase.auth.signOut({ scope: "global" }); } catch {}
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -144,34 +128,43 @@ export default function AuthPage() {
       });
 
       if (error) {
-        setConfirmationEmailSent(false);
-        const emsg = (error.message || '').toLowerCase();
-        if (emsg.includes("already registered") || error.code === "email_exists" || error.status === 400) {
-          setError("This email is already registered. Use “Log in” or “Continue with Google”.");
+        const emsg = (error.message || "").toLowerCase();
+
+        // Typical "already in use" signals
+        if (
+          emsg.includes("already") ||
+          emsg.includes("exists") ||
+          error.code === "email_exists" ||
+          error.status === 400 // Supabase sometimes collapses to 400 with text
+        ) {
+          setError('This email is already registered. Use "Log in", "Continue with Google", or "Get a magic link".');
           setIsLogin(true);
-        } else {
-          setError(error.message);
+          return;
         }
+
+        setError(error.message);
         return;
       }
 
-      // 3) If your project requires email confirmations, data.session is typically null.
-      // Only show the banner if we truly got a clean signUp.
+      // Supabase quirk: If email already exists, data.user.identities can be []
+      const alreadyExists =
+        data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0;
+
+      if (alreadyExists) {
+        setError('This email is already registered. Use "Log in", "Continue with Google", or "Get a magic link".');
+        setIsLogin(true);
+        return;
+      }
+
+      // If email confirmation is required, we won't have a session here
       if (!data?.session) {
-        setError(null);
         setConfirmationEmailSent(true);
         setIsLogin(true);
         return;
       }
 
-      // (Uncommon) If autoconfirm is enabled and we got a session immediately:
-      try {
-        await ensureProfile(data.user, {
-          created_at: new Date().toISOString(),
-          vault_code_set: false,
-          seed_phrase: generateSeedPhrase(),
-        });
-      } catch {}
+      // Auto-confirm (if enabled) → we already have a session
+      try { await ensureProfile(data.user); } catch {}
       navigate("/dashboard", { replace: true });
     } catch (err) {
       console.error("Auth error:", err);
@@ -223,7 +216,7 @@ export default function AuthPage() {
               WhatMatters
             </h1>
             <p className="mt-1 text-xs text-gray-500">
-              Focus your notes, docs, and tasks—securely.
+              Focus on your notes, docs, and tasks—securely.
             </p>
           </div>
 
