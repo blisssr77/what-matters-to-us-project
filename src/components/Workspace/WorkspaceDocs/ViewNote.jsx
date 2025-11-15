@@ -304,7 +304,7 @@ export default function WorkspaceViewNote() {
       const text = baseText;
       const type = "public";
 
-      const API_URL = "https:what-matters-to-us-project-ov13.vercel.app/api/summarize-note";
+      const API_URL = "https://what-matters-to-us-project-ov13.vercel.app/api/summarize-note";
 
       const res = await fetch(API_URL, {
         method: "POST",
@@ -386,7 +386,7 @@ export default function WorkspaceViewNote() {
       const text = baseText.trim();
       const type = "private";
 
-      const API_URL = "https:what-matters-to-us-project-ov13.vercel.app/api/summarize-note";
+      const API_URL = "https://what-matters-to-us-project-ov13.vercel.app/api/summarize-note";
 
       const res = await fetch(API_URL, {
         method: "POST",
