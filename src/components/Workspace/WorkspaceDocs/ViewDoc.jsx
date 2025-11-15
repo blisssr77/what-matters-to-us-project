@@ -606,31 +606,11 @@ export default function WorkspaceViewDoc() {
                 ) : (
                   <>
                     <span className="text-indigo-600">✨</span>
-                    Summarize Note with AI
+                    Summarize Notes with AI
                   </>
                 )}
               </button>
             </div>
-
-            {/* Notes Section */}
-            <h2 className="text-sm mb-1 font-bold text-gray-900">Note:</h2>
-            {doc?.notes && (
-              <p className="text-sm text-gray-800 mb-4">{doc.notes}</p>
-            )}
-
-            {/* PUBLIC AI SUMMARY */}
-            {publicSummary && (
-              <section className="mt-4 rounded-md border border-indigo-200 bg-indigo-50 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="text-xs font-semibold text-indigo-800">
-                    AI Summary (Public)
-                  </h2>
-                </div>
-                <p className="mt-1 text-xs md:text-sm text-indigo-900 whitespace-pre-wrap">
-                  {publicSummary}
-                </p>
-              </section>
-            )}
 
             {/* Tags */}
             {doc?.tags?.length > 0 && (
@@ -646,12 +626,32 @@ export default function WorkspaceViewDoc() {
               </div>
             )}
 
+            {/* Notes Section */}
+            <h2 className="text-sm mb-1 font-bold text-gray-900">Notes:</h2>
+            {doc?.notes && (
+              <p className="text-sm text-gray-800 mb-4">{doc.notes}</p>
+            )}
+
+            {/* PUBLIC AI SUMMARY */}
+            {publicSummary && (
+              <section className="mt-4 mb-8 rounded-md border border-indigo-200 bg-indigo-50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-xs font-semibold text-indigo-800">
+                    AI Summary (Public)
+                  </h2>
+                </div>
+                <p className="mt-1 text-xs md:text-sm text-indigo-900 whitespace-pre-wrap">
+                  {publicSummary}
+                </p>
+              </section>
+            )}
+
             {/* ✅ Display decrypted note + private AI block together (no duplication) */}
             {entered && decryptedNote && (
               <section className="mt-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-semibold text-gray-900">
-                    Private note:
+                    Private notes:
                   </h2>
                   <button
                     onClick={handleSummarizePrivate}
@@ -702,7 +702,7 @@ export default function WorkspaceViewDoc() {
                     ) : (
                       <>
                         <span className="text-purple-600">🔐</span>
-                        Summarize Private Note with AI
+                        Summarize Private Notes with AI
                       </>
                     )}
                   </button>
@@ -725,14 +725,6 @@ export default function WorkspaceViewDoc() {
                   </div>
                 )}
               </section>
-            )}
-
-            {doc?.file_metas?.length > 0 && (
-              <ul className="text-sm text-blue-500 space-y-1 mb-3">
-                {doc.file_metas.map((file, index) => (
-                  <li key={index}>📄 {file.name}</li>
-                ))}
-              </ul>
             )}
 
             {/* 🔐 Vaulted logic */}
@@ -783,7 +775,7 @@ export default function WorkspaceViewDoc() {
               ) : (
                 <>
                   {/* Action buttons */}
-                  <div className="flex items-center justify-end gap-4 text-xs mb-4">
+                  <div className="flex items-center justify-end gap-4 text-xs mt-6">
                     {/* <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
                         <Copy size={16} /> Copy
                       </button> */}
@@ -793,20 +785,29 @@ export default function WorkspaceViewDoc() {
                       }
                       className="flex items-center gap-1 text-blue-600 hover:underline"
                     >
-                      <Edit2 size={16} /> Edit
+                      <Edit2 size={16} /> Edit Document
                     </button>
                     <button
                       onClick={() => setShowConfirmPopup(true)}
                       className="flex items-center gap-1 text-red-600 hover:underline"
                     >
-                      <Trash2 size={16} /> Delete
+                      <Trash2 size={16} /> Delete Document
                     </button>
                   </div>
+
+                  {/* Attached files list */}
+                  {doc?.file_metas?.length > 0 && (
+                    <ul className="text-sm text-blue-500 space-y-1">
+                      {doc.file_metas.map((file, index) => (
+                        <li key={index}>📄 {file.name}</li>
+                      ))}
+                    </ul>
+                  )}
 
                   {/* File viewer + Download */}
                   {renderFileViewer()}
 
-                  <div className="mt-4 text-xs text-gray-400">
+                  <div className="mt-2 text-xs text-gray-400">
                     Last viewed just now · Private log only. Team audit history
                     coming soon.
                   </div>
@@ -816,22 +817,31 @@ export default function WorkspaceViewDoc() {
               // Public document
               <>
                 {/* Public controls */}
-                <div className="flex items-center justify-end gap-4 text-xs mb-4">
+                <div className="flex items-center justify-end gap-4 text-xs">
                   <button
                     onClick={() =>
                       navigate(`/workspace/vaults/doc-edit/${id}`)
                     }
                     className="flex items-center gap-1 text-blue-600 hover:underline"
                   >
-                    <Edit2 size={16} /> Edit
+                    <Edit2 size={16} /> Edit Document
                   </button>
                   <button
                     onClick={() => setShowConfirmPopup(true)}
                     className="flex items-center gap-1 text-red-600 hover:underline"
                   >
-                    <Trash2 size={16} /> Delete
+                    <Trash2 size={16} /> Delete Document
                   </button>
                 </div>
+
+                {/* Attached files list */}
+                {doc?.file_metas?.length > 0 && (
+                  <ul className="text-sm text-blue-500 space-y-1">
+                    {doc.file_metas.map((file, index) => (
+                      <li key={index}>📄 {file.name}</li>
+                    ))}
+                  </ul>
+                )}
 
                 {renderFileViewer()}
 
