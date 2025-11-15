@@ -47,6 +47,7 @@
     "framer-motion": "^12.23.12",
     "jszip": "^3.10.1",
     "lucide-react": "^0.525.0",
+    "openai": "^6.9.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-pdf": "^10.0.1",
