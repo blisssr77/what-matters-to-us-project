@@ -2,7 +2,7 @@ import React from "react";
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
-import { decryptFile, decryptText } from "../../../lib/encryption";
+import { decryptFile, decryptText, encryptText } from "../../../lib/encryption";
 import Layout from "../../Layout/Layout";
 import { X, Copy, Edit2, Trash2 } from "lucide-react";
 import { saveAs } from "file-saver";
@@ -31,15 +31,24 @@ export default function WorkspaceViewDoc() {
   const { id } = useParams();
   const { activeWorkspaceId } = useWorkspaceStore();
 
+  // Component states
   const [vaultCode, setVaultCode] = useState("");
   const [entered, setEntered] = useState(false);
   const [doc, setDoc] = useState(null);
 
+  // Decrypted content states
   const [decryptedFiles, setDecryptedFiles] = useState([]);
   const [decryptedFileType, setDecryptedFileType] = useState("");
   const [decryptedBlob, setDecryptedBlob] = useState(null);
   const [decryptedNote, setDecryptedNote] = useState(null);
 
+  // AI summary states
+  const [publicSummary, setPublicSummary] = useState("");
+  const [privateSummary, setPrivateSummary] = useState("");
+  const [isSummarizingPublic, setIsSummarizingPublic] = useState(false);
+  const [isSummarizingPrivate, setIsSummarizingPrivate] = useState(false);
+
+  // UI states
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -132,6 +141,10 @@ export default function WorkspaceViewDoc() {
         console.error("❌ Failed to fetch doc:", error);
       } else {
         setDoc(data);
+        // hydrate existing AI public summary if present
+        if (data && data.public_summary) {
+          setPublicSummary(data.public_summary);
+        }
         // If not vaulted, display immediately
         if (data && !data.is_vaulted) {
           const files = (data.file_metas || []).map((fm) => ({
@@ -194,6 +207,20 @@ export default function WorkspaceViewDoc() {
         } catch (err) {
           console.error("❌ Note decryption failed:", err);
           setErrorMsg("Decryption failed for the private note.");
+        }
+      }
+      // Decrypt private AI summary (if present)
+      if (doc.private_summary && doc.private_summary_iv) {
+       try {
+          const summary = await decryptText(
+            doc.private_summary,
+            doc.private_summary_iv,
+            code
+          );
+          setPrivateSummary(summary);
+        } catch (err) {
+          console.error("❌ Private summary decryption failed:", err);
+          // do not override existing error if note already failed
         }
       }
 
@@ -284,6 +311,128 @@ export default function WorkspaceViewDoc() {
   const handleCopy = async () => {
     if (decryptedNote) {
       await navigator.clipboard.writeText(decryptedNote);
+    }
+  };
+
+  // AI summarize - public side (non-sensitive workspace note or description)
+  const handleSummarizePublic = async () => {
+    if (!doc) return;
+
+    // Your schema uses `notes` (see your JSX), so use that
+    const baseText = (doc.notes || "").trim();
+
+    if (!baseText) {
+      setErrorMsg("No public text available to summarize.");
+      return;
+    }
+
+    setErrorMsg("");
+    setIsSummarizingPublic(true);
+
+    try {
+      const text = baseText;
+      const type = "public";
+
+      const API_URL = "https:what-matters-to-us-project-ov13.vercel.app/api/summarize-note";
+
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, type }),
+      });
+
+      if (!res.ok) {
+        console.error("❌ summarize-note (public) HTTP error:", res.status);
+        setErrorMsg("Failed to summarize public text. Please try again.");
+        return;
+      }
+
+      const data = await res.json();
+      const summary = (data && data.summary) || "";
+
+      setPublicSummary(summary);
+
+      // Save summary into this doc row
+      const { error: updateError } = await supabase
+        .from("workspace_vault_items")
+        .update({ public_summary: summary })
+        .eq("id", doc.id)
+        .eq("workspace_id", activeWorkspaceId);
+
+      if (updateError) {
+        console.error("❌ Failed to save public_summary:", updateError);
+        setErrorMsg("Summary generated but failed to save.");
+      }
+    } catch (err) {
+      console.error("❌ summarize-note (public) exception:", err);
+      setErrorMsg("Something went wrong while summarizing.");
+    } finally {
+      setIsSummarizingPublic(false);
+    }
+  };
+
+  // AI summarize - private note (requires decrypted note + Vault Code)
+  const handleSummarizePrivate = async () => {
+    if (!decryptedNote || !decryptedNote.trim()) {
+      setErrorMsg("No private note content to summarize.");
+      return;
+    }
+
+    const code = String(vaultCode || "").trim();
+    if (!code) {
+      setErrorMsg("Enter your Vault Code before summarizing the private note.");
+      return;
+    }
+
+    setErrorMsg("");
+    setIsSummarizingPrivate(true);
+
+    try {
+      const text = decryptedNote.trim();
+      const type = "private";
+
+      const API_URL = "https:what-matters-to-us-project-ov13.vercel.app/api/summarize-note";
+
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, type }),
+      });
+
+      if (!res.ok) {
+        console.error("❌ summarize-note (private) HTTP error:", res.status);
+        setErrorMsg("Failed to summarize private note. Please try again.");
+        return;
+      }
+
+      const data = await res.json();
+      const summary = (data && data.summary) || "";
+
+      // Encrypt the private summary with same Vault Code
+      const { encryptedData, iv } = await encryptText(summary, code);
+
+      const { error: updateError } = await supabase
+        .from("workspace_vault_items")
+        .update({
+          private_summary: encryptedData,
+          private_summary_iv: iv,
+        })
+        .eq("id", doc.id)
+        .eq("workspace_id", activeWorkspaceId);
+
+      if (updateError) {
+        console.error("❌ Failed to save private_summary:", updateError);
+        setErrorMsg("Private summary generated but failed to save.");
+        return;
+      }
+
+      // Keep decrypted copy in state for this view
+      setPrivateSummary(summary);
+    } catch (err) {
+      console.error("❌ summarize-note (private) exception:", err);
+      setErrorMsg("Something went wrong while summarizing.");
+    } finally {
+      setIsSummarizingPrivate(false);
     }
   };
 
@@ -390,7 +539,7 @@ export default function WorkspaceViewDoc() {
       )}
 
       <FullscreenCard className="max-w-3xl mx-auto p-6 bg-white rounded shadow border border-gray-200 mt-10 relative">
-        <CardHeaderActions onClose={() => navigate('/workspace/vaults')} />
+        <CardHeaderActions onClose={() => navigate("/workspace/vaults")} />
 
         {/* --- LOADING SKELETON WHILE FETCHING --- */}
         {loadingDoc ? (
@@ -400,16 +549,92 @@ export default function WorkspaceViewDoc() {
             <div className="h-4 w-5/6 bg-gray-200 rounded" />
             <div className="h-24 w-full bg-gray-200 rounded" />
           </div>
-          ) : (
-            <>
+        ) : (
+          <>
             {/* ---------------------- LOADED -------------------- */}
-            {/* Document title */}
-            {doc?.title && <h2 className="text-xl text-gray-900 font-bold mb-4">{doc.title}</h2>}
-            <h2 className="text-sm mb-1 font-bold text-gray-900">Notes:</h2>
-            {doc?.notes && <p className="text-sm text-gray-800 mb-4">{doc.notes}</p>}
+            {/* Document title + AI button row */}
+            <div className="mt-8 flex items-start justify-between mb-3">
+              {doc?.title && (
+                <h2 className="text-xl text-gray-900 font-bold mr-3">{doc.title}</h2>
+              )}
+
+              {/* AI Summarize Public button */}
+              <button
+                onClick={handleSummarizePublic}
+                disabled={isSummarizingPublic || !doc}
+                className={`
+                  px-4 py-1.5 
+                  rounded-md text-xs font-medium
+                  flex items-center gap-1.5
+                  border border-slate-300
+                  bg-white
+                  hover:bg-slate-100
+                  text-slate-700
+                  shadow-sm hover:shadow transition-all
+                  disabled:opacity-40 disabled:cursor-not-allowed
+                `}
+              >
+                {isSummarizingPublic ? (
+                  <>
+                    <svg
+                      className="animate-spin h-4 w-4 text-slate-600"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                      ></path>
+                    </svg>
+                    Summarizing…
+                  </>
+                ) : publicSummary ? (
+                  <>
+                    <span className="text-indigo-600">↻</span>
+                    Refresh Summary
+                  </>
+                ) : (
+                  <>
+                    <span className="text-indigo-600">✨</span>
+                    Summarize Note with AI
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Notes Section */}
+            <h2 className="text-sm mb-1 font-bold text-gray-900">Note:</h2>
+            {doc?.notes && (
+              <p className="text-sm text-gray-800 mb-4">{doc.notes}</p>
+            )}
+
+            {/* PUBLIC AI SUMMARY */}
+            {publicSummary && (
+              <section className="mt-4 rounded-md border border-indigo-200 bg-indigo-50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-xs font-semibold text-indigo-800">
+                    AI Summary (Public)
+                  </h2>
+                </div>
+                <p className="mt-1 text-xs md:text-sm text-indigo-900 whitespace-pre-wrap">
+                  {publicSummary}
+                </p>
+              </section>
+            )}
+
             {/* Tags */}
             {doc?.tags?.length > 0 && (
-              <div className="mb-4 text-sm font-bold text-gray-800">
+              <div className="mb-4 text-sm font-bold text-gray-800 pt-3">
                 Tags:{" "}
                 <div className="inline-block font-normal" />
                 {doc.tags.map((tag, index) => (
@@ -421,14 +646,85 @@ export default function WorkspaceViewDoc() {
               </div>
             )}
 
-            {/* Display decrypted note if available */}
+            {/* ✅ Display decrypted note + private AI block together (no duplication) */}
             {entered && decryptedNote && (
-              <>
-                <div className="text-gray-900 mb-1 font-bold text-sm">Private note:</div>
-                <div className="text-sm text-gray-800 bg-gray-100 border border-purple-200 rounded p-3 mb-4">
+              <section className="mt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-gray-900">
+                    Private note:
+                  </h2>
+                  <button
+                    onClick={handleSummarizePrivate}
+                    disabled={isSummarizingPrivate}
+                    className={`
+                      px-4 py-1.5 
+                      rounded-md text-xs font-medium
+                      flex items-center gap-1.5
+
+                      border border-slate-300
+                      bg-white
+                      hover:bg-slate-100
+                      text-slate-700
+
+                      shadow-sm hover:shadow transition-all
+                      disabled:opacity-40 disabled:cursor-not-allowed
+                    `}
+                  >
+                    {isSummarizingPrivate ? (
+                      <>
+                        <svg
+                          className="animate-spin h-4 w-4 text-slate-600"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          ></circle>
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                          ></path>
+                        </svg>
+                        Summarizing…
+                      </>
+                    ) : privateSummary ? (
+                      <>
+                        <span className="text-purple-600">↻</span>
+                        Refresh Private Summary
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-purple-600">🔐</span>
+                        Summarize Private Note with AI
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Raw decrypted note */}
+                <div className="text-sm text-gray-800 bg-gray-100 border border-purple-200 rounded p-3">
                   {decryptedNote}
                 </div>
-              </>
+
+                {/* PRIVATE AI SUMMARY – only shows after click (privateSummary not empty) */}
+                {privateSummary && (
+                  <div className="rounded-md border border-indigo-200 bg-indigo-50 p-3">
+                    <h3 className="text-xs font-semibold text-indigo-800">
+                      AI Summary (Private)
+                    </h3>
+                    <p className="mt-1 text-xs md:text-sm text-indigo-900 whitespace-pre-wrap">
+                      {privateSummary}
+                    </p>
+                  </div>
+                )}
+              </section>
             )}
 
             {doc?.file_metas?.length > 0 && (
@@ -444,49 +740,65 @@ export default function WorkspaceViewDoc() {
               !entered ? (
                 <div className="mb-4">
                   <label className="block text-sm font-bold text-gray-900">
-                  Enter Workspace Vault Code to Decrypt Document:
-                </label>
-
-                {/* Vault code input */}
-                <div className="mt-1 flex items-center gap-3">
-                  <input
-                  type="password"
-                  value={vaultCode}
-                  onChange={(e) => setVaultCode(e.target.value)}
-                  className="w-full p-2 border rounded text-sm text-gray-800"
-                  placeholder="Vault Code"
-                  autoComplete="current-password"
-                  />
-                  {/* Remember option for 15 minutes */}
-                  <label className="flex items-center gap-2 text-xs text-gray-600">
-                    <input
-                    type="checkbox"
-                    checked={rememberCode}
-                    onChange={(e) => setRememberCode(e.target.checked)}
-                    />
-                    Remember code for 15 min
+                    Enter Workspace Vault Code to Decrypt Document:
                   </label>
 
-                  <button onClick={() => handleDecrypt()} disabled={loading} className="btn-secondary text-sm">
-                    {loading ? "Decrypting..." : "Decrypt"}
-                  </button>
-                </div>
+                  {/* Vault code input */}
+                  <div className="mt-1 flex items-center gap-3">
+                    <input
+                      type="password"
+                      value={vaultCode}
+                      onChange={(e) => setVaultCode(e.target.value)}
+                      className="w-full p-2 border rounded text-sm text-gray-800"
+                      placeholder="Vault Code"
+                      autoComplete="current-password"
+                    />
+                    {/* Remember option for 15 minutes */}
+                    <label className="flex items-center gap-2 text-xs text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={rememberCode}
+                        onChange={(e) => setRememberCode(e.target.checked)}
+                      />
+                      Remember code for 15 min
+                    </label>
 
-                  {errorMsg && <p className="text-sm text-red-600 mt-2">{errorMsg}</p>}
+                    <button
+                      onClick={() => handleDecrypt()}
+                      disabled={loading}
+                      className="btn-secondary text-sm"
+                    >
+                      {loading ? "Decrypting..." : "Decrypt"}
+                    </button>
+                  </div>
+
+                  {errorMsg && (
+                    <p className="text-sm text-red-600 mt-2">{errorMsg}</p>
+                  )}
                 </div>
               ) : loading ? (
-                <p className="text-sm text-gray-500">🔐 Decrypting document...</p>
+                <p className="text-sm text-gray-500">
+                  🔐 Decrypting document...
+                </p>
               ) : (
                 <>
                   {/* Action buttons */}
                   <div className="flex items-center justify-end gap-4 text-xs mb-4">
                     {/* <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
-                      <Copy size={16} /> Copy
-                    </button> */}
-                    <button onClick={() => navigate(`/workspace/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
+                        <Copy size={16} /> Copy
+                      </button> */}
+                    <button
+                      onClick={() =>
+                        navigate(`/workspace/vaults/doc-edit/${id}`)
+                      }
+                      className="flex items-center gap-1 text-blue-600 hover:underline"
+                    >
                       <Edit2 size={16} /> Edit
                     </button>
-                    <button onClick={() => setShowConfirmPopup(true)} className="flex items-center gap-1 text-red-600 hover:underline">
+                    <button
+                      onClick={() => setShowConfirmPopup(true)}
+                      className="flex items-center gap-1 text-red-600 hover:underline"
+                    >
                       <Trash2 size={16} /> Delete
                     </button>
                   </div>
@@ -495,19 +807,28 @@ export default function WorkspaceViewDoc() {
                   {renderFileViewer()}
 
                   <div className="mt-4 text-xs text-gray-400">
-                    Last viewed just now · Private log only. Team audit history coming soon.
+                    Last viewed just now · Private log only. Team audit history
+                    coming soon.
                   </div>
                 </>
               )
-              ) : (
-                // 🌐 Public document
-                <>
+            ) : (
+              // Public document
+              <>
                 {/* Public controls */}
                 <div className="flex items-center justify-end gap-4 text-xs mb-4">
-                  <button onClick={() => navigate(`/workspace/vaults/doc-edit/${id}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
+                  <button
+                    onClick={() =>
+                      navigate(`/workspace/vaults/doc-edit/${id}`)
+                    }
+                    className="flex items-center gap-1 text-blue-600 hover:underline"
+                  >
                     <Edit2 size={16} /> Edit
                   </button>
-                  <button onClick={() => setShowConfirmPopup(true)} className="flex items-center gap-1 text-red-600 hover:underline">
+                  <button
+                    onClick={() => setShowConfirmPopup(true)}
+                    className="flex items-center gap-1 text-red-600 hover:underline"
+                  >
                     <Trash2 size={16} /> Delete
                   </button>
                 </div>
@@ -515,33 +836,24 @@ export default function WorkspaceViewDoc() {
                 {renderFileViewer()}
 
                 {doc?.created_at && (
-                        <div className="mb-1 text-xs text-gray-400">
-                            Created: {dayjs(doc.created_at).format("MMM D, YYYY h:mm A")}
-                        </div>
-                    )}
-                    {doc?.updated_at && (
-                        <div className="mb-3 text-xs text-gray-400">
-                            Updated: {dayjs(doc.updated_at).format("MMM D, YYYY h:mm A")}
-                        </div>
-                  )}
-
-                {/* Tags */}
-                {/* {doc?.tags?.length > 0 && (
-                  <div className="mb-4 text-sm text-gray-800">
-                    Tags:{" "}
-                    {doc.tags.map((tag, index) => (
-                      <React.Fragment key={tag}>
-                        <span className="bg-yellow-50 px-1 rounded">{tag}</span>
-                        {index < doc.tags.length - 1 && ", "}
-                      </React.Fragment>
-                    ))}
+                  <div className="mb-1 text-xs text-gray-400">
+                    Created:{" "}
+                    {dayjs(doc.created_at).format("MMM D, YYYY h:mm A")}
                   </div>
-                )} */}
+                )}
+                {doc?.updated_at && (
+                  <div className="mb-3 text-xs text-gray-400">
+                    Updated:{" "}
+                    {dayjs(doc.updated_at).format("MMM D, YYYY h:mm A")}
+                  </div>
+                )}
+
                 <div className="mt-4 text-xs text-gray-400">
-                  Last viewed just now · Private log only. Team audit history coming soon.
-                </div>                 
-                </>
-              )}
+                  Last viewed just now · Private log only. Team audit history
+                  coming soon.
+                </div>
+              </>
+            )}
           </>
         )}
       </FullscreenCard>
