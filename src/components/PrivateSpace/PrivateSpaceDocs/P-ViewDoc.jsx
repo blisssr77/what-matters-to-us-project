@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
-import { decryptFile, decryptText } from "@/lib/encryption";
+import { decryptFile, decryptText, encryptText } from "@/lib/encryption";
 import Layout from "@/components/Layout/Layout";
 import { X, Copy, Edit2, Trash2 } from "lucide-react";
 import { usePrivateSpaceStore } from "@/store/usePrivateSpaceStore";
@@ -27,6 +27,7 @@ const mimeToExtension = {
 export default function PrivateViewDoc() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { activeSpaceId } = usePrivateSpaceStore();
 
   const [vaultCode, setVaultCode] = useState("");
   const [entered, setEntered] = useState(false);
@@ -36,6 +37,12 @@ export default function PrivateViewDoc() {
   const [decryptedFileType, setDecryptedFileType] = useState("");
   const [decryptedBlob, setDecryptedBlob] = useState(null);
   const [decryptedNote, setDecryptedNote] = useState(null);
+
+  // AI summary states
+  const [publicSummary, setPublicSummary] = useState("");
+  const [privateSummary, setPrivateSummary] = useState("");
+  const [isSummarizingPublic, setIsSummarizingPublic] = useState(false);
+  const [isSummarizingPrivate, setIsSummarizingPrivate] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
@@ -260,6 +267,128 @@ export default function PrivateViewDoc() {
     }
   }
 
+  // AI summarize - public side (non-sensitive workspace note or description)
+  const handleSummarizePublic = async () => {
+    if (!doc) return;
+
+    // Your schema uses `notes` (see your JSX), so use that
+    const baseText = (doc.notes || "").trim();
+
+    if (!baseText) {
+      setErrorMsg("No public text available to summarize.");
+      return;
+    }
+
+    setErrorMsg("");
+    setIsSummarizingPublic(true);
+
+    try {
+      const text = baseText;
+      const type = "public";
+
+      const API_URL = "https://what-matters-to-us-project-ov13.vercel.app/api/summarize-note";
+
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, type }),
+      });
+
+      if (!res.ok) {
+        console.error("❌ summarize-note (public) HTTP error:", res.status);
+        setErrorMsg("Failed to summarize public text. Please try again.");
+        return;
+      }
+
+      const data = await res.json();
+      const summary = (data && data.summary) || "";
+
+      setPublicSummary(summary);
+
+      // Save summary into this doc row
+      const { error: updateError } = await supabase
+        .from("private_vault_items")
+        .update({ public_summary: summary })
+        .eq("id", doc.id)
+        .eq("private_space_id", activeSpaceId);
+
+      if (updateError) {
+        console.error("❌ Failed to save public_summary:", updateError);
+        setErrorMsg("Summary generated but failed to save.");
+      }
+    } catch (err) {
+      console.error("❌ summarize-note (public) exception:", err);
+      setErrorMsg("Something went wrong while summarizing.");
+    } finally {
+      setIsSummarizingPublic(false);
+    }
+  };
+
+  // AI summarize - private note (requires decrypted note + Vault Code)
+  const handleSummarizePrivate = async () => {
+    if (!decryptedNote || !decryptedNote.trim()) {
+      setErrorMsg("No private note content to summarize.");
+      return;
+    }
+
+    const code = String(vaultCode || "").trim();
+    if (!code) {
+      setErrorMsg("Enter your Vault Code before summarizing the private note.");
+      return;
+    }
+
+    setErrorMsg("");
+    setIsSummarizingPrivate(true);
+
+    try {
+      const text = decryptedNote.trim();
+      const type = "private";
+
+      const API_URL = "https://what-matters-to-us-project-ov13.vercel.app/api/summarize-note";
+
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, type }),
+      });
+
+      if (!res.ok) {
+        console.error("❌ summarize-note (private) HTTP error:", res.status);
+        setErrorMsg("Failed to summarize private note. Please try again.");
+        return;
+      }
+
+      const data = await res.json();
+      const summary = (data && data.summary) || "";
+
+      // Encrypt the private summary with same Vault Code
+      const { encryptedData, iv } = await encryptText(summary, code);
+
+      const { error: updateError } = await supabase
+        .from("private_vault_items")
+        .update({
+          private_summary: encryptedData,
+          private_summary_iv: iv,
+        })
+        .eq("id", doc.id)
+        .eq("private_space_id", activeSpaceId);
+
+      if (updateError) {
+        console.error("❌ Failed to save private_summary:", updateError);
+        setErrorMsg("Private summary generated but failed to save.");
+        return;
+      }
+
+      // Keep decrypted copy in state for this view
+      setPrivateSummary(summary);
+    } catch (err) {
+      console.error("❌ summarize-note (private) exception:", err);
+      setErrorMsg("Something went wrong while summarizing.");
+    } finally {
+      setIsSummarizingPrivate(false);
+    }
+  };
+
   // Render file viewer (works for both decrypted (vaulted) and public files)
   const renderFileViewer = () =>
     (decryptedFiles || []).map((file, i) => {
@@ -356,10 +485,11 @@ export default function PrivateViewDoc() {
             ) : (
               <>
               {/* ---------------------- LOADED -------------------- */}
-              {/* Document title */}
-              {doc?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{doc.title}</h2>}
-              <h2 className="text-sm mb-1 font-bold text-gray-800">Notes:</h2>
-              {doc?.notes && <p className="text-sm text-gray-800 mb-4">{doc.notes}</p>}
+              <div className="mt-8 flex items-start justify-between mb-3">
+                {/* Document title */}
+                {doc?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{doc.title}</h2>}
+              </div>
+
               {/* Tags */}
               {doc?.tags?.length > 0 && (
                 <div className="mb-4 text-sm font-bold text-gray-800">
@@ -375,23 +505,155 @@ export default function PrivateViewDoc() {
                 </div>
               )}
 
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm mb-1 font-bold text-gray-800">Notes:</h2>
+                {/* AI Summarize Public button */}
+                <button
+                  onClick={handleSummarizePublic}
+                  disabled={isSummarizingPublic || !doc}
+                  className={`
+                    px-4 py-1.5 
+                    rounded-md text-xs font-medium
+                    flex items-center gap-1.5
+                    border border-slate-300
+                    bg-white
+                    hover:bg-slate-100
+                    text-slate-700
+                    shadow-sm hover:shadow transition-all
+                    disabled:opacity-40 disabled:cursor-not-allowed
+                  `}
+                >
+                  {isSummarizingPublic ? (
+                    <>
+                      <svg
+                        className="animate-spin h-4 w-4 text-slate-600"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                        ></path>
+                      </svg>
+                      Summarizing…
+                    </>
+                  ) : publicSummary ? (
+                    <>
+                      <span className="text-indigo-600">↻</span>
+                      Refresh Summary
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-indigo-600">✨</span>
+                      Summarize Notes with AI
+                    </>
+                  )}
+                </button>
+              </div>
+              {doc?.notes && <p className="text-sm text-gray-800 mb-4">{doc.notes}</p>}
+
+              {/* PUBLIC AI SUMMARY */}
+              {publicSummary && (
+                <section className="mt-4 mb-8 rounded-md border border-indigo-200 bg-indigo-50 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="text-xs font-semibold text-indigo-800">
+                      AI Summary (Public)
+                    </h2>
+                  </div>
+                  <p className="mt-1 text-xs md:text-sm text-indigo-900 whitespace-pre-wrap">
+                    {publicSummary}
+                  </p>
+                </section>
+              )}
+
               {/* Decrypted private note */}
               {entered && decryptedNote && (
-                <>
-                  <div className="text-gray-800 mb-1 text-sm font-bold">Private note:</div>
+                <section className="mt-4 space-y-3 mb-6">
+                  <div className="flex items-center justify-between">
+                    <div className="text-gray-800 mb-1 text-sm font-bold">Private note:</div>
+
+                    <button
+                      onClick={handleSummarizePrivate}
+                      disabled={isSummarizingPrivate}
+                      className={`
+                        px-4 py-1.5 
+                        rounded-md text-xs font-medium
+                        flex items-center gap-1.5
+
+                        border border-slate-300
+                        bg-white
+                        hover:bg-slate-100
+                        text-slate-700
+
+                        shadow-sm hover:shadow transition-all
+                        disabled:opacity-40 disabled:cursor-not-allowed
+                      `}
+                    >
+                      {isSummarizingPrivate ? (
+                        <>
+                          <svg
+                            className="animate-spin h-4 w-4 text-slate-600"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            ></circle>
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                            ></path>
+                          </svg>
+                          Summarizing…
+                        </>
+                      ) : privateSummary ? (
+                        <>
+                          <span className="text-purple-600">↻</span>
+                          Refresh Private Summary
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-purple-600">🔐</span>
+                          Summarize Private Notes with AI
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Raw decrypted note */}
                   <div className="text-sm text-gray-900 bg-gray-100 border border-purple-200 rounded p-3 mb-4">
                     {decryptedNote}
                   </div>
-                </>
-              )}
 
-              {/* File list (names) */}
-              {doc?.file_metas?.length > 0 && (
-                <ul className="text-sm text-blue-500 space-y-1 mb-3">
-                  {doc.file_metas.map((file, index) => (
-                    <li key={index}>📄 {file.name}</li>
-                  ))}
-                </ul>
+                  {/* PRIVATE AI SUMMARY – only shows after click (privateSummary not empty) */}
+                  {privateSummary && (
+                    <div className="rounded-md border border-indigo-200 bg-indigo-50 p-3">
+                      <h3 className="text-xs font-semibold text-indigo-800">
+                        AI Summary (Private)
+                      </h3>
+                      <p className="mt-1 text-xs md:text-sm text-indigo-900 whitespace-pre-wrap">
+                        {privateSummary}
+                      </p>
+                    </div>
+                  )}
+                </section>
               )}
 
               {/* Vault code prompt (only for vaulted docs) */}
@@ -434,25 +696,35 @@ export default function PrivateViewDoc() {
                 <>
 
                 {/* Actions */}
-                <div className="flex items-center justify-end gap-4 text-xs mb-4">
-                  {decryptedNote && (
+                <div className="flex items-center justify-end gap-4 text-xs mt-8">
+                  {/* {decryptedNote && (
                     <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
                       <Copy size={16} /> Copy
                     </button>
-                  )}
+                  )} */}
                   <button
                     onClick={() => navigate(`/privatespace/vaults/doc-edit/${id}`)}
                     className="flex items-center gap-1 text-blue-600 hover:underline"
                   >
-                    <Edit2 size={16} /> Edit
+                    <Edit2 size={16} /> Edit Document
                   </button>
                   <button
                     onClick={() => setShowConfirmPopup(true)}
                     className="flex items-center gap-1 text-red-600 hover:underline"
                   >
-                    <Trash2 size={16} /> Delete
+                    <Trash2 size={16} /> Delete Document
                   </button>
                 </div>
+
+
+                {/* File list (names) */}
+                {doc?.file_metas?.length > 0 && (
+                  <ul className="text-sm text-blue-500 space-y-1">
+                    {doc.file_metas.map((file, index) => (
+                      <li key={index}>📄 {file.name}</li>
+                    ))}
+                  </ul>
+                )}
 
                 {/* Viewer */}
                 {renderFileViewer()}

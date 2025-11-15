@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
-import { decryptText } from "../../../lib/encryption";
+import { decryptText, encryptText } from "../../../lib/encryption";
 import Layout from "../../Layout/Layout";
 import { X, Copy, Edit2, Trash2 } from "lucide-react";
 import dayjs from "dayjs";
@@ -12,10 +12,29 @@ import TextAlign from '@tiptap/extension-text-align'
 import ReadOnlyViewer from '@/components/Editors/ReadOnlyViewer'
 import FullscreenCard from "@/components/Layout/FullscreenCard";
 import CardHeaderActions from "@/components/Layout/CardHeaderActions";
+import { usePrivateSpaceStore } from "@/store/usePrivateSpaceStore";
+
+// HELPER for AI summarize - Utility to extract plain text from TipTap JSON
+const extractPlainTextFromTiptap = (node) => {
+  if (!node) return "";
+
+  // text node
+  if (node.type === "text" && node.text) {
+    return node.text;
+  }
+
+  // nodes with children
+  if (Array.isArray(node.content)) {
+    return node.content.map(extractPlainTextFromTiptap).join(" ");
+  }
+
+  return "";
+};
 
 export default function PrivateViewNote() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { activeSpaceId } = usePrivateSpaceStore();
 
     const [vaultCode, setVaultCode] = useState("");
     const [noteData, setNoteData] = useState(null);
@@ -23,6 +42,13 @@ export default function PrivateViewNote() {
     const [decryptErr, setDecryptErr] = useState('')
     const [errorMsg, setErrorMsg] = useState("");
     const [loading, setLoading] = useState(false);
+
+    // AI summarize state
+    const [publicSummary, setPublicSummary] = useState("");
+    const [privateSummary, setPrivateSummary] = useState("");
+    const [isSummarizingPublic, setIsSummarizingPublic] = useState(false);
+    const [isSummarizingPrivate, setIsSummarizingPrivate] = useState(false);
+
     const [codeEntered, setCodeEntered] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     // remember-opt-in
@@ -237,6 +263,170 @@ export default function PrivateViewNote() {
         navigate("/privatespace/vaults");
     };
 
+    // ===================== AI summarize - PUBLIC (workspace note) =====================
+    const handleSummarizePublic = async () => {
+        if (!noteData) return;
+
+        // Prefer plain text notes; fallback to HTML if that's what you have
+        const baseText = (
+            noteData.notes ||
+            noteData.public_note_html ||
+            ""
+        ).trim();
+
+        if (!baseText) {
+            setErrorMsg("No public text available to summarize.");
+            return;
+        }
+
+        setErrorMsg("");
+        setIsSummarizingPublic(true);
+
+        try {
+            const text = baseText;
+            const type = "public";
+
+            const API_URL = "https://what-matters-to-us-project-ov13.vercel.app/api/summarize-note";
+
+            const res = await fetch(API_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text, type }),
+            });
+
+            if (!res.ok) {
+                const errJson = await res.json().catch(() => null);
+                console.error(
+                    "summarize-note (workspace note - public) HTTP error:",
+                    res.status,
+                    errJson
+                );
+                setErrorMsg(
+                    errJson?.error ||
+                    "Failed to summarize public note. Please try again later."
+                );
+                return;
+            }
+
+            const data = await res.json();
+            const summary = (data && data.summary) || "";
+
+            setPublicSummary(summary);
+
+            // Save summary for this note row
+            const { error: updateError } = await supabase
+            .from("private_vault_items")
+            .update({ public_summary: summary })
+            .eq("id", noteData.id)
+            .eq("private_space_id", activeSpaceId);
+
+            if (updateError) {
+                console.error("Failed to save public_summary (note):", updateError);
+                setErrorMsg("Summary generated but failed to save.");
+            }
+        } catch (err) {
+            console.error("summarize-note (workspace note - public) exception:", err);
+            setErrorMsg("Something went wrong while summarizing.");
+        } finally {
+            setIsSummarizingPublic(false);
+        }
+    };
+
+    // ===================== AI summarize - PRIVATE (workspace note) =====================
+    const handleSummarizePrivate = async () => {
+        // 1) Build a meaningful baseText from decrypted content
+        let baseText = "";
+
+        // Prefer clean HTML if we have it
+        if (privateHtml && privateHtml.trim()) {
+            baseText = privateHtml;
+        }
+        // Else, try TipTap JSON
+        else if (privateJson) {
+            baseText = extractPlainTextFromTiptap(privateJson);
+        }
+        // Fallback to decryptedNote (for non-vaulted or legacy)
+        else if (decryptedNote && decryptedNote.trim()) {
+            baseText = decryptedNote;
+        }
+
+        if (!baseText || !baseText.trim()) {
+            setErrorMsg("No private note content to summarize.");
+            return;
+        }
+
+        const code = String(vaultCode || "").trim();
+        if (!code) {
+            setErrorMsg("Enter your Vault Code before summarizing the private note.");
+            return;
+        }
+
+        setErrorMsg("");
+        setIsSummarizingPrivate(true);
+
+        try {
+            const text = baseText.trim();
+            const type = "private";
+
+            const API_URL = "https://what-matters-to-us-project-ov13.vercel.app/api/summarize-note";
+
+            const res = await fetch(API_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text, type }),
+            });
+
+            if (!res.ok) {
+                const errJson = await res.json().catch(() => null);
+                console.error(
+                    "❌ summarize-note (workspace note - private) HTTP error:",
+                    res.status,
+                    errJson
+                );
+                setErrorMsg(
+                    errJson?.error ||
+                    "Failed to summarize private note. Please try again later."
+                );
+                return;
+            }
+
+            const data = await res.json();
+            const summary = (data && data.summary) || "";
+
+            // Encrypt the private summary with same Vault Code
+            const { encryptedData, iv } = await encryptText(summary, code);
+
+            const { error: updateError } = await supabase
+            .from("private_vault_items")
+            .update({
+                private_summary: encryptedData,
+                private_summary_iv: iv,
+            })
+            .eq("id", noteData.id)
+            .eq("private_space_id", activeSpaceId);
+
+            if (updateError) {
+                console.error(
+                    "❌ Failed to save private_summary (note):",
+                    updateError
+                );
+                setErrorMsg("Private summary generated but failed to save.");
+                return;
+            }
+
+            // Keep decrypted copy in state for this view
+            setPrivateSummary(summary);
+        } catch (err) {
+            console.error(
+                "❌ summarize-note (workspace note - private) exception:",
+                err
+            );
+            setErrorMsg("Something went wrong while summarizing.");
+        } finally {
+            setIsSummarizingPrivate(false);
+        }
+    };
+
     // derived states
     const loadingNote = noteData === null
 
@@ -285,9 +475,11 @@ export default function PrivateViewNote() {
                 </div>
                 ) : (
                     <>
+                    <div className="mt-10 flex items-start justify-between mb-2">
+                        {/* Title */}
+                        {noteData?.title && <h2 className="text-xl text-gray-800 font-bold mb-3">{noteData.title}</h2>}
+                    </div>
 
-                    {/* Title */}
-                    {noteData?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{noteData.title}</h2>}
                     {/* Tags */}
                     {noteData?.tags?.length > 0 && (
                         <div className="mb-3 text-sm text-gray-800 font-bold">
@@ -304,26 +496,94 @@ export default function PrivateViewNote() {
                     )}
                     
                     {/* Public note */}
-                    <div className="mb-4">
-                        <h2 className="text-sm font-bold text-gray-800 m-0 mb-1">Notes:</h2>
+                    <div className="mb-6">
+                        <div className="flex items-center justify-between mb-2">
+                            <h2 className="text-sm font-bold text-gray-800 m-0 mb-1">Notes:</h2>
+                            <button
+                                onClick={handleSummarizePublic}
+                                disabled={isSummarizingPublic || !noteData}
+                                className={`
+                                    px-4 py-1.5 
+                                    rounded-md text-xs font-medium
+                                    flex items-center gap-1.5
+                                    border border-slate-300
+                                    bg-white
+                                    hover:bg-slate-100
+                                    text-slate-700
+                                    justify-self-end
+                                    shadow-sm hover:shadow transition-all
+                                    disabled:opacity-40 disabled:cursor-not-allowed
+                                `}
+                            >
+                            {isSummarizingPublic ? (
+                                <>
+                                <svg
+                                    className="animate-spin h-4 w-4 text-slate-600"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <circle
+                                        className="opacity-25"
+                                        cx="12"
+                                        cy="12"
+                                        r="10"
+                                        stroke="currentColor"
+                                        strokeWidth="4"
+                                    ></circle>
+                                    <path
+                                        className="opacity-75"
+                                        fill="currentColor"
+                                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                                    ></path>
+                                </svg>
+                                Summarizing…
+                                </>
+                                ) : publicSummary ? (
+                                <>
+                                    <span className="text-indigo-600">↻</span>
+                                    Refresh Summary
+                                </>
+                                ) : (
+                                <>
+                                    <span className="text-indigo-600">✨</span>
+                                    Summarize Notes with AI
+                                </>
+                                )}
+                            </button>
+                        </div>
 
                         {publicJson ? (
                             <ReadOnlyViewer
-                            json={publicJson}
-                            className="wm-content text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4"
+                                json={publicJson}
+                                className="wm-content text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4"
                             />
                         ) : noteData?.public_note_html ? (
                             <ReadOnlyViewer
-                            html={noteData.public_note_html}
-                            className="wm-content prose max-w-none text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4
-                                        [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_li]:my-1"
+                                html={noteData.public_note_html}
+                                className="wm-content prose max-w-none text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4
+                                [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_li]:my-1"
                             />
                         ) : noteData?.notes ? (
                             <p className="text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4">
-                            {noteData.notes}
+                                {noteData.notes}
                             </p>
                         ) : (
                             <p className="text-sm text-gray-500 mb-4">No public note</p>
+                        )}
+
+                        {/* PUBLIC AI SUMMARY */}
+                        {publicSummary && (
+                            <section className="mt-2 mb-8 rounded-md border border-indigo-200 bg-indigo-50 p-3">
+                                <div className="flex items-center justify-between gap-2">
+                                    <h2 className="text-xs font-semibold text-indigo-800">
+                                        AI Summary (Public)
+                                    </h2>
+                                </div>
+                                <p className="mt-1 text-xs md:text-sm text-indigo-900 whitespace-pre-wrap">
+                                    {publicSummary}
+                                </p>
+                            </section>
                         )}
                     </div>
 
@@ -369,48 +629,115 @@ export default function PrivateViewNote() {
                             {/* Private (vaulted) note */}
                             {noteData?.is_vaulted && (
                                 <div className="mt-2 mb-4">
-                                    <div className="text-gray-800 mb-1 text-sm font-bold">Private note:</div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="text-gray-800 mb-1 text-sm font-bold">Private notes:</div>
+
+                                        <button
+                                            onClick={handleSummarizePrivate}
+                                            disabled={isSummarizingPrivate}
+                                            className={`
+                                                px-4 py-1.5 
+                                                rounded-md text-xs font-medium
+                                                flex items-center gap-1.5
+                                                border border-slate-300
+                                                bg-white
+                                                hover:bg-slate-100
+                                                text-slate-700
+                                                shadow-sm hover:shadow transition-all
+                                                disabled:opacity-40 disabled:cursor-not-allowed
+                                            `}
+                                        >
+                                            {isSummarizingPrivate ? (
+                                                <>
+                                                    <svg
+                                                        className="animate-spin h-4 w-4 text-slate-600"
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                    >
+
+                                                        <circle
+                                                            className="opacity-25"
+                                                            cx="12"
+                                                            cy="12"
+                                                            r="10"
+                                                            stroke="currentColor"
+                                                            strokeWidth="4"
+                                                        ></circle>
+                                                        <path
+                                                            className="opacity-75"
+                                                            fill="currentColor"
+                                                            d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                                                        ></path>
+                                                    </svg>
+                                                    Summarizing…
+                                                </>
+                                                ) : privateSummary ? (
+                                                <>
+                                                    <span className="text-purple-600">↻</span>
+                                                    Refresh Private Summary
+                                                </>
+                                                ) : (
+                                                <>
+                                                    <span className="text-purple-600">🔐</span>
+                                                    Summarize Private Notes with AI
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
 
                                     {decryptErr ? (
                                         <div className="text-xs text-red-400 mb-2">{decryptErr}</div>
                                     ) : (privateJson || privateHtml) ? (
                                         <ReadOnlyViewer
-                                        json={privateJson}
-                                        html={privateHtml}
-                                        className="wm-content text-sm text-gray-900 bg-gray-100 border border-purple-200 rounded p-3"
+                                            json={privateJson}
+                                            html={privateHtml}
+                                            className="wm-content text-sm text-gray-900 bg-gray-100 border border-purple-200 rounded p-3"
                                         />
                                     ) : (typeof decryptedNote === 'string' && decryptedNote !== '') ? (
                                         <div className="wm-content text-sm text-gray-900 bg-gray-100 border border-purple-200 rounded p-3">
-                                        {decryptedNote}
+                                            {decryptedNote}
                                         </div>
                                     ) : (
                                         <div className="text-sm text-gray-600 bg-gray-100 border border-purple-200 rounded p-3">
-                                        Decrypting…
+                                            Decrypting…
+                                        </div>
+                                    )}
+
+                                    {/* PRIVATE AI SUMMARY */}
+                                    {privateSummary && (
+                                        <div className="rounded-md border border-indigo-200 bg-indigo-50 p-3 mt-2">
+                                            <h3 className="text-xs font-semibold text-indigo-800">
+                                                AI Summary (Private)
+                                            </h3>
+                                            <p className="mt-1 text-xs md:text-sm text-indigo-900 whitespace-pre-wrap">
+                                                {privateSummary}
+                                            </p>
                                         </div>
                                     )}
                                 </div>
                             )}
 
                             {/* Action buttons */}
-                            <div className="flex items-center justify-end gap-4 text-xs mb-4">
-                                {decryptedNote && (
+                            <div className="flex items-center justify-end gap-4 text-xs mb-4 mt-8">
+                                {/* {decryptedNote && (
                                     <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
                                         <Copy size={16} /> Copy
                                     </button>
-                                )}
+                                )} */}
                                 <button
-                                onClick={() => navigate(`/privatespace/vaults/note-edit/${id}`)}
-                                className="flex items-center gap-1 text-blue-600 hover:underline"
+                                    onClick={() => navigate(`/privatespace/vaults/note-edit/${id}`)}
+                                    className="flex items-center gap-1 text-blue-600 hover:underline"
                                 >
                                     <Edit2 size={16} />
-                                    Edit
+                                    Edit Document
                                 </button>
                                 <button
-                                onClick={() => setShowDeleteConfirm(true)}
-                                className="flex items-center gap-1 text-red-600 hover:underline"
+                                    onClick={() => setShowDeleteConfirm(true)}
+                                    className="flex items-center gap-1 text-red-600 hover:underline"
                                 >
                                     <Trash2 size={16} />
-                                    Delete
+                                    Delete Document
                                 </button>
                             </div>
 

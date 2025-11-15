@@ -32,7 +32,6 @@ const extractPlainTextFromTiptap = (node) => {
   return "";
 };
 
-
 export default function WorkspaceViewNote() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -281,7 +280,7 @@ export default function WorkspaceViewNote() {
     navigate("/workspace/vaults");
   };
 
-    // ===================== AI summarize - PUBLIC (workspace note) =====================
+  // ===================== AI summarize - PUBLIC (workspace note) =====================
   const handleSummarizePublic = async () => {
     if (!noteData) return;
 
@@ -445,7 +444,6 @@ export default function WorkspaceViewNote() {
     }
   };
 
-
   // Utility to generate TipTap JSON from HTML (for privateJson fallback)
   const publicJson = useMemo(() => {
     if (!noteData?.public_note_html) return null
@@ -502,59 +500,9 @@ export default function WorkspaceViewNote() {
                 <>
                   <div className="mt-10 flex items-start justify-between mb-2">
                   {/* Title + AI public summarize button */}
-                  {noteData?.title && <h2 className="text-xl text-gray-800 font-bold mb-4">{noteData.title}</h2>}
+                  {noteData?.title && <h2 className="text-xl text-gray-800 font-bold mb-3">{noteData.title}</h2>}
 
-                  <button
-                    onClick={handleSummarizePublic}
-                    disabled={isSummarizingPublic || !noteData}
-                    className={`
-                      px-4 py-1.5 
-                      rounded-md text-xs font-medium
-                      flex items-center gap-1.5
-                      border border-slate-300
-                      bg-white
-                      hover:bg-slate-100
-                      text-slate-700
-                      shadow-sm hover:shadow transition-all
-                      disabled:opacity-40 disabled:cursor-not-allowed
-                    `}
-                  >
-                    {isSummarizingPublic ? (
-                      <>
-                        <svg
-                          className="animate-spin h-4 w-4 text-slate-600"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          ></circle>
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                          ></path>
-                        </svg>
-                        Summarizing…
-                      </>
-                    ) : publicSummary ? (
-                      <>
-                        <span className="text-indigo-600">↻</span>
-                        Refresh Summary
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-indigo-600">✨</span>
-                        Summarize Notes with AI
-                      </>
-                    )}
-                  </button>
+                  
                 </div>
 
                 {/* Display tags content */}
@@ -572,13 +520,69 @@ export default function WorkspaceViewNote() {
                 )}
                 
                 {/* Public note */}
-                <div className="mb-4">
-                  <h2 className="text-sm font-bold text-gray-900 m-0 mb-1">Notes:</h2>
+                <div className="mb-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-sm font-bold text-gray-900 m-0 mb-1">Notes:</h2>
+
+                      <button
+                        onClick={handleSummarizePublic}
+                        disabled={isSummarizingPublic || !noteData}
+                        className={`
+                          px-4 py-1.5 
+                          rounded-md text-xs font-medium
+                          flex items-center gap-1.5
+                          border border-slate-300
+                          bg-white
+                          hover:bg-slate-100
+                          text-slate-700
+                          justify-self-end
+                          shadow-sm hover:shadow transition-all
+                          disabled:opacity-40 disabled:cursor-not-allowed
+                        `}
+                      >
+
+                        {isSummarizingPublic ? (
+                          <>
+                            <svg
+                              className="animate-spin h-4 w-4 text-slate-600"
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                            >
+                              <circle
+                                className="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                strokeWidth="4"
+                              ></circle>
+                              <path
+                                className="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                              ></path>
+                            </svg>
+                            Summarizing…
+                          </>
+                        ) : publicSummary ? (
+                          <>
+                            <span className="text-indigo-600">↻</span>
+                            Refresh Summary
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-indigo-600">✨</span>
+                            Summarize Notes with AI
+                          </>
+                        )}
+                      </button>
+                  </div>
 
                   {publicJson ? (
                     <ReadOnlyViewer
                       json={publicJson}
-                      className="wm-content text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-4"
+                      className="wm-content text-sm text-gray-800 bg-white border border-gray-200 rounded p-3 mb-5"
                     />
                   ) : noteData?.public_note_html ? (
                     <ReadOnlyViewer
@@ -597,7 +601,7 @@ export default function WorkspaceViewNote() {
 
                 {/* PUBLIC AI SUMMARY */}
                 {publicSummary && (
-                  <section className="mt-4 mb-8 rounded-md border border-indigo-200 bg-indigo-50 p-3">
+                  <section className="mt-2 mb-8 rounded-md border border-indigo-200 bg-indigo-50 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <h2 className="text-xs font-semibold text-indigo-800">
                         AI Summary (Public)
@@ -722,7 +726,7 @@ export default function WorkspaceViewNote() {
 
                           {/* PRIVATE AI SUMMARY */}
                           {privateSummary && (
-                            <div className="rounded-md border border-indigo-200 bg-indigo-50 p-3 mt-3">
+                            <div className="rounded-md border border-indigo-200 bg-indigo-50 p-3 mt-2">
                               <h3 className="text-xs font-semibold text-indigo-800">
                                 AI Summary (Private)
                               </h3>
@@ -739,7 +743,7 @@ export default function WorkspaceViewNote() {
                   )}
 
                   {/* Action buttons */}
-                  <div className="flex items-center justify-end gap-4 text-xs mb-4">
+                  <div className="flex items-center justify-end gap-4 text-xs mb-4 mt-8">
                       {/* <button
                           onClick={handleCopy}
                           className="flex items-center gap-1 text-purple-600 hover:underline"

@@ -558,6 +558,25 @@ export default function WorkspaceViewDoc() {
                 <h2 className="text-xl text-gray-900 font-bold mr-3">{doc.title}</h2>
               )}
 
+            </div>
+
+            {/* Tags */}
+            {doc?.tags?.length > 0 && (
+              <div className="mb-4 text-sm font-bold text-gray-800 pt-3">
+                Tags:{" "}
+                <div className="inline-block font-normal" />
+                {doc.tags.map((tag, index) => (
+                  <React.Fragment key={tag}>
+                    <span className="bg-yellow-50 px-1 rounded">{tag}</span>
+                    {index < doc.tags.length - 1 && ", "}
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
+
+            {/* Notes Section */}
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm mb-1 font-bold text-gray-900">Notes:</h2>
               {/* AI Summarize Public button */}
               <button
                 onClick={handleSummarizePublic}
@@ -611,23 +630,7 @@ export default function WorkspaceViewDoc() {
                 )}
               </button>
             </div>
-
-            {/* Tags */}
-            {doc?.tags?.length > 0 && (
-              <div className="mb-4 text-sm font-bold text-gray-800 pt-3">
-                Tags:{" "}
-                <div className="inline-block font-normal" />
-                {doc.tags.map((tag, index) => (
-                  <React.Fragment key={tag}>
-                    <span className="bg-yellow-50 px-1 rounded">{tag}</span>
-                    {index < doc.tags.length - 1 && ", "}
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
-
-            {/* Notes Section */}
-            <h2 className="text-sm mb-1 font-bold text-gray-900">Notes:</h2>
+              
             {doc?.notes && (
               <p className="text-sm text-gray-800 mb-4">{doc.notes}</p>
             )}
@@ -775,7 +778,7 @@ export default function WorkspaceViewDoc() {
               ) : (
                 <>
                   {/* Action buttons */}
-                  <div className="flex items-center justify-end gap-4 text-xs mt-6">
+                  <div className="flex items-center justify-end gap-4 text-xs mt-8">
                     {/* <button onClick={handleCopy} className="flex items-center gap-1 text-purple-600 hover:underline">
                         <Copy size={16} /> Copy
                       </button> */}
