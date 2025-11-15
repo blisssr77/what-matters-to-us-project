@@ -26,14 +26,20 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", corsHeaders["Access-Control-Allow-Methods"]);
   res.setHeader("Access-Control-Allow-Headers", corsHeaders["Access-Control-Allow-Headers"]);
 
-  // 1) Handle preflight
+  // Handle preflight
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
-  // 2) Only allow POST
+  // Only allow POST
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  // 🔐 Explicitly check API key
+  if (!process.env.OPENAI_API_KEY) {
+    console.error("❌ OPENAI_API_KEY is not set in Vercel env vars");
+    return res.status(500).json({ error: "OPENAI_API_KEY is not configured" });
   }
 
   try {
@@ -66,7 +72,9 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ summary });
   } catch (err) {
-    console.error("AI summarize error:", err);
-    return res.status(500).json({ error: "Server error" });
+    console.error("❌ AI summarize error:", err?.message, err?.stack);
+    return res
+      .status(500)
+      .json({ error: err?.message || "Server error while calling OpenAI" });
   }
 }
