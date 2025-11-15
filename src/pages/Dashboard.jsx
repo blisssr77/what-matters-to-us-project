@@ -214,8 +214,8 @@ export default function Dashboard() {
                 desc="Link docs to tasks, events, or tags. Everything connected, never exposed."
                 cta="Start Linking"
                 onClick={() => navigate("/workspace/vaults")}
-              />
-              <Feature
+              /> */}
+              {/* <Feature
                 icon={<Wand2 size={16} />}
                 title="AI Assist (Opt-in)"
                 desc="Ask for summaries or plans—AI only sees what you allow and nothing else."
@@ -289,6 +289,16 @@ function SecurityCard({ navigate }) {
             <div className="font-medium">Zero-trust workflows</div>
             <p className="text-slate-300/80">
               Access is verified at read time, not assumed. Sensitive actions prompt for Vault Code when needed—no silent grants.
+            </p>
+          </div>
+        </li>
+        <li className="flex items-start gap-3">
+          <span className="mt-0.5 text-indigo-300"><Lock size={16}/></span>
+          <div>
+            <div className="font-medium">AI-Powered Note Summaries</div>
+            <p className="text-slate-300/80">
+              Quickly condense long notes into clean, readable summaries using OpenAI. 
+              Private notes stay fully protected—your Vault Code decrypts locally before sending secure text for summarization.
             </p>
           </div>
         </li>
