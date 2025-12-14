@@ -649,7 +649,7 @@ export default function WorkspaceViewDoc() {
               </section>
             )}
 
-            {/* ✅ Display decrypted note + private AI block together (no duplication) */}
+            {/* Display decrypted note + private AI block together (no duplication) */}
             {entered && decryptedNote && (
               <section className="mt-4 space-y-3">
                 <div className="flex items-center justify-between">
