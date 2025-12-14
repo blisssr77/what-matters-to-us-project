@@ -241,8 +241,8 @@ export default function QuickAddModal({
             const body = {
                 ...base,
                 private_space_id: privateSpaceId,
-                user_id: uid,                                 // ✅ REQUIRED by schema
-                file_name: title.trim() || "Untitled",        // ✅ REQUIRED by schema
+                user_id: uid,                                 // REQUIRED by schema
+                file_name: title.trim() || "Untitled",        // REQUIRED by schema
             };
             const { data, error } = await supabase
             .from("private_vault_items")

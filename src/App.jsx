@@ -1,8 +1,8 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import AuthPage from "./components/Auth/AuthPage";
-import Dashboard from "./pages/Dashboard";
+import Dashboard from "./pages/Dashboard/Dashboard";
 import ManageAccount from "./pages/Account/ManageAccount";
-import CalendarPage from "./pages/CalendarPage";
+import CalendarPage from "./pages/Calendar/CalendarPage";
 import Verify from "./components/Auth/Verify";
 import AuthPasswordRecover from "./pages/Account/AuthPasswordRecover";
 
@@ -25,8 +25,9 @@ import WorkspaceEditNote from "./components/Workspace/WorkspaceDocs/EditNote";
 import WorkspaceViewDoc from "./components/Workspace/WorkspaceDocs/ViewDoc";
 import WorkspaceEditDoc from "./components/Workspace/WorkspaceDocs/EditDoc";
 import WorkspaceTags from "./pages/Workspace/WorkspaceTags";
-import WMessenger from "./pages/Workspace/W-Messenger";
 import WProjectPlanner from "./pages/Workspace/W-ProjectPlanner";
+
+import MessengerPage from "./pages/Workspace/Messenger/MessengerPage.jsx";
 
 function App() {
   return (
@@ -58,7 +59,8 @@ function App() {
         <Route path="/workspace/vaults/doc-view/:id" element={<WorkspaceViewDoc />} />
         <Route path="/workspace/vaults/doc-edit/:id" element={<WorkspaceEditDoc />} />
         <Route path="/workspace/vaults/tags" element={<WorkspaceTags />} />
-        <Route path="/workspace/messenger" element={<WMessenger />} />
+        <Route path="/workspace/messenger" element={<MessengerPage />} />
+        {/* <Route path="/workspace/messenger" element={<WMessenger />} /> */}
         <Route path="/workspace/projects" element={<WProjectPlanner />} />
       </Routes>
     </Router>
