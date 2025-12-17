@@ -29,6 +29,13 @@ A lightweight, privacy‑first workspace for **notes, docs, tasks, and calendars
 - **Account Management**
   - “Set password” path for Google‑only accounts via `/auth/recover`.
   - “Change password” form for email/password users, with live rule checks.
+- **AI Assistant**
+  - Smart summarization for long notes and documents.
+  - Helps users quickly digest complex content without leaving the workspace.
+- **Real-time Messenger**
+  - **Schema:** Relational design with `conversations`, `participants` (for unread counts), and `messages`.
+  - **Security:** Advanced RLS using `!inner` joins and `SECURITY DEFINER` helper functions to prevent infinite recursion loops.
+  - **Performance:** Zustand store managing global state with **optimistic UI updates** for instant message sending and live unread badges.
 - **Profile management** with `profiles` table (username, names, email, verified flag, timestamps), safe **upsert** helpers, and RLS‑safe reads/writes.
 - **Vault Codes** (Workspace & Private): user‑level encryption codes, rotation flows, and RPC helpers:
   - `set_user_vault_code`, `verify_user_vault_code`
@@ -41,9 +48,10 @@ A lightweight, privacy‑first workspace for **notes, docs, tasks, and calendars
 
 ## 🧱 Tech Stack
 
-- **Frontend:** React + Vite, Tailwind CSS  
-- **Auth & DB:** Supabase (Auth, Postgres, RLS, RPC)  
-- **State & Routing:** React Router, lightweight component state  
+- **Frontend:** React + Vite, Tailwind CSS
+- **Auth & DB:** Supabase (Auth, Postgres, RLS, RPC)
+- **AI:** OpenAI API (Assistant for note summarization)
+- **State & Routing:** React Router, lightweight component state
 - **Nice touches:** BroadcastChannel for cross‑tab email verification, debounced field validators, non‑persist Supabase client for “probe” logins
 
 ---
