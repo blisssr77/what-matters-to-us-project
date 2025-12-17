@@ -11,9 +11,22 @@ import { useChatStore } from "../store/useChatStore";
 import { formatMessagePreviewTime } from "../utils/formatMessageTime";
 
 export function useMessenger() {
-  const { upsertChatPreview } = useMessengerStore.getState();
+  // 1. Get the clear functions from your stores
+  const { 
+    upsertChatPreview, 
+    clearMessenger // <--- Get this from Messenger Store
+  } = useMessengerStore.getState();
 
-  // ---- Messenger-level store (chat list + selection) ----
+  // If useChatStore has a reset function, get it here too. 
+  // If not, you might need to add one to useChatStore.js similar to clearMessenger.
+  const {
+    messagesByChatId,
+    setMessagesForChat,
+    appendMessagesToChat,
+    setChatHasMore,
+    clearAllMessages // <--- Assuming you added a reset to useChatStore (Recommended)
+  } = useChatStore();
+
   const {
     currentUserId,
     setCurrentUserId,
@@ -25,29 +38,35 @@ export function useMessenger() {
     setChatsLoading,
     setChatsError,
     setSelectedChatId,
+    clearUnreadCount,
   } = useMessengerStore();
 
   const activeChatId = selectedChatId;
 
-  // ---- Per-chat messages store ----
-  const {
-    messagesByChatId,
-    setMessagesForChat,
-    appendMessagesToChat,
-    setChatHasMore,
-  } = useChatStore();
-
-  // =============== Auth: get current user ===============
+  // =============== Auth & Wipe Logic ===============
   useEffect(() => {
     (async () => {
       const { data, error: authErr } = await supabase.auth.getUser();
+      
+      // ✅ FIX: If no user, WIPE DATA immediately
       if (authErr || !data?.user) {
+        console.log("No user found, wiping messenger data...");
         setCurrentUserId(null);
+        clearMessenger();     // Wipe chats list
+        if (clearAllMessages) clearAllMessages(); // Wipe messages cache (if exists)
         return;
       }
+
+      // If user exists, but it's DIFFERENT from what we have in store (e.g. account switch)
+      if (currentUserId && currentUserId !== data.user.id) {
+        console.log("User changed, wiping old messenger data...");
+        clearMessenger();
+        if (clearAllMessages) clearAllMessages();
+      }
+
       setCurrentUserId(data.user.id);
     })();
-  }, [setCurrentUserId]);
+  }, [setCurrentUserId, clearMessenger, clearAllMessages, currentUserId]);
 
   // =============== Load chats ===============
   const loadChats = useCallback(async () => {
@@ -73,21 +92,19 @@ export function useMessenger() {
     }
   }, [currentUserId, setChats, setChatsError, setChatsLoading]);
 
+  // Only load chats if we actually have a user
   useEffect(() => {
     if (currentUserId) {
       loadChats();
     }
   }, [currentUserId, loadChats]);
 
-  // =============== Active chat helpers ===============
-  const { clearUnreadCount } = useMessengerStore();
-
+  // ... (The rest of your file remains exactly the same: openChat, loadInitialMessages, etc.)
+  
   const openChat = useCallback(
     async (chatId) => {
       if (!chatId) return;
-      // Clear unread count when opening
       clearUnreadCount(chatId);
-      // Set selected chat ID
       setSelectedChatId(chatId);
 
       const entry = messagesByChatId[chatId];
@@ -110,12 +127,6 @@ export function useMessenger() {
           limit: 50,
           before: null,
         });
-
-        // API usually returns Oldest->Newest, but the store needs Newest->Oldest
-        // So we might need to reverse them here if apiFetchMessages returns them chronologically.
-        // Assuming apiFetchMessages returns [Newest, ..., Oldest] is standard for pagination.
-        // If API returns [Oldest, ..., Newest], reverse it here:
-        // const sorted = [...messages].reverse(); 
         setMessagesForChat(chatId, messages, hasMore);
       } catch (err) {
         console.error("loadInitialMessages error:", err);
@@ -128,16 +139,12 @@ export function useMessenger() {
   const loadOlderMessages = useCallback(
     async (chatId) => {
       if (!chatId) return;
-
       const entry = messagesByChatId[chatId];
       const list = entry?.items || [];
-
       if (!list.length) {
         await loadInitialMessages(chatId);
         return;
       }
-
-      // Store is Newest->Oldest. The "Oldest" message is at the END of the list.
       const oldest = list[list.length - 1]; 
       const beforeTs = oldest?.created_at || null;
       if (!beforeTs) return;
@@ -148,8 +155,6 @@ export function useMessenger() {
           limit: 50,
           before: beforeTs,
         });
-
-        // Add older messages to the END of the list (append)
         appendMessagesToChat(chatId, messages, { prepend: false });
         setChatHasMore(chatId, hasMore);
       } catch (err) {
@@ -157,16 +162,9 @@ export function useMessenger() {
         setChatsError("Failed to load older messages.");
       }
     },
-    [
-      messagesByChatId,
-      loadInitialMessages,
-      appendMessagesToChat,
-      setChatHasMore,
-      setChatsError,
-    ]
+    [messagesByChatId, loadInitialMessages, appendMessagesToChat, setChatHasMore, setChatsError]
   );
 
-  // =============== Messaging actions ===============
   const sendTextMessage = useCallback(
     async (chatId, text) => {
       if (!currentUserId || !chatId || !text?.trim()) return null;
@@ -179,8 +177,6 @@ export function useMessenger() {
           type: "text",
         });
 
-        // --- FIX IS HERE: prepend: true ---
-        // This puts the new message at index 0 (Newest)
         appendMessagesToChat(chatId, [msg], { prepend: true });
 
         upsertChatPreview({
@@ -211,7 +207,6 @@ export function useMessenger() {
           textAfter: textAfter || null,
         });
 
-        // --- FIX IS HERE: prepend: true ---
         if (result.attachmentMessage) {
           appendMessagesToChat(chatId, [result.attachmentMessage], { prepend: true });
           upsertChatPreview({
@@ -242,7 +237,6 @@ export function useMessenger() {
     [currentUserId, appendMessagesToChat, setChatsError, upsertChatPreview]
   );
 
-  // =============== Derived values ===============
   const activeMessages = useMemo(() => {
     if (!selectedChatId) return [];
     return messagesByChatId[selectedChatId]?.items || [];
@@ -255,10 +249,8 @@ export function useMessenger() {
 
   const chatsWithMeta = useMemo(() => {
     return (chats || []).map((chat) => {
-      // Logic for preview...
       const entry = messagesByChatId[chat.id];
       const msgs = entry?.items || [];
-      // If store is Newest->Oldest, the *newest* message is at index 0
       const last = msgs.length > 0 ? msgs[0] : null; 
 
       const lastText =

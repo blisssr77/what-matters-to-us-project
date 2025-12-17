@@ -3,7 +3,7 @@ import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { useOnboardingStore } from "@/store/useOnboardingStore";
 import {
   ShieldCheck, Lock, FileText, CalendarDays, Users, CheckCircle2, Wand2,
-  FolderLock, KeyRound, Link2, Rocket, ChevronRight, LogIn, BadgeCheck, RefreshCw
+  FolderLock, KeyRound, Link2, Rocket, ChevronRight, LogIn, BadgeCheck, RefreshCw, MessageSquare
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout/Layout";
@@ -208,13 +208,13 @@ export default function Dashboard() {
                 cta="Open Calendar"
                 onClick={() => navigate("/calendar")}
               />
-              {/* <Feature
-                icon={<Link2 size={16} />}
-                title="Smart Linking"
-                desc="Link docs to tasks, events, or tags. Everything connected, never exposed."
-                cta="Start Linking"
-                onClick={() => navigate("/workspace/vaults")}
-              /> */}
+              <Feature
+                icon={<MessageSquare size={16} />}
+                title="Messenger"
+                desc="Secure, real-time chat for your team. Direct messages, workspace channels, and instant file sharing."
+                cta="Open Chat"
+                onClick={() => navigate("/workspace/messenger")}
+              />
               {/* <Feature
                 icon={<Wand2 size={16} />}
                 title="AI Assist (Opt-in)"

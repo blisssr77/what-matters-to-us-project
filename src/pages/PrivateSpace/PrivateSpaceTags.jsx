@@ -4,7 +4,6 @@ import { usePrivateSpaceStore } from '@/store/usePrivateSpaceStore';
 import {
   listPrivateTags,
   createPrivateTag,
-  updateTag,
   deleteTag,
 } from '@/lib/tagsApi';
 import TagEditorModal from '@/components/Tags/TagEditorModal.jsx';
@@ -25,91 +24,107 @@ export default function PrivateSpaceTags() {
   const [confirm, setConfirm] = useState(null);
   const [error, setError] = useState('');
 
+  // Fix: Store currentUserId in state
+  const [currentUserId, setCurrentUserId] = useState(null);
+
   const [selectedId, setSelectedId] = useState(null);
-  const [sortBy, setSortBy] = useState('name'); // 'name' | 'usage_count' | 'created_by_name' | 'space'
+  const [sortBy, setSortBy] = useState('name'); 
   const [sortDir, setSortDir] = useState('asc');
 
-  // NEW: private space list + filter
   const [privateSpaceList, setPrivateSpaceList] = useState([]);
-  const [psFilterId, setPsFilterId] = useState('all'); // 'all' | private_space_id
+  const [psFilterId, setPsFilterId] = useState('all'); 
 
-  // --- load tags (all spaces for this user; server filters by user via RPC)
-  const loadTags = async () => {
-    let cancelled = false;
-    setLoading(true);
-    setError('');
+  // 1. Load User on Mount
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) setCurrentUserId(user.id);
+    };
+    getUser();
+  }, []);
 
-    try {
-      const { data: { user } = {} } = await supabase.auth.getUser();
-      if (!user?.id) {
-        throw new Error('Not signed in');
-      }
-
-      // null => all of THIS user's private-space tags (RPC must scope by auth.uid())
-      const { data, error } = await listPrivateTags(user.id, null);
-      if (error) throw error;
-
-      if (!cancelled) setRows(Array.isArray(data) ? data : []);
-    } catch (e) {
-      if (!cancelled) {
-        setRows([]); // clear on error so “No tags yet.” can render
-        setError(e?.message || 'Failed to load tags');
-      }
-    } finally {
-      if (!cancelled) setLoading(false);
-    }
-
-    // return a cancel hook if you call this inside useEffect
-    return () => { cancelled = true; };
-  };
-
-  // --- load private spaces for the current user
+  // 2. Load Private Spaces
   const loadPrivateSpaces = async () => {
-    try {
-      const { data: { user } = {} } = await supabase.auth.getUser();
-      if (!user?.id) { setPrivateSpaceList([]); return; }
+    if (!currentUserId) return; // Wait for user
 
+    try {
       const { data, error } = await supabase
         .from('private_spaces')
         .select('id, name')
-        .eq('created_by', user.id)
+        .eq('created_by', currentUserId)
         .order('name', { ascending: true });
 
-      if (error) { setPrivateSpaceList([]); return; }
+      if (error) throw error;
 
       const list = (data || []).map(s => ({ id: s.id, name: s.name || 'Private Space' }));
       setPrivateSpaceList(list);
 
-      // default pill selection = activeSpaceId if available
+      // Sync filter with activeSpaceId from store
       if (activeSpaceId && list.some(s => s.id === activeSpaceId)) {
         setPsFilterId(activeSpaceId);
       } else {
         setPsFilterId('all');
       }
-    } catch {
+    } catch (err) {
+      console.error("Error loading spaces:", err);
       setPrivateSpaceList([]);
     }
   };
 
-  useEffect(() => { loadPrivateSpaces(); }, [activeSpaceId]);
-  useEffect(() => { loadTags(); }, [activeSpaceId]);
+  // 3. Load Tags
+  const loadTags = async () => {
+    if (!currentUserId) return; // Wait for user
 
-  // sorting toggle
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+
+    try {
+      // Pass null as second arg to get ALL private tags for this user, 
+      // then we filter client-side with pills.
+      const { data, error } = await listPrivateTags(null);
+      if (error) throw error;
+
+      if (!cancelled) {
+        // console.log("Tags loaded:", data); // Uncomment to debug if data is arriving
+        setRows(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      if (!cancelled) {
+        setRows([]); 
+        setError(e?.message || 'Failed to load tags');
+      }
+    } finally {
+      if (!cancelled) setLoading(false);
+    }
+    return () => { cancelled = true; };
+  };
+
+  // Reload when user or activeSpaceId changes
+  useEffect(() => { 
+    if (currentUserId) loadPrivateSpaces(); 
+  }, [currentUserId, activeSpaceId]);
+
+  useEffect(() => { 
+    if (currentUserId) loadTags(); 
+  }, [currentUserId, activeSpaceId]); // Reload tags if space changes (optional, usually just need to reload on mount/user)
+
+
   const toggleSort = (key) => {
     if (sortBy === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
     else { setSortBy(key); setSortDir('asc'); }
   };
 
-  // filtered + sorted rows (by pill + search)
+  // Filter & Sort
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
 
-    // pill filter by private space
+    // 1. Filter by Private Space Pill
     const bySpace = psFilterId === 'all'
       ? rows
       : rows.filter(r => r.private_space_id === psFilterId);
 
-    // search filter
+    // 2. Filter by Search Query
     const base = s
       ? bySpace.filter(r =>
           (r.name || '').toLowerCase().includes(s) ||
@@ -119,10 +134,9 @@ export default function PrivateSpaceTags() {
         )
       : bySpace;
 
-    // sort accessor
+    // 3. Sort
     const readSortField = (r) => (sortBy === 'space' ? (r.space_name || '') : r[sortBy]);
 
-    // sort
     const sorted = [...base].sort((a, b) => {
       const av = readSortField(a);
       const bv = readSortField(b);
@@ -139,36 +153,29 @@ export default function PrivateSpaceTags() {
     return sorted;
   }, [rows, q, sortBy, sortDir, psFilterId]);
 
-  // handlers
+  // Handlers
   const handleNew  = () => { setEditInitial(null); setEditOpen(true); };
   const handleEdit = (tag) => { setEditInitial(tag); setEditOpen(true); };
 
-  // create or update — supports single space or "all private spaces"
   const handleSave = async ({ name, color, privateSpaceId, applyAllPrivateSpaces }) => {
     setEditOpen(false);
-    const { data: { user } = {} } = await supabase.auth.getUser();
-    if (!user?.id) { setError('Not signed in'); return; }
+    if (!currentUserId) { setError('Not signed in'); return; }
+    
     try {
       if (applyAllPrivateSpaces) {
-        // create the tag in every private space for this user
-        // (skip if you have a server-side helper for this)
         const creates = privateSpaceList.map(ps =>
-          createPrivateTag({ name, color, privateSpaceId: ps.id, userId: user.id })
+          createPrivateTag({ name, color, privateSpaceId: ps.id, userId: currentUserId })
         );
-        const results = await Promise.allSettled(creates);
-        const rejected = results.find(r => r.status === 'rejected' || r.value?.error);
-        if (rejected) {
-          const msg = rejected?.reason?.message || rejected?.value?.error?.message || 'Failed to create in some spaces';
-          setError(msg);
-        }
+        await Promise.allSettled(creates);
       } else {
         const targetSpaceId = privateSpaceId || activeSpaceId;
         if (!targetSpaceId) { setError('No private space selected'); return; }
+        
         const { error } = await createPrivateTag({
           name,
           color,
           privateSpaceId: targetSpaceId,
-          userId: user.id,
+          userId: currentUserId,
         });
         if (error) throw error;
       }
@@ -178,7 +185,6 @@ export default function PrivateSpaceTags() {
     }
   };
 
-  // delete
   const handleDelete = async (tag) => setConfirm(tag);
   const confirmDelete = async () => {
     const tag = confirm; setConfirm(null);
@@ -190,7 +196,6 @@ export default function PrivateSpaceTags() {
   return (
     <Layout>
       <div className="max-w-5xl mx-auto p-4">
-        {/* Toolbar */}
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-lg text-gray-800 font-bold">Private Space Tags</h1>
@@ -205,11 +210,9 @@ export default function PrivateSpaceTags() {
               <RefreshCw size={16} /> Reload
             </button>
 
-            {/* Make sure your MergePTagsButton accepts `userId` and optional `privateSpaceId` */}
             <MergePTagsButton
               className="text-gray-500 inline-flex items-center gap-2 px-3 py-1.5 rounded border border-gray-300 text-sm bg-white hover:bg-gray-50"
-              // For private tags, scope by user and (optionally) by activeSpaceId
-              userId={(supabase.auth.getUser()).data?.user?.id || null}
+              userId={currentUserId} 
               privateSpaceId={activeSpaceId || null}
               selectedTagId={selectedId}
               tags={filtered}
@@ -227,7 +230,7 @@ export default function PrivateSpaceTags() {
           </div>
         </div>
 
-        {/* NEW: Private space pills filter */}
+        {/* Private space pills filter */}
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <button
             className={clsx(
@@ -250,14 +253,14 @@ export default function PrivateSpaceTags() {
                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
               )}
               onClick={() => setPsFilterId(ps.id)}
-              title={ps.id === activeSpaceId ? 'Active private space' : undefined}
             >
               {ps.name}{ps.id === activeSpaceId ? ' • Active' : ''}
             </button>
           ))}
         </div>
 
-        {/* Search */}
+        {/* ... (Rest of Table Render remains the same) ... */}
+        
         <div className="mb-3">
           <input
             className="w-full max-w-sm border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
@@ -267,7 +270,6 @@ export default function PrivateSpaceTags() {
           />
         </div>
 
-        {/* Table */}
         <div className="overflow-x-auto bg-white border rounded shadow-sm">
           <table className="min-w-full text-xs">
             <thead className="bg-gray-50 sticky top-0 z-10">
@@ -319,18 +321,15 @@ export default function PrivateSpaceTags() {
                         onClick={(e) => e.stopPropagation()}
                       />
                     </td>
-
                     <td className="p-2">
                       <div className="flex items-center gap-2">
                         <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: tag.color || '#e5e7eb' }} />
                         <span className="text-gray-800">{tag.name}</span>
                       </div>
                     </td>
-
                     <td className="p-2 text-gray-700">{tag.usage_count ?? 0}</td>
                     <td className="p-2 text-gray-700">{tag.created_by_name || '—'}</td>
                     <td className="p-2 text-gray-700">{tag.space_name || '—'}</td>
-
                     <td className="p-2 text-right">
                       <div className="inline-flex items-center gap-2">
                         <button
@@ -350,7 +349,7 @@ export default function PrivateSpaceTags() {
                   </tr>
                 ))
               ) : (
-                <tr><td className="p-6 text-gray-500" colSpan={6}>No tags yet.</td></tr>
+                <tr><td className="p-6 text-gray-500" colSpan={6}>No tags found.</td></tr>
               )}
             </tbody>
           </table>
@@ -358,7 +357,6 @@ export default function PrivateSpaceTags() {
 
       </div>
 
-      {/* Modal: restrict creation to ACTIVE private space */}
       <TagEditorModal
         open={editOpen}
         initial={editInitial ? { ...editInitial, section: 'Private' } : null}

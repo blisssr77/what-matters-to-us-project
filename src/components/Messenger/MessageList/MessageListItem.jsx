@@ -81,7 +81,7 @@ export default function MessageListItem({
     return formatMessagePreviewTime(ts);
   }, [lastMessage, chat]);
 
-  console.log(`Chat ${title}: unread_count is`, chat.unread_count);
+  // console.log(`Chat ${title}: unread_count is`, chat.unread_count);
 
   return (
     <button

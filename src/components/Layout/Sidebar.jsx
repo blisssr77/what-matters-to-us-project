@@ -65,11 +65,11 @@ export default function Sidebar() {
     (acc, curr) => acc + (curr.unreadCount || 0), 
     0
   );
-  console.log("DEBUG SIDEBAR:", { 
-  conversations, 
-  firstItem: conversations?.[0], 
-  totalUnreadCount 
-});
+  // console.log("DEBUG SIDEBAR:", { 
+  //   conversations, 
+  //   firstItem: conversations?.[0], 
+  //   totalUnreadCount 
+  // });
   // ---------------------
 
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
@@ -178,7 +178,7 @@ export default function Sidebar() {
                 exit={{ opacity: 0, height: 0 }}
                 className="ml-5 border-l border-gray-800 pl-3 space-y-1 text-xs"
               >
-                {navLink("Projects Planner", <FolderKanban size={16} />, "/workspace/projects", "text-xs")}
+                {/* {navLink("Projects Planner", <FolderKanban size={16} />, "/workspace/projects", "text-xs")} */}
                 
                 {/* --- PASSING THE UNREAD COUNT HERE --- */}
                 {navLink(
@@ -228,7 +228,7 @@ export default function Sidebar() {
                 exit={{ opacity: 0, height: 0 }}
                 className="ml-5 border-l border-gray-800 pl-3 space-y-1 text-xs"
               >
-                {navLink("Projects Planner", <FolderKanban size={16} />, "/workspace/projects", "text-xs")}
+                {/* {navLink("Projects Planner", <FolderKanban size={16} />, "/workspace/projects", "text-xs")} */}
                 {navLink("Docs", <Lock size={16} />, "/privatespace/vaults", "text-xs")}
                 {navLink("Tags", <FileText size={16} />, "/privatespace/vaults/tags", "text-xs")}
               </motion.ul>
